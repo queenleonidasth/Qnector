@@ -133,6 +133,7 @@ function App(): React.ReactElement {
     "workspace" | "memory" | "runtime" | "settings" | null
   >(null);
   const [isClosingDrawer, setIsClosingDrawer] = useState(false);
+  const drawerCloseFallbackRef = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -192,13 +193,36 @@ function App(): React.ReactElement {
     return () => window.removeEventListener("keydown", closeSetupOnEscape);
   }, [setupOpen, setupBusy]);
 
-  const closeDrawer = () => {
+  const finishDrawerClose = (): void => {
+    if (drawerCloseFallbackRef.current !== null) {
+      window.clearTimeout(drawerCloseFallbackRef.current);
+      drawerCloseFallbackRef.current = null;
+    }
+    setActiveDrawer(null);
+    setIsClosingDrawer(false);
+  };
+
+  const closeDrawer = (): void => {
     if (!activeDrawer || isClosingDrawer) return;
     setIsClosingDrawer(true);
-    window.setTimeout(() => {
-      setActiveDrawer(null);
-      setIsClosingDrawer(false);
-    }, 240);
+    if (drawerCloseFallbackRef.current !== null) {
+      window.clearTimeout(drawerCloseFallbackRef.current);
+    }
+    // The DOM should normally be removed by drawerSlideDown's animationend.
+    // Keep a generous fallback for reduced-motion / renderer edge cases.
+    drawerCloseFallbackRef.current = window.setTimeout(finishDrawerClose, 600);
+  };
+
+  const onDrawerAnimationEnd = (
+    event: React.AnimationEvent<HTMLDivElement>,
+  ): void => {
+    if (
+      isClosingDrawer &&
+      event.target === event.currentTarget &&
+      event.animationName === "drawerSlideDown"
+    ) {
+      finishDrawerClose();
+    }
   };
 
   const toggleDrawer = (
@@ -1450,6 +1474,7 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
@@ -1508,6 +1533,7 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
@@ -1648,6 +1674,7 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card runtime-drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
@@ -1881,6 +1908,7 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">

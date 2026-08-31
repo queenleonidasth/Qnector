@@ -82,3 +82,29 @@ describe("desktop UI overflow guards", () => {
     );
   });
 });
+
+describe("drawer animation smoothness", () => {
+  it("keeps the drawer overlay aligned to the full viewport and on compositor-friendly transforms", async () => {
+    const css = await styles();
+    expect(css).toMatch(
+      /\.drawer-backdrop \{[\s\S]*?position:\s*fixed;[\s\S]*?inset:\s*0;/,
+    );
+    expect(css).toMatch(
+      /\.drawer-backdrop::before \{[\s\S]*?will-change:\s*opacity;[\s\S]*?translateZ\(0\)/,
+    );
+    expect(css).toMatch(
+      /\.drawer-card \{[\s\S]*?will-change:\s*transform;[\s\S]*?translate3d\(0, 0, 0\)/,
+    );
+    expect(css).toContain("transform: translate3d(0, calc(100% + 24px), 0);");
+  });
+
+  it("does not fade the drawer card through the backdrop opacity animation", async () => {
+    const css = await styles();
+    const backdropBlock =
+      css.match(/\.drawer-backdrop \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(backdropBlock).not.toContain("animation: backdropFade");
+    expect(css).toMatch(
+      /\.drawer-backdrop::before \{[\s\S]*?animation:\s*backdropFade/,
+    );
+  });
+});
