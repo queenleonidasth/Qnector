@@ -41,7 +41,7 @@ export class ReleaseManager {
           : null;
 
     let runningMatchesLatest: boolean | null = null;
-    if (latestPackaged) {
+    if (latestPackaged && running.channel !== "development") {
       runningMatchesLatest = samePath(
         running.executablePath,
         latestPackaged.path,

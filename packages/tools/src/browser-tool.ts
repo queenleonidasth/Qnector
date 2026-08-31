@@ -379,13 +379,13 @@ export async function executeBrowser(
       }
 
       if (action === "screenshot") {
-        const format = stringInput(object, "format") ?? "png";
+        const format = stringInput(object, "format") ?? "jpeg";
         if (!["png", "jpeg"].includes(format))
           throw new Error(
             "INVALID_INPUT: browser screenshot format must be png or jpeg",
           );
         const maxWidth = clamp(
-          numberInput(object, "maxWidth", 2_048),
+          numberInput(object, "maxWidth", 1_600),
           320,
           4_096,
         );

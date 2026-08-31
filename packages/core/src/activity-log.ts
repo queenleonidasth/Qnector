@@ -10,11 +10,20 @@ export interface ActivityEvent {
   entry: ActivityEntry;
 }
 
+interface PendingActivityWrite {
+  line: string;
+  bytes: number;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
+
 export class ActivityLogger {
   private readonly entries: ActivityEntry[] = [];
   private readonly listeners = new Set<(event: ActivityEvent) => void>();
   private persistedBytes = 0;
   private writeQueue: Promise<void> = Promise.resolve();
+  private readonly pendingWrites: PendingActivityWrite[] = [];
+  private drainScheduled = false;
 
   public constructor(
     private readonly file: string,
@@ -130,35 +139,76 @@ export class ActivityLogger {
     };
     this.entries.push(entry);
     while (this.entries.length > this.maxEntries) this.entries.shift();
-    await this.queuePersist(async () => {
-      await mkdir(path.dirname(this.file), { recursive: true });
-      const line = `${JSON.stringify(entry)}\n`;
-      const lineBytes = Buffer.byteLength(line, "utf8");
-      if (this.persistedBytes + lineBytes > this.maxFileBytes)
-        await this.compactFile();
-      else {
-        await appendFile(this.file, line, "utf8");
-        this.persistedBytes += lineBytes;
-      }
-    });
+    const line = `${JSON.stringify(entry)}\n`;
+    await this.enqueuePersist(line, Buffer.byteLength(line, "utf8"));
     const event = { type: "activity:new" as const, entry };
     for (const listener of this.listeners) listener(event);
     return entry;
   }
 
-  private async compactFile(): Promise<void> {
+  private async compactFile(
+    entries: readonly ActivityEntry[] = this.entries,
+  ): Promise<void> {
     await mkdir(path.dirname(this.file), { recursive: true });
-    const content = this.entries.length
-      ? `${this.entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
+    const content = entries.length
+      ? `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
       : "";
     await writeFile(this.file, content, "utf8");
     this.persistedBytes = Buffer.byteLength(content, "utf8");
+  }
+
+  private enqueuePersist(line: string, bytes: number): Promise<void> {
+    const pending = new Promise<void>((resolve, reject) => {
+      this.pendingWrites.push({ line, bytes, resolve, reject });
+    });
+    this.scheduleDrain();
+    return pending;
+  }
+
+  private scheduleDrain(): void {
+    if (this.drainScheduled) return;
+    this.drainScheduled = true;
+    queueMicrotask(() => {
+      this.drainScheduled = false;
+      void this.drainPendingWrites();
+    });
+  }
+
+  private async drainPendingWrites(): Promise<void> {
+    if (this.pendingWrites.length === 0) return;
+    const batch = this.pendingWrites.splice(0);
+    const entriesSnapshot = [...this.entries];
+    const content = batch.map((entry) => entry.line).join("");
+    const bytes = batch.reduce((total, entry) => total + entry.bytes, 0);
+    try {
+      await this.queuePersist(async () => {
+        await mkdir(path.dirname(this.file), { recursive: true });
+        if (this.persistedBytes + bytes > this.maxFileBytes)
+          await this.compactFile(entriesSnapshot);
+        else {
+          await appendFile(this.file, content, "utf8");
+          this.persistedBytes += bytes;
+        }
+      });
+      for (const entry of batch) entry.resolve();
+    } catch (error) {
+      for (const entry of batch) entry.reject(error);
+    } finally {
+      if (this.pendingWrites.length > 0) this.scheduleDrain();
+    }
   }
 
   private async queuePersist(work: () => Promise<void>): Promise<void> {
     const current = this.writeQueue.then(work);
     this.writeQueue = current.catch(() => undefined);
     await current;
+  }
+
+  public async flush(): Promise<void> {
+    do {
+      await this.drainPendingWrites();
+      await this.writeQueue;
+    } while (this.pendingWrites.length > 0);
   }
 
   public async error(

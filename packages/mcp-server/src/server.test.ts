@@ -10,6 +10,7 @@ import {
 import { defaultConfig } from "../../core/src/config.js";
 import { Phase0Server } from "./phase0.js";
 import { QnectorRuntime } from "./server.js";
+import { toolDefinitions } from "../../tools/src/index.js";
 
 describe("Qnector MCP runtime", () => {
   let runtime: QnectorRuntime | undefined;
@@ -67,6 +68,7 @@ describe("Qnector MCP runtime", () => {
       "Do not rebuild completed roadmap features.",
     );
     expect(instructions).toContain("release-rule");
+    expect(Buffer.byteLength(instructions!, "utf8")).toBeLessThanOrEqual(4_000);
 
     const listed = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",
@@ -91,17 +93,107 @@ describe("Qnector MCP runtime", () => {
       "requests",
       "performance",
       "build_info",
+      "parallel",
+      "context_snapshot",
+      "release_status",
       "doctor",
       "workspace_symbols",
       "semantic_search",
+      "read_many",
       "wait_for_port",
+      "pty_start",
       "task_start",
+      "workflow_save",
       "launch",
+      "navigate",
+      "upload_file",
       "range_value",
     ]) {
       expect(listedText).toContain(expected);
     }
     expect(listedText).toContain("capture the current display");
+
+    const advertisedTools =
+      (
+        listed.body as {
+          result?: {
+            tools?: Array<{
+              name: string;
+              inputSchema?: {
+                properties?: { action?: { enum?: string[] } };
+              };
+            }>;
+          };
+        }
+      ).result?.tools ?? [];
+    for (const definition of toolDefinitions) {
+      const expectedActions = (
+        definition.inputSchema as {
+          properties?: { action?: { enum?: string[] } };
+        }
+      ).properties?.action?.enum;
+      const advertised = advertisedTools.find(
+        (tool) => tool.name === definition.name,
+      );
+      expect(
+        advertised,
+        `${definition.name} should be advertised`,
+      ).toBeTruthy();
+      expect(advertised?.inputSchema?.properties?.action?.enum).toEqual(
+        expectedActions,
+      );
+    }
+
+    const compactCall = await request(`http://127.0.0.1:${port}/mcp`, {
+      jsonrpc: "2.0",
+      id: 20,
+      method: "tools/call",
+      params: { name: "system", arguments: { action: "status" } },
+    });
+    const compactResult = (
+      compactCall.body as {
+        result?: {
+          content?: Array<{ type?: string; text?: string }>;
+          structuredContent?: Record<string, unknown>;
+        };
+      }
+    ).result;
+    expect(compactResult?.content?.[0]?.text).toBe("Qnector local status");
+    expect(compactResult?.structuredContent).toMatchObject({
+      ok: true,
+      tool: "system",
+      action: "status",
+    });
+    expect(JSON.stringify(compactResult?.content)).not.toContain(
+      "activeWorkspace",
+    );
+
+    const parallelCall = await request(`http://127.0.0.1:${port}/mcp`, {
+      jsonrpc: "2.0",
+      id: 21,
+      method: "tools/call",
+      params: {
+        name: "system",
+        arguments: {
+          action: "parallel",
+          maxConcurrency: 2,
+          calls: [
+            { id: "status", tool: "system", input: { action: "status" } },
+            {
+              id: "env",
+              tool: "system",
+              input: { action: "env", keys: ["PATH"] },
+            },
+          ],
+        },
+      },
+    });
+    expect(parallelCall.response.ok).toBe(true);
+    const parallelText = JSON.stringify(parallelCall.body);
+    expect(parallelText).toContain("Parallel batch completed 2/2 operation(s)");
+    expect(parallelText).toContain('"action":"parallel"');
+    expect(parallelText).toContain('"id":"status"');
+    expect(parallelText).toContain('"id":"env"');
 
     const resources = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",

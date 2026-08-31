@@ -6,7 +6,7 @@ Qnector advertises **eight grouped MCP tools**. Each call uses an object with an
 
 | Tool        | Actions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `system`    | `info`, `status`, `build_info`, `release_status`, `context_snapshot`, `processes`, `process_info`, `find_process`, `ports`, `doctor`, `everything_status`, `which`, `search_files`, `env`, `open_path`, `open_url`, `clipboard_read`, `clipboard_write`, `toast`, `screen_capture`, `window_list`, `window_focus`                                                                                                                                                                                                                 |
+| `system`    | `parallel`, `info`, `status`, `build_info`, `release_status`, `context_snapshot`, `processes`, `process_info`, `find_process`, `ports`, `doctor`, `everything_status`, `which`, `search_files`, `env`, `open_path`, `open_url`, `clipboard_read`, `clipboard_write`, `toast`, `screen_capture`, `window_list`, `window_focus`                                                                                                                                                                                                     |
 | `workspace` | `get`, `set`, `list_recent`, `tree`, `list`, `glob`, `grep`, `stat`, `summary`, `diagnostics`, `document_symbols`, `workspace_symbols`, `definition`, `references`, `hover`, `rename_locations`, `semantic_search`, `lsp_status`, `lsp_document_symbols`, `lsp_workspace_symbols`, `lsp_definition`, `lsp_references`, `lsp_hover`, `watch`, `watch_events`, `unwatch`, `wait_for_file`, `wait_for_change`                                                                                                                        |
 | `files`     | `read`, `read_many`, `preview`, `inspect`, `extract_text`, `render`, `document_query`, `write`, `append`, `replace`, `multi_edit`, `apply_patch`, `mkdir`, `move`, `copy`, `delete`, `hash`                                                                                                                                                                                                                                                                                                                                       |
 | `process`   | `run`, `start`, `output`, `stdin`, `stop`, `list`, `kill_tree`, `wait_for_exit`, `wait_for_output`, `wait_for_port`, `task_start`, `task_get`, `task_list`, `task_cancel`, `workflow_save`, `workflow_list`, `workflow_get`, `workflow_start`, `workflow_status`, `workflow_runs`, `workflow_cancel`, `workflow_resume`                                                                                                                                                                                                           |
@@ -29,7 +29,9 @@ The production server uses modular MCP TypeScript SDK v2 (`@modelcontextprotocol
 
 ## Context, native processes and release state
 
-`system.context_snapshot` returns one bounded machine/workspace snapshot: build/release identity, active memory state, recent activity, managed processes, Qnector-related native processes, visible windows and capability flags. It is intended to reduce repeated discovery calls at the beginning of a task.
+`system.context_snapshot` is the preferred one-call discovery action at the beginning of a task. Its default compact mode returns cached build identity, bounded active memory, recent activity, managed processes and capability flags without scanning release/source state or enumerating desktop windows/native Qnector processes. Pass `details: true` only when expanded release/process/window context is needed; use `system.release_status` when release comparison alone is required.
+
+`system.parallel` reduces MCP/model round-trips when two or more independent Qnector operations are known up front. Supply 2-12 `{ id?, tool, input }` calls and optional `maxConcurrency` from 1-8 (default 6); Qnector executes subcalls concurrently but returns results in the original input order. Do not put dependent operations, recursive `system.parallel`, or multiple mutations of the same file/process/browser/UI state in one parallel batch. Prefer purpose-built one-call actions such as `files.read_many` or `system.context_snapshot` when they already cover the task more compactly.
 
 `system.processes` lists native OS processes; `find_process` filters by name/path/command line; `process_info` combines process metadata with TCP endpoints; and `ports` returns bounded TCP listener/connection summaries. Windows results include executable path, command line, parent PID, start time, CPU, working-set memory and file/product version when available.
 
@@ -41,7 +43,7 @@ The production server uses modular MCP TypeScript SDK v2 (`@modelcontextprotocol
 
 Visible desktop actions are presentation-gated. `system.open_path`, `system.open_url`, `system.toast`, and `system.window_focus` require `presentToUser: true`; intermediate inspection/QC should remain headless and use file reads, browser/CDP inspection, or screenshots without opening viewers.
 
-Workspace `grep`/`glob` remain separate: Everything locates filenames across Windows, workspace search inspects the active project, and Code Intelligence understands program semantics.
+Workspace `grep`/`glob` remain separate: Everything locates filenames across Windows, workspace search inspects the active project, and Code Intelligence understands program semantics. Windows packages bundle ripgrep and `workspace.grep` prefers that executable (or another resolvable `rg`) before falling back to the bounded Node implementation. `workspace.summary` is compact by default; use `details: true` when expanded memory context is actually needed.
 
 ## TypeScript Code Intelligence
 
@@ -130,7 +132,7 @@ Use a dedicated Qnector profile for automated web-app development rather than a 
 
 ## Image attachments
 
-`files.preview` supports PNG/JPEG/WEBP. `system.screen_capture` and `browser.screenshot` use the same `ToolAttachment` path. Structured results contain metadata only; the MCP server maps the attachment to MCP image content. Oversized images are bounded/re-encoded by the applicable platform implementation.
+`files.preview` supports PNG/JPEG/WEBP. When several known text files are needed, prefer `files.read_many` so they are returned in one tool turn. `files.read` bounds UTF-8 content with `maxChars` (100,000 default, 1,000,000 maximum); base64 reads are byte-paginated with `offsetBytes`/`limitBytes` (256,000-byte default, 5,000,000 maximum) and return `nextCursor`. `system.screen_capture` and `browser.screenshot` use the same `ToolAttachment` path; their default capture is JPEG at a bounded 1600 px width unless the caller requests another format/size. Structured results contain metadata only; the MCP server maps the attachment to MCP image content. MCP text content is intentionally concise while the full tool result is carried once in `structuredContent`.
 
 ## Validation
 
@@ -145,7 +147,8 @@ npx pnpm@10.15.0 build
 npx pnpm@10.15.0 smoke:mcp
 npx pnpm@10.15.0 accept:p1-p10
 npx pnpm@10.15.0 accept:p11-p18
+npx pnpm@10.15.0 accept:p23
 npx pnpm@10.15.0 accept:browser
 ```
 
-Windows release changes additionally run `package:windows` and inspect packaged `app.asar` plus the bundled UIA/Everything extra resources.
+Windows release changes additionally run `package:windows` and inspect packaged `app.asar` plus the bundled UIA/Everything/ripgrep/OpenAI tunnel-client extra resources.

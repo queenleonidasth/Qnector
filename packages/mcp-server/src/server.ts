@@ -12,9 +12,9 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import {
   McpServer,
   createMcpHandler,
+  fromJsonSchema,
   type McpRequestContext,
 } from "@modelcontextprotocol/server";
-import { z } from "zod";
 import {
   ActivityLogger,
   QNECTOR_VERSION,
@@ -57,6 +57,10 @@ import {
 } from "./session-bootstrap.js";
 
 const execFileAsync = promisify(execFile);
+const mcpInputSchemaCache = new Map<
+  ToolDefinition["name"],
+  ReturnType<typeof fromJsonSchema>
+>();
 
 export interface QnectorRuntimeOptions {
   config?: QnectorConfig;
@@ -271,6 +275,7 @@ export class QnectorRuntime {
     this.fileWatch.stopAll();
     await this.browserRuntime.close().catch(() => undefined);
     await this.processManager.stopAll();
+    await this.activity.flush();
     if (this.listening) await this.app.close();
     this.listening = false;
     this.state = "disconnected";
@@ -327,7 +332,7 @@ export class QnectorRuntime {
       instructions ? { instructions } : undefined,
     );
     for (const definition of this.registry.list()) {
-      const schema = inputSchemaFor(definition.name);
+      const schema = inputSchemaFor(definition);
       server.registerTool(
         definition.name,
         {
@@ -344,7 +349,7 @@ export class QnectorRuntime {
           const { attachments, ...jsonResult } = result;
           return {
             content: [
-              { type: "text", text: JSON.stringify(jsonResult, null, 2) },
+              { type: "text", text: toolResultText(jsonResult) },
               ...(attachments ?? []).map((attachment) => ({
                 type: "image" as const,
                 data: attachment.dataBase64,
@@ -428,8 +433,8 @@ export class QnectorRuntime {
     try {
       const memory = await this.memory.recall({
         checkpointLimit: 1,
-        factLimit: 20,
-        changeLimit: 10,
+        factLimit: 8,
+        changeLimit: 6,
       });
       return buildSessionBootstrapInstructions(memory, this.activity.list());
     } catch (error) {
@@ -499,298 +504,34 @@ function capMemoryResource(value: MemoryRecall): MemoryRecall {
   return result;
 }
 
-function inputSchemaFor(name: ToolDefinition["name"]): z.ZodType {
-  if (name === "system")
-    return z
-      .object({
-        action: z.enum([
-          "info",
-          "status",
-          "build_info",
-          "doctor",
-          "everything_status",
-          "which",
-          "search_files",
-          "env",
-          "open_path",
-          "open_url",
-          "clipboard_read",
-          "clipboard_write",
-          "toast",
-          "screen_capture",
-          "window_list",
-          "window_focus",
-        ]),
-        name: z.string().optional(),
-        query: z.string().optional(),
-        provider: z.enum(["auto", "everything", "fallback"]).optional(),
-        maxResults: z.number().int().optional(),
-        offset: z.number().int().optional(),
-        details: z.boolean().optional(),
-        keys: z.array(z.string()).optional(),
-        path: z.string().optional(),
-        url: z.string().optional(),
-        text: z.string().optional(),
-        html: z.string().optional(),
-        title: z.string().optional(),
-        body: z.string().optional(),
-        silent: z.boolean().optional(),
-        source: z.string().optional(),
-        sourceId: z.string().optional(),
-        format: z.string().optional(),
-        maxWidth: z.number().int().optional(),
-        windowId: z.string().optional(),
-        id: z.string().optional(),
-      })
-      .passthrough();
-  if (name === "workspace")
-    return z
-      .object({
-        action: z.enum([
-          "get",
-          "set",
-          "list_recent",
-          "tree",
-          "list",
-          "glob",
-          "grep",
-          "stat",
-          "summary",
-          "diagnostics",
-          "document_symbols",
-          "definition",
-          "references",
-          "hover",
-          "rename_locations",
-          "workspace_symbols",
-          "semantic_search",
-          "lsp_status",
-          "lsp_document_symbols",
-          "lsp_workspace_symbols",
-          "lsp_definition",
-          "lsp_references",
-          "lsp_hover",
-          "watch",
-          "watch_events",
-          "unwatch",
-          "wait_for_file",
-          "wait_for_change",
-        ]),
-        path: z.string().optional(),
-        tsconfig: z.string().optional(),
-        severity: z
-          .enum(["error", "warning", "suggestion", "message"])
-          .optional(),
-        line: z.number().int().optional(),
-        column: z.number().int().optional(),
-        pattern: z.string().optional(),
-        query: z.string().optional(),
-        glob: z.string().optional(),
-        watchId: z.string().optional(),
-        cursor: z.number().int().optional(),
-        recursive: z.boolean().optional(),
-        timeoutMs: z.number().int().optional(),
-        intervalMs: z.number().int().optional(),
-        maxFiles: z.number().int().optional(),
-        serverCommand: z.string().optional(),
-        serverArgs: z.array(z.string()).optional(),
-        maxResults: z.number().int().optional(),
-        offset: z.number().int().optional(),
-        includeHidden: z.boolean().optional(),
-      })
-      .passthrough();
-  if (name === "files")
-    return z
-      .object({
-        action: z.string(),
-        path: z.string().optional(),
-        paths: z.array(z.string()).optional(),
-        content: z.string().optional(),
-        contentBase64: z.string().optional(),
-        oldText: z.string().optional(),
-        newText: z.string().optional(),
-        replaceAll: z.boolean().optional(),
-        edits: z.array(z.unknown()).optional(),
-        patch: z.string().optional(),
-        destination: z.string().optional(),
-        offsetLine: z.number().int().optional(),
-        limitLines: z.number().int().optional(),
-        maxChars: z.number().int().optional(),
-        encoding: z.string().optional(),
-        format: z.string().optional(),
-        maxWidth: z.number().int().optional(),
-        expectedSha256: z.string().optional(),
-        recursive: z.boolean().optional(),
-      })
-      .passthrough();
-  if (name === "process")
-    return z
-      .object({
-        action: z.enum([
-          "run",
-          "start",
-          "output",
-          "stdin",
-          "stop",
-          "list",
-          "kill_tree",
-          "wait_for_exit",
-          "wait_for_output",
-          "wait_for_port",
-          "task_start",
-          "task_get",
-          "task_list",
-          "task_cancel",
-        ]),
-        command: z.string().optional(),
-        cwd: z.string().optional(),
-        shell: z.string().optional(),
-        timeoutMs: z.number().int().optional(),
-        maxChars: z.number().int().optional(),
-        outputMode: z.string().optional(),
-        env: z.record(z.string(), z.string()).optional(),
-        processId: z.string().optional(),
-        taskId: z.string().optional(),
-        cursor: z.number().int().optional(),
-        text: z.string().optional(),
-        pattern: z.string().optional(),
-        caseSensitive: z.boolean().optional(),
-        host: z.string().optional(),
-        port: z.number().int().optional(),
-        intervalMs: z.number().int().optional(),
-      })
-      .passthrough();
-  if (name === "memory")
-    return z
-      .object({
-        action: z.string(),
-        currentTask: z.string().optional(),
-        completedSteps: z.array(z.string()).optional(),
-        pendingSteps: z.array(z.string()).optional(),
-        criticalContext: z.string().optional(),
-        label: z.string().optional(),
-        key: z.string().optional(),
-        value: z.string().optional(),
-        category: z.string().optional(),
-        tags: z.array(z.string()).optional(),
-        id: z.string().optional(),
-        query: z.string().optional(),
-        limit: z.number().int().optional(),
-        cursor: z.number().int().optional(),
-        checkpointLimit: z.number().int().optional(),
-        factLimit: z.number().int().optional(),
-        changeLimit: z.number().int().optional(),
-        keepCheckpoints: z.number().int().optional(),
-        replacementSummary: z.string().optional(),
-        scope: z.string().optional(),
-        format: z.string().optional(),
-        path: z.string().optional(),
-      })
-      .passthrough();
-  if (name === "browser")
-    return z
-      .object({
-        action: z.enum([
-          "status",
-          "targets",
-          "console",
-          "network_errors",
-          "reload",
-          "screenshot",
-          "dom_snapshot",
-          "query",
-          "inspect",
-          "computed_style",
-          "evaluate",
-          "requests",
-          "performance",
-          "launch",
-          "close",
-          "restart",
-          "open_local",
-          "profile_status",
-        ]),
-        host: z.string().optional(),
-        port: z.number().int().optional(),
-        browser: z.enum(["auto", "chrome", "edge"]).optional(),
-        executablePath: z.string().optional(),
-        url: z.string().optional(),
-        targetId: z.string().optional(),
-        maxResults: z.number().int().optional(),
-        idleMs: z.number().int().optional(),
-        format: z.enum(["png", "jpeg"]).optional(),
-        maxWidth: z.number().int().optional(),
-        fullPage: z.boolean().optional(),
-        maxDepth: z.number().int().optional(),
-        selector: z.string().optional(),
-        nodeId: z.number().int().optional(),
-        properties: z.array(z.string()).optional(),
-        expression: z.string().optional(),
-        awaitPromise: z.boolean().optional(),
-        maxChars: z.number().int().optional(),
-        reloadPage: z.boolean().optional(),
-        metrics: z.array(z.string()).optional(),
-      })
-      .passthrough();
-  if (name === "computer")
-    return z
-      .object({
-        action: z.enum([
-          "windows",
-          "inspect",
-          "find",
-          "invoke",
-          "set_value",
-          "focus",
-          "select",
-          "toggle",
-          "expand",
-          "collapse",
-          "scroll_into_view",
-          "range_value",
-          "wait",
-        ]),
-        windowId: z.string().optional(),
-        elementId: z.string().optional(),
-        name: z.string().optional(),
-        automationId: z.string().optional(),
-        controlType: z.string().optional(),
-        className: z.string().optional(),
-        value: z.string().optional(),
-        numberValue: z.number().optional(),
-        condition: z
-          .enum(["exists", "not_exists", "enabled", "disabled", "value_equals"])
-          .optional(),
-        depth: z.number().int().optional(),
-        maxResults: z.number().int().optional(),
-        timeoutMs: z.number().int().optional(),
-      })
-      .passthrough();
-  return z
-    .object({
-      action: z.string(),
-      cwd: z.string().optional(),
-      path: z.string().optional(),
-      paths: z.array(z.string()).optional(),
-      staged: z.boolean().optional(),
-      maxChars: z.number().int().optional(),
-      maxCount: z.number().int().optional(),
-      ref: z.string().optional(),
-      name: z.string().optional(),
-      create: z.boolean().optional(),
-      delete: z.boolean().optional(),
-      all: z.boolean().optional(),
-      message: z.string().optional(),
-      remote: z.string().optional(),
-      branch: z.string().optional(),
-      stashAction: z.string().optional(),
-      mode: z.string().optional(),
-      force: z.boolean().optional(),
-      dryRun: z.boolean().optional(),
-    })
-    .passthrough();
+function toolResultText(result: Record<string, unknown>): string {
+  const summary =
+    typeof result.summary === "string"
+      ? result.summary
+      : "Qnector tool completed";
+  if (result.ok === false && result.error && typeof result.error === "object") {
+    const error = result.error as {
+      code?: unknown;
+      message?: unknown;
+      hint?: unknown;
+    };
+    const code = typeof error.code === "string" ? error.code : "TOOL_ERROR";
+    const message = typeof error.message === "string" ? error.message : summary;
+    const hint = typeof error.hint === "string" ? ` Hint: ${error.hint}` : "";
+    return `${code}: ${message}${hint}`;
+  }
+  return summary;
 }
 
+function inputSchemaFor(
+  definition: ToolDefinition,
+): ReturnType<typeof fromJsonSchema> {
+  const cached = mcpInputSchemaCache.get(definition.name);
+  if (cached) return cached;
+  const schema = fromJsonSchema(definition.inputSchema);
+  mcpInputSchemaCache.set(definition.name, schema);
+  return schema;
+}
 export async function createRuntime(
   options: { configFile?: string; workspace?: string; port?: number } = {},
 ): Promise<QnectorRuntime> {

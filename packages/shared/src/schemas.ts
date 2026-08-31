@@ -42,6 +42,7 @@ export const configSchema = z.object({
     startAtLogin: z.boolean().optional(),
     globalShortcut: z.string().min(1).optional(),
     globalShortcutEnabled: z.boolean().optional(),
+    setupCompleted: z.boolean().optional(),
     theme: z.enum(["system", "light", "dark"]),
   }),
   memory: z

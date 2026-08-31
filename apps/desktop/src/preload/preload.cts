@@ -29,6 +29,7 @@ const api: QnectorApi = {
   openTerminal: (path) => ipcRenderer.invoke("system:open-terminal", path),
   openUrl: (url) => ipcRenderer.invoke("system:open-url", url),
   getConfig: () => ipcRenderer.invoke("config:get"),
+  getConnectionSetup: () => ipcRenderer.invoke("setup:inspect"),
   updateConfig: (patch) => ipcRenderer.invoke("config:update", patch),
   onStatus: (listener) => subscribe("bridge:state", listener),
   onActivity: (listener) => subscribe("activity:new", listener),

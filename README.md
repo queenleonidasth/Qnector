@@ -5,8 +5,10 @@ controlled interface for working with local projects, files, terminals, Git,
 browsers, documents, and Windows applications while you keep using ChatGPT as the
 AI interface.
 
-Qnector runs locally and does **not** call the OpenAI model API. Tools run with the
-Windows permissions of the user who launches Qnector.
+Qnector's tools run locally and do **not** call the OpenAI model API. The default
+connection uses the official OpenAI tunnel client and its Runtime API key only
+for tunnel control-plane access. Tools run with the Windows permissions of the
+user who launches Qnector.
 
 [Download the latest Windows release](https://github.com/queenleonidasth/Qnector/releases/latest)
 · [Connect to ChatGPT](docs/chatgpt-setup.md) · [Tool reference](docs/tool-reference.md)
@@ -74,15 +76,15 @@ Qnector exposes these capabilities through eight grouped MCP tools:
 - Windows 10 or Windows 11, x64.
 - A ChatGPT account/workspace that can add a custom MCP app, plugin, or
   connector.
-- [`cloudflared`](https://developers.cloudflare.com/tunnel/downloads/) installed
-  for the default **Cloudflare Quick** connection. Qnector searches PATH and
-  common Windows install locations. A Cloudflare account is not required for a
-  Quick Tunnel.
+- For the default guided connection: access to OpenAI Tunnels management and a
+  Runtime API key whose principal can read and use tunnels. Alternative
+  transports remain available in Settings.
 
 Chrome or Edge is needed only for browser automation. Git, Everything, and
 external language servers are optional and enable their corresponding features.
-The release already contains the UI Automation helper, Everything CLI client,
-and TypeScript runtime libraries.
+The release already contains the official OpenAI tunnel client and its
+`cloudflared` companion, ripgrep, the UI Automation helper, Everything CLI
+client, and TypeScript runtime libraries.
 
 ### Option A: Setup installer (recommended)
 
@@ -108,17 +110,19 @@ Get-FileHash .\Qnector-*-win-x64-setup.exe -Algorithm SHA256
 
 ## First-time setup
 
-1. Open Qnector and select **Workspace → Choose Folder**.
-2. Keep **Settings → Tunnel Mode** on **Cloudflare Quick (Auto)** unless you
-   already use another supported transport.
-3. Click the orb or **Connect to Bridge**.
-4. Wait until the status changes to **BRIDGE: ACTIVE** and an HTTPS MCP URL
-   appears.
-5. Click **COPY** to copy the URL, or select **Open in ChatGPT**.
-6. In ChatGPT, enable Developer Mode if required, create a custom MCP
-   app/plugin/connector named `Qnector`, and paste the URL ending in `/mcp`.
-7. Confirm that ChatGPT discovers all eight Qnector tools, then enable Qnector
-   in a new chat.
+1. Start Qnector. The **OpenAI Tunnel Setup** wizard opens automatically on a
+   fresh install.
+2. Confirm that **Bundled tunnel-client** is ready, then continue.
+3. Use the wizard links to create or copy a Tunnel ID and create a separate
+   Runtime API key with **Tunnels Read + Use** permission.
+4. Paste the Tunnel ID and Runtime API key, keep the `qnector` profile unless a
+   different profile is intentional, and select **Save & Connect**.
+5. Wait for **OpenAI Tunnel is connected**, then open ChatGPT Connector
+   Settings from the success page.
+6. Create or verify the Qnector connector while the desktop app is running and
+   confirm that ChatGPT discovers all eight grouped tools.
+7. In Qnector, select **Workspace → Choose Folder**, then enable Qnector in a
+   new ChatGPT conversation.
 
 ChatGPT changes its connector labels periodically. See the detailed
 [ChatGPT connection guide](docs/chatgpt-setup.md) if the menu names differ.
@@ -175,6 +179,14 @@ Build the Setup and Portable Windows packages:
 npx pnpm@10.15.0 package:windows
 ```
 
+Native release executables are intentionally not stored in Git. Before
+packaging, provision the verified Windows binaries at
+`tools/everything-cli/es.exe`, `tools/ripgrep/rg.exe`,
+`tools/tunnel-client/tunnel-client.exe`, and
+`tools/tunnel-client/cloudflared.exe`. The packaging script stops with a clear
+error if an asset is missing. Version, hash, and license details for ripgrep are
+recorded in [`tools/ripgrep/README.md`](tools/ripgrep/README.md).
+
 Artifacts are written to `apps/desktop/release`. If a running portable build
 locks that directory, the packaging script uses a timestamped `retry-*` folder.
 
@@ -204,6 +216,11 @@ Windows account permissions, and the selected workspace is the default working
 context rather than an access boundary. Only run it on a computer and workspace
 you trust, review ChatGPT confirmations, and disconnect the bridge when it is not
 needed.
+
+Tunnel credentials are saved in the current Windows user's Qnector configuration
+under `%APPDATA%\Qnector`. Use a dedicated Runtime API key with only the tunnel
+permissions required by Qnector, and revoke it if the computer or user profile is
+no longer trusted.
 
 Qnector does not automate ChatGPT itself, retrieve ChatGPT cookies, or bypass
 product confirmations. Managed browser profiles are intended for web application

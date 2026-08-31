@@ -6,6 +6,11 @@ if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = "dotnet" }
 & $dotnet publish (Join-Path $projectRoot "tools\uia-helper\Qnector.UiaHelper.csproj") -c Release -r win-x64 --self-contained true -o (Join-Path $projectRoot "tools\uia-helper\publish")
 if ($LASTEXITCODE -ne 0) { throw "Failed to publish qnector-uia helper" }
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\everything-cli\es.exe"))) { throw "Everything CLI tools\everything-cli\es.exe is missing" }
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\ripgrep\rg.exe"))) { throw "Ripgrep tools\ripgrep\rg.exe is missing" }
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\ripgrep\LICENSE-MIT"))) { throw "Ripgrep tools\ripgrep\LICENSE-MIT is missing" }
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\ripgrep\UNLICENSE"))) { throw "Ripgrep tools\ripgrep\UNLICENSE is missing" }
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\tunnel-client\tunnel-client.exe"))) { throw "OpenAI tunnel client tools\tunnel-client\tunnel-client.exe is missing" }
+if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\tunnel-client\cloudflared.exe"))) { throw "OpenAI tunnel companion tools\tunnel-client\cloudflared.exe is missing" }
 $typescriptLib = Join-Path $projectRoot "node_modules\typescript\lib"
 foreach ($lib in @("lib.d.ts", "lib.es2022.d.ts", "lib.dom.d.ts")) {
   if (-not (Test-Path -LiteralPath (Join-Path $typescriptLib $lib))) { throw "TypeScript standard library $lib is missing" }
@@ -33,6 +38,13 @@ $resourceRoot = Join-Path $releaseDir "win-unpacked\resources"
 $requiredPackagedResources = @(
   "uia-helper\qnector-uia.exe",
   "everything-cli\es.exe",
+  "ripgrep\rg.exe",
+  "ripgrep\LICENSE-MIT",
+  "ripgrep\UNLICENSE",
+  "openai-tunnel\tunnel-client.exe",
+  "openai-tunnel\cloudflared.exe",
+  "openai-tunnel\LICENSE",
+  "openai-tunnel\NOTICE",
   "typescript-lib\lib.d.ts",
   "typescript-lib\lib.es2022.d.ts",
   "typescript-lib\lib.dom.d.ts"

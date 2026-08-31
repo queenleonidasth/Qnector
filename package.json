@@ -40,7 +40,7 @@
     "fastify": "^5.12.1",
     "pdfjs-dist": "^6.3.289",
     "ws": "^8.18.1",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.4.3"
   },
   "devDependencies": {

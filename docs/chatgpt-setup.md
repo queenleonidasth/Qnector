@@ -4,13 +4,14 @@ Qnector exposes a Streamable HTTP MCP endpoint. The exact ChatGPT labels can cha
 
 For the official deployment flow, see [OpenAI's ChatGPT app connection documentation](https://developers.openai.com/plugins/deploy/connect-chatgpt).
 
-1. Start Qnector and select the workspace. Qnector creates a Cloudflare Quick Tunnel MCP link automatically.
-2. Wait for **Your MCP link is ready**, then click **Copy MCP Link**.
-3. Click **Copy & Create Plugin** to open the ChatGPT Plugins page.
-4. In ChatGPT Web, enable Developer Mode if it is available for the account, then create a custom app/plugin/connector named `Qnector`.
-5. Paste the copied HTTPS MCP URL (it ends in `/mcp`) and select the connection/auth option required by the transport.
-6. Scan the server and confirm the eight grouped tools: `system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, and `computer`.
-7. Open a new chat and select Qnector from the tools menu.
+1. Start Qnector. On a fresh install, **OpenAI Tunnel Setup** opens automatically; it is also available later from **Settings → Connection Setup**.
+2. Confirm that **Bundled tunnel-client** shows ready. Windows packages include both `tunnel-client.exe` and its `cloudflared.exe` companion, so no executable path is required.
+3. Open **Tunnels** from the wizard and create or copy a Tunnel ID (`tunnel_...`).
+4. Open **Runtime API Keys** from the wizard and create a separate Runtime API key. The runtime-key principal needs **Tunnels Read + Use** permission; do not use an Admin API key for the long-lived daemon.
+5. Paste the Tunnel ID and Runtime API key into Qnector, keep the default `qnector` profile unless a different profile is intentional, then click **Save & Connect**.
+6. Qnector creates the `sample_mcp_remote_no_auth` profile for its local MCP endpoint, runs `tunnel-client doctor --explain`, and starts the tunnel daemon. The setup is marked complete only after the bridge reaches `connected`.
+7. On the success page, open **ChatGPT Connector Settings**. Create or verify the connector while Qnector/tunnel-client is running, then scan the server and confirm the eight grouped tools: `system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, and `computer`.
+8. Open a new chat and select Qnector from the tools menu.
 
 Start with a read-only inspection prompt:
 

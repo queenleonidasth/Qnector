@@ -3,8 +3,66 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ActivityLogger } from "./activity-log.js";
+import { defaultConfig, loadConfig } from "./config.js";
+import { DocumentIntelligenceService } from "./document-intelligence.js";
 import { MemoryStore } from "./memory-store.js";
 import { REDACTED_SECRET, sanitizeText } from "./secret-sanitizer.js";
+import * as XLSX from "xlsx";
+
+describe("DocumentIntelligenceService", () => {
+  it("reads XLSX files through the SheetJS ESM filesystem adapter", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-xlsx-esm-"));
+    try {
+      const file = path.join(root, "stock.xlsx");
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(
+        workbook,
+        XLSX.utils.aoa_to_sheet([
+          ["Branch", "Stock"],
+          ["Bangkok", 42],
+        ]),
+        "Inventory",
+      );
+      await writeFile(
+        file,
+        XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+      );
+
+      const result = await new DocumentIntelligenceService().extractText({
+        path: file,
+      });
+      expect(result.text).toContain("Bangkok,42");
+      expect(result.metadata.sheets).toEqual(["Inventory"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Qnector config first-run migration", () => {
+  it("starts fresh installs in guided OpenAI Tunnel setup", () => {
+    const config = defaultConfig("C:\\workspace");
+    expect(config.transport.mode).toBe("openai-tunnel");
+    expect(config.transport.openaiProfile).toBe("qnector");
+    expect(config.ui.setupCompleted).toBe(false);
+  });
+
+  it("treats pre-wizard config files as already configured", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-old-config-"));
+    try {
+      const file = path.join(root, "config.json");
+      const legacy = defaultConfig(root);
+      delete legacy.ui.setupCompleted;
+      legacy.transport.mode = "local-only";
+      await writeFile(file, JSON.stringify(legacy), "utf8");
+      const loaded = await loadConfig({ file, persist: false });
+      expect(loaded.transport.mode).toBe("local-only");
+      expect(loaded.ui.setupCompleted).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("MemoryStore", () => {
   let root: string | undefined;

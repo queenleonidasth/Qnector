@@ -1,19 +1,31 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
 import type {
   ActivityEntry,
+  ConnectionSetupStatus,
   ProcessSnapshot,
   ServerStatus,
   ToolResult,
   TransportSnapshot,
 } from "../preload/api.js";
+import {
+  coalesceActivity,
+  mergeActivityEntry,
+  sameActivityCall,
+} from "./activity-feed.js";
 
 const fallbackBridge: TransportSnapshot = {
   state: "disconnected",
-  mode: "cloudflare-quick",
+  mode: "openai-tunnel",
 };
+
+const OPENAI_TUNNELS_URL =
+  "https://platform.openai.com/settings/organization/tunnels";
+const OPENAI_RUNTIME_KEYS_URL =
+  "https://platform.openai.com/settings/organization/api-keys";
+const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
 
 const transportOptions: Array<{ value: TransportMode; label: string }> = [
   { value: "cloudflare-quick", label: "Cloudflare Quick (Auto)" },
@@ -102,6 +114,7 @@ function App(): React.ReactElement {
   >();
   const [bridge, setBridge] = useState<TransportSnapshot>(fallbackBridge);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityEntry>();
   const [processes, setProcesses] = useState<ProcessSnapshot[]>([]);
   const [config, setConfig] = useState<QnectorConfig>();
   const [memory, setMemory] = useState<MemoryRecallView>();
@@ -124,6 +137,41 @@ function App(): React.ReactElement {
   const [holdProgress, setHoldProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const [burstFlash, setBurstFlash] = useState(false);
+  const [enteringActivityId, setEnteringActivityId] = useState<string>();
+  const [activityVisibleRows, setActivityVisibleRows] = useState(4);
+  const activityStreamRef = useRef<HTMLDivElement | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupStep, setSetupStep] = useState(0);
+  const [setupInfo, setSetupInfo] = useState<ConnectionSetupStatus>();
+  const [setupProfile, setSetupProfile] = useState("qnector");
+  const [setupTunnelId, setSetupTunnelId] = useState("");
+  const [setupRuntimeApiKey, setSetupRuntimeApiKey] = useState("");
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupError, setSetupError] = useState<string>();
+
+  useEffect(() => {
+    const stream = activityStreamRef.current;
+    if (!stream) return;
+    const updateVisibleRows = (): void => {
+      const usableHeight = Math.max(44, stream.clientHeight - 8);
+      setActivityVisibleRows(
+        Math.max(1, Math.min(15, Math.ceil(usableHeight / 50))),
+      );
+    };
+    updateVisibleRows();
+    const observer = new ResizeObserver(updateVisibleRows);
+    observer.observe(stream);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedActivity) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedActivity(undefined);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedActivity]);
 
   const closeDrawer = () => {
     if (!activeDrawer || isClosingDrawer) return;
@@ -200,6 +248,57 @@ function App(): React.ReactElement {
 
   useEffect(() => {
     let mounted = true;
+    let activityDrainTimer: number | undefined;
+    const activityQueue: ActivityEntry[] = [];
+
+    const drainActivityQueue = (): void => {
+      activityDrainTimer = undefined;
+      if (!mounted) return;
+      const entry = activityQueue.shift();
+      if (!entry) return;
+
+      if (entry.status === "running") {
+        setEnteringActivityId(entry.id);
+        window.setTimeout(() => {
+          if (!mounted) return;
+          setEnteringActivityId((current) =>
+            current === entry.id ? undefined : current,
+          );
+        }, 240);
+      }
+
+      setActivity((items) => mergeActivityEntry(items, entry).slice(0, 50));
+      if (entry.status !== "running") {
+        setSelectedActivity((current) =>
+          current?.status === "running" && sameActivityCall(current, entry)
+            ? { ...entry, id: current.id }
+            : current,
+        );
+      }
+
+      if (activityQueue.length > 0) {
+        const delay =
+          entry.status === "running"
+            ? activityQueue.length > 24
+              ? 95
+              : activityQueue.length > 8
+                ? 110
+                : 125
+            : 28;
+        activityDrainTimer = window.setTimeout(drainActivityQueue, delay);
+      }
+    };
+
+    const enqueueActivity = (entry: ActivityEntry): void => {
+      activityQueue.push(entry);
+      if (activityQueue.length > 120) {
+        activityQueue.splice(0, activityQueue.length - 120);
+      }
+      if (activityDrainTimer === undefined) {
+        activityDrainTimer = window.setTimeout(drainActivityQueue, 0);
+      }
+    };
+
     void Promise.all([
       window.qnector.getStatus(),
       window.qnector.getActivity(),
@@ -211,9 +310,22 @@ function App(): React.ReactElement {
         setStatus(nextStatus);
         setBridge(nextStatus.bridge);
         if (nextStatus.bridge.state !== "error") setError(undefined);
-        setActivity(nextActivity);
+        setActivity(coalesceActivity(nextActivity).slice(0, 50));
         setProcesses(nextProcesses);
         setConfig(nextConfig);
+        setSetupProfile(
+          nextConfig.transport.openaiProfile?.trim() || "qnector",
+        );
+        setSetupTunnelId(nextConfig.transport.openaiTunnelId ?? "");
+        setSetupRuntimeApiKey(nextConfig.transport.openaiRuntimeApiKey ?? "");
+        if (nextConfig.ui.setupCompleted !== true) {
+          setSetupOpen(true);
+          setSetupStep(0);
+        }
+        void window.qnector
+          .getConnectionSetup()
+          .then((info) => mounted && setSetupInfo(info))
+          .catch(() => undefined);
       })
       .catch((reason: unknown) => setError(String(reason)));
 
@@ -222,9 +334,7 @@ function App(): React.ReactElement {
       setBridge(next.bridge);
       if (next.bridge.state !== "error") setError(undefined);
     });
-    const offActivity = window.qnector.onActivity((entry) =>
-      setActivity((items) => [entry, ...items].slice(0, 50)),
-    );
+    const offActivity = window.qnector.onActivity(enqueueActivity);
     const offProcess = window.qnector.onProcess((entry) =>
       setProcesses((items) => [
         entry,
@@ -237,6 +347,7 @@ function App(): React.ReactElement {
       offStatus();
       offActivity();
       offProcess();
+      if (activityDrainTimer !== undefined) clearTimeout(activityDrainTimer);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
@@ -361,6 +472,82 @@ function App(): React.ReactElement {
     await window.qnector.openChatGpt();
   };
 
+  const openSetupWizard = async (): Promise<void> => {
+    setSetupError(undefined);
+    setSetupStep(0);
+    setSetupOpen(true);
+    if (config) {
+      setSetupProfile(config.transport.openaiProfile?.trim() || "qnector");
+      setSetupTunnelId(config.transport.openaiTunnelId ?? "");
+      setSetupRuntimeApiKey(config.transport.openaiRuntimeApiKey ?? "");
+    }
+    try {
+      setSetupInfo(await window.qnector.getConnectionSetup());
+    } catch (reason) {
+      setSetupError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const saveAndConnectOpenAi = async (): Promise<void> => {
+    if (!config) return;
+    const profile = setupProfile.trim() || "qnector";
+    const tunnelId = setupTunnelId.trim();
+    const runtimeApiKey = setupRuntimeApiKey.trim();
+    if (!setupInfo?.clientAvailable) {
+      setSetupError(
+        "Bundled OpenAI tunnel-client is missing. Reinstall or use a complete Qnector package.",
+      );
+      return;
+    }
+    if (!tunnelId) {
+      setSetupError(
+        "Enter the Tunnel ID created in OpenAI Tunnels management.",
+      );
+      return;
+    }
+    if (!runtimeApiKey) {
+      setSetupError(
+        "Enter a Runtime API key with Tunnels Read + Use permission.",
+      );
+      return;
+    }
+
+    setSetupBusy(true);
+    setSetupError(undefined);
+    try {
+      const saved = await window.qnector.updateConfig({
+        transport: {
+          ...config.transport,
+          mode: "openai-tunnel",
+          openaiTunnelClientPath: undefined,
+          openaiProfile: profile,
+          openaiTunnelId: tunnelId,
+          openaiRuntimeApiKey: runtimeApiKey,
+        },
+        ui: { ...config.ui, setupCompleted: false },
+      });
+      setConfig(saved);
+      const snapshot = await window.qnector.connect();
+      if (snapshot.state !== "connected")
+        throw new Error(
+          snapshot.message || "OpenAI tunnel did not reach connected state.",
+        );
+      const completed = await window.qnector.updateConfig({
+        ui: { ...saved.ui, setupCompleted: true },
+      });
+      setConfig(completed);
+      setBridge(snapshot);
+      const latest = await window.qnector.getStatus();
+      setStatus(latest);
+      setSetupInfo(await window.qnector.getConnectionSetup());
+      setSetupStep(2);
+    } catch (reason) {
+      setSetupError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSetupBusy(false);
+    }
+  };
+
   const updateTransportMode = async (mode: TransportMode): Promise<void> => {
     if (!config) return;
     setBusy(true);
@@ -408,6 +595,25 @@ function App(): React.ReactElement {
       : isConnected
         ? (status?.localUrl ?? "http://127.0.0.1:8787/mcp")
         : "Connect to generate MCP link");
+
+  const runtimeChecks = runtimeDashboard.doctor?.checks ?? [];
+  const runtimePassCount = runtimeChecks.filter(
+    (check) => check.status === "pass",
+  ).length;
+  const runtimeWarnCount = runtimeChecks.filter(
+    (check) => check.status === "warn",
+  ).length;
+  const runtimeFailCount = runtimeChecks.filter(
+    (check) => check.status === "fail",
+  ).length;
+  const runtimeManagedProcesses =
+    runtimeDashboard.snapshot?.managedProcesses.filter(
+      (process) => process.state === "running",
+    ) ?? [];
+  const runtimeNativeProcesses =
+    runtimeDashboard.snapshot?.nativeQnectorProcesses ?? [];
+  const runtimeProcessCount =
+    runtimeManagedProcesses.length + runtimeNativeProcesses.length;
 
   return (
     <div className="app-container">
@@ -593,31 +799,47 @@ function App(): React.ReactElement {
             </span>
           </div>
 
-          <div className="activity-stream">
-            {activity.slice(0, 15).map((item) => (
-              <div className="activity-item" key={item.id}>
-                <div className="item-left">
-                  <div className="item-title">
-                    {item.tool}.{item.action}
+          <div className="activity-stream" ref={activityStreamRef}>
+            <div
+              className="activity-track"
+              style={{
+                height: `${Math.max(activity.length, activityVisibleRows) * 50 + 8}px`,
+              }}
+            >
+              {activity.map((item, index) => (
+                <button
+                  type="button"
+                  className={`activity-item ${enteringActivityId === item.id ? "entering" : ""}`}
+                  data-activity-id={item.id}
+                  key={item.id}
+                  style={{ transform: `translate3d(0, ${index * 50}px, 0)` }}
+                  onClick={() => setSelectedActivity(item)}
+                  aria-label={`View details for ${item.tool}.${item.action}`}
+                >
+                  <div className="item-left">
+                    <div className="item-title">
+                      {item.tool}.{item.action}
+                    </div>
+                    <div className="item-args">{item.argsSummary || "—"}</div>
                   </div>
-                  <div className="item-args">{item.argsSummary || "—"}</div>
-                </div>
-                <div className="item-right">
-                  {item.durationMs !== undefined && (
-                    <span>{item.durationMs}ms</span>
-                  )}
-                  <span>{formatTime(item.timestamp)}</span>
-                  <span className={`item-bead ${item.status}`} />
-                </div>
-              </div>
-            ))}
+                  <div className="item-right">
+                    {item.durationMs !== undefined && (
+                      <span>{item.durationMs}ms</span>
+                    )}
+                    <span>{formatTime(item.timestamp)}</span>
+                    <span className={`item-bead ${item.status}`} />
+                    <span className="activity-open-glyph">›</span>
+                  </div>
+                </button>
+              ))}
 
-            {activity.length === 0 && (
-              <div className="empty-activity">
-                <span className="empty-spark">✦</span>
-                <span>Ready for incoming tool calls</span>
-              </div>
-            )}
+              {activity.length === 0 && (
+                <div className="empty-activity">
+                  <span className="empty-spark">✦</span>
+                  <span>Ready for incoming tool calls</span>
+                </div>
+              )}
+            </div>
           </div>
         </section>
       </main>
@@ -652,6 +874,347 @@ function App(): React.ReactElement {
           <span>Settings</span>
         </button>
       </footer>
+
+      {setupOpen && (
+        <div className="setup-backdrop" onClick={() => setSetupOpen(false)}>
+          <section
+            className="setup-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Qnector OpenAI Tunnel connection setup"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="setup-header">
+              <div>
+                <span className="setup-kicker">FIRST-RUN CONNECTION</span>
+                <h2>OpenAI Tunnel Setup</h2>
+              </div>
+              <div className="setup-step-badge">{setupStep + 1} / 3</div>
+            </div>
+
+            <div className="setup-progress" aria-hidden="true">
+              {[0, 1, 2].map((step) => (
+                <span
+                  key={step}
+                  className={step <= setupStep ? "active" : ""}
+                />
+              ))}
+            </div>
+
+            {setupStep === 0 && (
+              <div className="setup-body">
+                <div className="setup-hero-mark">Q</div>
+                <div className="setup-copy-block">
+                  <h3>Connect this PC to ChatGPT</h3>
+                  <p>
+                    Qnector now includes the official OpenAI tunnel-client. You
+                    no longer need to browse for an executable path on a new PC.
+                  </p>
+                </div>
+                <div className="setup-checklist">
+                  <div
+                    className={setupInfo?.clientAvailable ? "ready" : "missing"}
+                  >
+                    <span>{setupInfo?.clientAvailable ? "✓" : "!"}</span>
+                    <div>
+                      <strong>Bundled tunnel-client</strong>
+                      <small>
+                        {setupInfo?.clientAvailable
+                          ? setupInfo.clientPath
+                          : "Client not found in this package"}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="ready">
+                    <span>✓</span>
+                    <div>
+                      <strong>Local MCP server</strong>
+                      <small>
+                        {status?.localUrl ?? "http://127.0.0.1:8787/mcp"}
+                      </small>
+                    </div>
+                  </div>
+                </div>
+                <div className="setup-note">
+                  Next you will create or copy a Tunnel ID and a Runtime API
+                  key. The long-lived tunnel uses the runtime key, not an Admin
+                  API key.
+                </div>
+              </div>
+            )}
+
+            {setupStep === 1 && (
+              <div className="setup-body">
+                <div className="setup-copy-block">
+                  <h3>OpenAI tunnel credentials</h3>
+                  <p>
+                    Create a tunnel, then create a separate Runtime API key
+                    whose principal has Tunnels Read + Use permission.
+                  </p>
+                </div>
+                <div className="setup-link-grid">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void window.qnector.openUrl(OPENAI_TUNNELS_URL)
+                    }
+                  >
+                    <span>①</span>
+                    <div>
+                      <strong>Open Tunnels</strong>
+                      <small>Create / copy Tunnel ID</small>
+                    </div>
+                    <b>↗</b>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void window.qnector.openUrl(OPENAI_RUNTIME_KEYS_URL)
+                    }
+                  >
+                    <span>②</span>
+                    <div>
+                      <strong>Runtime API Keys</strong>
+                      <small>Create daemon credential</small>
+                    </div>
+                    <b>↗</b>
+                  </button>
+                </div>
+                <label className="setup-field">
+                  <span>Tunnel ID</span>
+                  <input
+                    value={setupTunnelId}
+                    onChange={(event) => setSetupTunnelId(event.target.value)}
+                    placeholder="tunnel_..."
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="setup-field">
+                  <span>Runtime API Key</span>
+                  <input
+                    type="password"
+                    value={setupRuntimeApiKey}
+                    onChange={(event) =>
+                      setSetupRuntimeApiKey(event.target.value)
+                    }
+                    placeholder="Paste the runtime key"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="setup-field compact">
+                  <span>Profile name</span>
+                  <input
+                    value={setupProfile}
+                    onChange={(event) => setSetupProfile(event.target.value)}
+                    placeholder="qnector"
+                    autoComplete="off"
+                  />
+                </label>
+                <div className="setup-note">
+                  Qnector will initialize the <b>sample_mcp_remote_no_auth</b>{" "}
+                  profile against its local MCP URL, then launch tunnel-client
+                  for you.
+                </div>
+              </div>
+            )}
+
+            {setupStep === 2 && (
+              <div className="setup-body setup-success">
+                <div className="setup-success-ring">✓</div>
+                <div className="setup-copy-block">
+                  <h3>OpenAI Tunnel is connected</h3>
+                  <p>
+                    Keep Qnector running while ChatGPT uses the connector. The
+                    tunnel client is supervised by Qnector and starts with the
+                    saved profile.
+                  </p>
+                </div>
+                <div className="setup-connected-card">
+                  <span className="item-bead success" />
+                  <div>
+                    <strong>{setupInfo?.profile ?? setupProfile}</strong>
+                    <small>
+                      {setupInfo?.bridge.message ??
+                        "OpenAI tunnel-client running"}
+                    </small>
+                  </div>
+                </div>
+                <button
+                  className="setup-primary wide"
+                  type="button"
+                  onClick={() =>
+                    void window.qnector.openUrl(CHATGPT_CONNECTORS_URL)
+                  }
+                >
+                  Open ChatGPT Connector Settings ↗
+                </button>
+                <div className="setup-note">
+                  Create or verify the ChatGPT connector only while
+                  tunnel-client is running. Qnector must stay running for
+                  connector discovery and MCP calls.
+                </div>
+              </div>
+            )}
+
+            {setupError && <div className="setup-error">{setupError}</div>}
+
+            <div className="setup-footer">
+              {setupStep > 0 && setupStep < 2 ? (
+                <button
+                  className="setup-secondary"
+                  type="button"
+                  disabled={setupBusy}
+                  onClick={() => {
+                    setSetupError(undefined);
+                    setSetupStep((step) => Math.max(0, step - 1));
+                  }}
+                >
+                  Back
+                </button>
+              ) : (
+                <button
+                  className="setup-secondary"
+                  type="button"
+                  onClick={() => setSetupOpen(false)}
+                >
+                  {setupStep === 2 ? "Close" : "Not now"}
+                </button>
+              )}
+
+              {setupStep === 0 && (
+                <button
+                  className="setup-primary"
+                  type="button"
+                  disabled={!setupInfo?.clientAvailable}
+                  onClick={() => {
+                    setSetupError(undefined);
+                    setSetupStep(1);
+                  }}
+                >
+                  Continue
+                </button>
+              )}
+              {setupStep === 1 && (
+                <button
+                  className="setup-primary"
+                  type="button"
+                  disabled={setupBusy}
+                  onClick={() => void saveAndConnectOpenAi()}
+                >
+                  {setupBusy ? "Connecting…" : "Save & Connect"}
+                </button>
+              )}
+              {setupStep === 2 && (
+                <button
+                  className="setup-primary"
+                  type="button"
+                  onClick={() => setSetupOpen(false)}
+                >
+                  Finish
+                </button>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {selectedActivity && (
+        <div
+          className="activity-detail-backdrop"
+          onClick={() => setSelectedActivity(undefined)}
+        >
+          <section
+            className="activity-detail-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedActivity.tool}.${selectedActivity.action} tool call details`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="activity-detail-header">
+              <div className="activity-detail-title-wrap">
+                <span
+                  className={`activity-detail-status ${selectedActivity.status}`}
+                >
+                  {selectedActivity.status}
+                </span>
+                <div className="activity-detail-title">
+                  {selectedActivity.tool}.{selectedActivity.action}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-drawer-close"
+                onClick={() => setSelectedActivity(undefined)}
+                aria-label="Close tool call details"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="activity-detail-meta-grid">
+              <div className="activity-detail-meta">
+                <span>Started / Updated</span>
+                <strong>{formatDateTime(selectedActivity.timestamp)}</strong>
+              </div>
+              <div className="activity-detail-meta">
+                <span>Duration</span>
+                <strong>
+                  {selectedActivity.durationMs === undefined
+                    ? "Running"
+                    : `${selectedActivity.durationMs} ms`}
+                </strong>
+              </div>
+              <div className="activity-detail-meta">
+                <span>Output</span>
+                <strong>{formatBytes(selectedActivity.outputSize)}</strong>
+              </div>
+              <div className="activity-detail-meta">
+                <span>Call ID</span>
+                <strong title={selectedActivity.id}>
+                  {shortActivityId(selectedActivity.id)}
+                </strong>
+              </div>
+            </div>
+
+            <div className="activity-detail-section">
+              <span className="activity-detail-label">REQUEST / ARGUMENTS</span>
+              <pre className="activity-detail-code">
+                {selectedActivity.argsSummary || "No arguments"}
+              </pre>
+            </div>
+
+            <div className="activity-detail-section">
+              <span className="activity-detail-label">WHAT IT DID</span>
+              <div className="activity-detail-summary">
+                {selectedActivity.summary ??
+                  (selectedActivity.status === "running"
+                    ? "This tool call is still running. Result details will update when it completes."
+                    : "No result summary was recorded.")}
+              </div>
+            </div>
+
+            {selectedActivity.error && (
+              <div className="activity-detail-section error">
+                <span className="activity-detail-label">ERROR</span>
+                <div className="activity-detail-error-title">
+                  {selectedActivity.error.code}:{" "}
+                  {selectedActivity.error.message}
+                </div>
+                {selectedActivity.error.hint && (
+                  <div className="activity-detail-summary">
+                    Hint: {selectedActivity.error.hint}
+                  </div>
+                )}
+                {selectedActivity.error.details !== undefined && (
+                  <pre className="activity-detail-code error">
+                    {formatActivityDetails(selectedActivity.error.details)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       {activeDrawer === "workspace" && (
         <div
@@ -857,7 +1420,7 @@ function App(): React.ReactElement {
           onClick={closeDrawer}
         >
           <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            className={`drawer-card runtime-drawer-card ${isClosingDrawer ? "closing" : ""}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
@@ -866,154 +1429,223 @@ function App(): React.ReactElement {
                 ✕
               </button>
             </div>
-            <div className="drawer-content">
-              <div className="setting-toggle-card">
-                <div style={{ minWidth: 0 }}>
-                  <span className="drawer-label">Release Identity</span>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      marginTop: "4px",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {runtimeDashboard.release?.status ??
-                      (runtimeBusy ? "checking…" : "unknown")}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "9px",
-                      color: "var(--text-muted)",
-                      marginTop: "3px",
-                      overflowWrap: "anywhere",
-                    }}
-                  >
-                    {runtimeDashboard.release?.recommendation ??
-                      "Refresh to compare running, packaged, and source state."}
-                  </div>
+
+            <div className="runtime-scroll" data-testid="runtime-scroll">
+              <p className="runtime-intro">
+                Health, release state, active processes and workflow history.
+                Start with the summary, then expand only the section you need.
+              </p>
+
+              <div className="runtime-summary-grid">
+                <div className="runtime-summary-card">
+                  <span className="runtime-summary-label">Health</span>
+                  <strong>
+                    {runtimeBusy && runtimeChecks.length === 0
+                      ? "Checking…"
+                      : runtimeFailCount > 0
+                        ? "Needs attention"
+                        : runtimeWarnCount > 0
+                          ? "Healthy · warnings"
+                          : runtimeChecks.length > 0
+                            ? "Healthy"
+                            : "Not checked"}
+                  </strong>
+                  <small>
+                    {runtimePassCount} pass · {runtimeWarnCount} warn ·{" "}
+                    {runtimeFailCount} fail
+                  </small>
                 </div>
-                <span
-                  className={`item-bead ${runtimeDashboard.release?.status === "latest" ? "success" : runtimeDashboard.release?.status === "outdated" || runtimeDashboard.release?.status === "source-newer" ? "error" : "running"}`}
-                />
+                <div className="runtime-summary-card">
+                  <span className="runtime-summary-label">Release</span>
+                  <strong className="runtime-summary-value">
+                    {runtimeDashboard.release?.status ??
+                      (runtimeBusy ? "Checking…" : "Unknown")}
+                  </strong>
+                  <small>running vs newest local build</small>
+                </div>
+                <div className="runtime-summary-card">
+                  <span className="runtime-summary-label">Processes</span>
+                  <strong>{runtimeProcessCount}</strong>
+                  <small>currently running</small>
+                </div>
+                <div className="runtime-summary-card">
+                  <span className="runtime-summary-label">Workflows</span>
+                  <strong>{runtimeDashboard.workflowRuns.length}</strong>
+                  <small>recent runs</small>
+                </div>
               </div>
 
-              <div className="memory-summary-box">
-                <div className="memory-box-header">
-                  <span>RUNTIME HEALTH</span>
-                  <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>
-                    {runtimeDashboard.doctor?.checks.length ?? 0} checks
-                  </span>
+              <details className="runtime-section" open>
+                <summary>
+                  <span>Release & build</span>
+                  <span
+                    className={`item-bead ${runtimeDashboard.release?.status === "latest" ? "success" : runtimeDashboard.release?.status === "outdated" || runtimeDashboard.release?.status === "source-newer" ? "error" : "running"}`}
+                  />
+                </summary>
+                <div className="runtime-section-body">
+                  <strong className="runtime-release-status">
+                    {runtimeDashboard.release?.status ??
+                      (runtimeBusy ? "checking…" : "unknown")}
+                  </strong>
+                  <p>
+                    {runtimeDashboard.release?.recommendation ??
+                      "Refresh to compare the running executable, newest package, and source state."}
+                  </p>
                 </div>
-                <div className="memory-checklist">
-                  {runtimeDashboard.doctor?.checks.map((check) => (
-                    <div
-                      className="memory-checklist-item"
-                      key={check.name}
-                      title={check.detail}
-                    >
+              </details>
+
+              <details className="runtime-section">
+                <summary>
+                  <span>Health checks</span>
+                  <span className="runtime-section-count">
+                    {runtimeChecks.length} checks
+                  </span>
+                </summary>
+                <div className="runtime-section-body runtime-list">
+                  {runtimeChecks.map((check) => (
+                    <div className="runtime-list-row" key={check.name}>
                       <span
                         className={`item-bead ${check.status === "pass" ? "success" : check.status === "warn" ? "running" : "error"}`}
                       />
-                      <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                        <strong>{check.name}</strong> — {check.detail}
-                      </span>
+                      <div>
+                        <strong>{check.name}</strong>
+                        <span>{check.detail}</span>
+                      </div>
                     </div>
                   ))}
                   {!runtimeDashboard.doctor && (
-                    <div className="memory-checklist-item pending">
-                      <span>Runtime diagnostics have not been loaded yet.</span>
+                    <div className="runtime-empty">
+                      Diagnostics have not been loaded yet.
                     </div>
                   )}
                 </div>
-              </div>
+              </details>
 
-              <div className="memory-summary-box">
-                <div className="memory-box-header">
-                  <span>ACTIVE PROCESS CONTEXT</span>
+              <details className="runtime-section">
+                <summary>
+                  <span>Active processes</span>
+                  <span className="runtime-section-count">
+                    {runtimeProcessCount} running
+                  </span>
+                </summary>
+                <div className="runtime-section-body runtime-list">
+                  {runtimeNativeProcesses.slice(0, 8).map((process) => (
+                    <div
+                      className="runtime-list-row"
+                      key={`native-${process.pid}`}
+                    >
+                      <span className="check-icon">●</span>
+                      <div>
+                        <strong>
+                          {process.name} · PID {process.pid}
+                        </strong>
+                        {process.executablePath && (
+                          <span>{process.executablePath}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {runtimeManagedProcesses.slice(0, 8).map((process) => (
+                    <div
+                      className="runtime-list-row"
+                      key={`managed-${process.id}`}
+                    >
+                      <span className="check-icon">▶</span>
+                      <div>
+                        <strong>Managed process</strong>
+                        <span>{process.command}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {runtimeProcessCount === 0 && (
+                    <div className="runtime-empty">
+                      No active processes loaded.
+                    </div>
+                  )}
                 </div>
-                <div className="memory-checklist">
-                  {(runtimeDashboard.snapshot?.nativeQnectorProcesses ?? [])
-                    .slice(0, 8)
-                    .map((proc) => (
-                      <div
-                        className="memory-checklist-item"
-                        key={`native-${proc.pid}`}
-                      >
-                        <span className="check-icon">●</span>
-                        <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                          {proc.name} · PID {proc.pid}
-                          {proc.executablePath
-                            ? ` · ${proc.executablePath}`
-                            : ""}
-                        </span>
-                      </div>
-                    ))}
-                  {(runtimeDashboard.snapshot?.managedProcesses ?? [])
-                    .filter((proc) => proc.state === "running")
-                    .slice(0, 8)
-                    .map((proc) => (
-                      <div
-                        className="memory-checklist-item"
-                        key={`managed-${proc.id}`}
-                      >
-                        <span className="check-icon">▶</span>
-                        <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                          {proc.command}
-                        </span>
-                      </div>
-                    ))}
-                  {(runtimeDashboard.snapshot?.nativeQnectorProcesses.length ??
-                    0) === 0 &&
-                    !runtimeDashboard.snapshot?.managedProcesses.some(
-                      (proc) => proc.state === "running",
-                    ) && (
-                      <div className="memory-checklist-item pending">
-                        <span>No active process context loaded.</span>
-                      </div>
-                    )}
-                </div>
-              </div>
+              </details>
 
-              <div className="memory-summary-box">
-                <div className="memory-box-header">
-                  <span>WORKFLOWS</span>
-                  <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>
+              <details className="runtime-section">
+                <summary>
+                  <span>Recent workflows</span>
+                  <span className="runtime-section-count">
                     {runtimeDashboard.workflowRuns.length} recent
                   </span>
-                </div>
-                <div className="memory-checklist">
-                  {runtimeDashboard.workflowRuns.slice(0, 8).map((run) => (
-                    <div className="memory-checklist-item" key={run.runId}>
+                </summary>
+                <div className="runtime-section-body runtime-list">
+                  {runtimeDashboard.workflowRuns.slice(0, 10).map((run) => (
+                    <div className="runtime-list-row" key={run.runId}>
                       <span
                         className={`item-bead ${run.state === "succeeded" ? "success" : run.state === "failed" ? "error" : "running"}`}
                       />
-                      <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                        {run.workflow} — {run.state}
-                      </span>
+                      <div>
+                        <strong>{run.workflow}</strong>
+                        <span>
+                          {run.state} · {formatTime(run.updatedAt)}
+                        </span>
+                      </div>
                     </div>
                   ))}
                   {runtimeDashboard.workflowRuns.length === 0 && (
-                    <div className="memory-checklist-item pending">
-                      <span>No workflow runs recorded.</span>
+                    <div className="runtime-empty">
+                      No workflow runs recorded.
                     </div>
                   )}
                 </div>
-              </div>
+              </details>
 
-              <div className="drawer-actions" style={{ marginTop: "6px" }}>
-                <button
-                  className="btn-drawer-action"
-                  disabled={runtimeBusy}
-                  onClick={() => void refreshRuntime()}
-                >
-                  {runtimeBusy ? "↻ Refreshing…" : "↻ Refresh Runtime"}
-                </button>
-              </div>
+              <details className="runtime-section">
+                <summary>
+                  <span>Recent runtime activity</span>
+                  <span className="runtime-section-count">
+                    {runtimeDashboard.snapshot?.recentActivity.length ?? 0}{" "}
+                    entries
+                  </span>
+                </summary>
+                <div className="runtime-section-body runtime-list">
+                  {(runtimeDashboard.snapshot?.recentActivity ?? [])
+                    .slice(0, 10)
+                    .map((entry, index) => (
+                      <div
+                        className="runtime-list-row"
+                        key={`${entry.timestamp}-${entry.tool}-${entry.action}-${index}`}
+                      >
+                        <span className={`item-bead ${entry.status}`} />
+                        <div>
+                          <strong>
+                            {entry.tool}.{entry.action}
+                          </strong>
+                          <span>{entry.summary || entry.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  {(runtimeDashboard.snapshot?.recentActivity.length ?? 0) ===
+                    0 && (
+                    <div className="runtime-empty">
+                      No recent runtime activity.
+                    </div>
+                  )}
+                </div>
+              </details>
+            </div>
+
+            <div className="runtime-footer">
+              <span>
+                {runtimeDashboard.snapshot?.capturedAt
+                  ? `Updated ${formatTime(runtimeDashboard.snapshot.capturedAt)}`
+                  : "Open Runtime to load diagnostics"}
+              </span>
+              <button
+                className="btn-drawer-action"
+                disabled={runtimeBusy}
+                onClick={() => void refreshRuntime()}
+              >
+                {runtimeBusy ? "↻ Refreshing…" : "↻ Refresh"}
+              </button>
             </div>
           </div>
         </div>
       )}
-
       {/* Slide-Up Settings Drawer */}
       {activeDrawer === "settings" && (
         <div
@@ -1031,6 +1663,21 @@ function App(): React.ReactElement {
               </button>
             </div>
             <div className="drawer-content">
+              <button
+                className="setup-launch-card"
+                type="button"
+                onClick={() => void openSetupWizard()}
+              >
+                <span className="setup-launch-icon">✦</span>
+                <span className="setup-launch-copy">
+                  <strong>Connection Setup</strong>
+                  <small>
+                    Guided OpenAI Tunnel setup from first run to connected
+                  </small>
+                </span>
+                <span className="activity-open-glyph">›</span>
+              </button>
+
               {/* Tunnel Mode Card */}
               <div className="setting-toggle-card">
                 <div
@@ -1047,7 +1694,7 @@ function App(): React.ReactElement {
                 </div>
                 <select
                   className="drawer-select"
-                  value={config?.transport.mode ?? "cloudflare-quick"}
+                  value={config?.transport.mode ?? "openai-tunnel"}
                   disabled={busy}
                   onChange={(e) =>
                     void updateTransportMode(e.target.value as TransportMode)
@@ -1208,6 +1855,42 @@ function formatTime(timestamp: string): string {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
+  }
+}
+
+function formatDateTime(timestamp: string): string {
+  try {
+    return new Date(timestamp).toLocaleString([], {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return timestamp;
+  }
+}
+
+function formatBytes(value: number | undefined): string {
+  if (value === undefined) return "—";
+  if (value < 1_000) return `${value} B`;
+  if (value < 1_000_000) return `${(value / 1_000).toFixed(1)} KB`;
+  return `${(value / 1_000_000).toFixed(2)} MB`;
+}
+
+function shortActivityId(id: string): string {
+  if (id.length <= 18) return id;
+  return `${id.slice(0, 8)}…${id.slice(-6)}`;
+}
+
+function formatActivityDetails(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
   }
 }
 

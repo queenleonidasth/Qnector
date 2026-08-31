@@ -27,7 +27,7 @@ import {
 export const filesDefinition: ToolDefinition = {
   name: "files",
   description:
-    "Read, preview images, create, edit, patch, move, copy, hash, or delete local files. files.preview returns PNG/JPEG/WEBP as an MCP image attachment so ChatGPT can inspect the image directly. Relative paths resolve from the active Qnector workspace; absolute paths are supported. Prefer read before edit, apply_patch for multi-file changes, and return a concise change summary.",
+    "Read, preview images, create, edit, patch, move, copy, hash, or delete local files. Prefer read_many when 2 or more known files are needed so they can be fetched in one tool turn. files.preview returns PNG/JPEG/WEBP as an MCP image attachment. Relative paths resolve from the active Qnector workspace; absolute paths are supported. Prefer read before edit and apply_patch for multi-file changes.",
   inputSchema: {
     type: "object",
     properties: {
@@ -65,6 +65,8 @@ export const filesDefinition: ToolDefinition = {
       destination: { type: "string" },
       offsetLine: { type: "integer", minimum: 1 },
       limitLines: { type: "integer", minimum: 1 },
+      offsetBytes: { type: "integer", minimum: 0 },
+      limitBytes: { type: "integer", minimum: 1, maximum: 5000000 },
       maxChars: { type: "integer", minimum: 1 },
       page: { type: "integer", minimum: 1 },
       sheet: { type: "string" },
@@ -428,21 +430,67 @@ async function readFileAction(
   const encoding = stringInput(input, "encoding") ?? "utf8";
   const info = await stat(target);
   if (!info.isFile()) throw new Error(`NOT_A_FILE: ${target}`);
-  const sha256 = await hashFile(target);
   if (encoding === "base64") {
-    const buffer = await readFile(target);
+    const offsetBytes = Math.max(
+      0,
+      Math.min(Math.floor(numberInput(input, "offsetBytes", 0)), info.size),
+    );
+    const limitBytes = Math.max(
+      1,
+      Math.min(
+        Math.floor(numberInput(input, "limitBytes", 256_000)),
+        5_000_000,
+      ),
+    );
+    const selectedBytes = Math.min(
+      limitBytes,
+      Math.max(0, info.size - offsetBytes),
+    );
+    const buffer = Buffer.alloc(selectedBytes);
+    let bytesRead = 0;
+    if (selectedBytes > 0) {
+      const handle = await open(target, "r");
+      try {
+        while (bytesRead < selectedBytes) {
+          const result = await handle.read(
+            buffer,
+            bytesRead,
+            selectedBytes - bytesRead,
+            offsetBytes + bytesRead,
+          );
+          if (result.bytesRead === 0) break;
+          bytesRead += result.bytesRead;
+        }
+      } finally {
+        await handle.close();
+      }
+    }
+    const content =
+      bytesRead === buffer.length ? buffer : buffer.subarray(0, bytesRead);
+    const sha256 = await hashFile(target);
+    const truncated = offsetBytes + bytesRead < info.size;
+    const nextOffsetBytes = truncated ? offsetBytes + bytesRead : null;
     return {
-      summary: `Read ${buffer.length} bytes from ${target}`,
+      summary: `Read ${bytesRead} of ${info.size} bytes from ${target}`,
       data: {
         path: target,
         encoding,
-        contentBase64: buffer.toString("base64"),
-        bytes: buffer.length,
+        contentBase64: content.toString("base64"),
+        bytes: bytesRead,
+        totalBytes: info.size,
+        offsetBytes,
+        limitBytes,
         sha256,
+        truncated,
+        nextOffsetBytes,
       },
+      truncated,
+      nextCursor: nextOffsetBytes,
     };
   }
-  const content = await readFile(target, "utf8");
+  const buffer = await readFile(target);
+  const sha256 = createHash("sha256").update(buffer).digest("hex");
+  const content = buffer.toString("utf8");
   const allLines = content.split(/\r?\n/);
   if (allLines.at(-1) === "") allLines.pop();
   const offsetLine = Math.max(
@@ -454,13 +502,23 @@ async function readFileAction(
     Math.min(Math.floor(numberInput(input, "limitLines", 200)), 10_000),
   );
   const selected = allLines.slice(offsetLine - 1, offsetLine - 1 + limitLines);
-  const numbered = selected
+  const numberedRaw = selected
     .map(
       (line, index) =>
         `${String(offsetLine + index).padStart(6, " ")} | ${line}`,
     )
     .join("\n");
-  const truncated = offsetLine - 1 + selected.length < allLines.length;
+  const maxChars = Math.max(
+    1_000,
+    Math.min(Math.floor(numberInput(input, "maxChars", 100_000)), 1_000_000),
+  );
+  const contentTruncated = numberedRaw.length > maxChars;
+  const numbered = contentTruncated
+    ? numberedRaw.slice(0, maxChars)
+    : numberedRaw;
+  const linesTruncated = offsetLine - 1 + selected.length < allLines.length;
+  const truncated = linesTruncated || contentTruncated;
+  const nextOffsetLine = linesTruncated ? offsetLine + selected.length : null;
   return {
     summary: `Read ${selected.length} line(s) from ${target}`,
     data: {
@@ -472,11 +530,13 @@ async function readFileAction(
       endLine: selected.length ? offsetLine + selected.length - 1 : null,
       totalLines: allLines.length,
       sha256,
+      maxChars,
+      contentTruncated,
       truncated,
-      nextOffsetLine: truncated ? offsetLine + selected.length : null,
+      nextOffsetLine,
     },
     truncated,
-    nextCursor: truncated ? offsetLine + selected.length : null,
+    nextCursor: nextOffsetLine,
   };
 }
 
@@ -510,7 +570,7 @@ async function readManyAction(
       files.push({
         path: target,
         content: text,
-        sha256: await hashFile(target),
+        sha256: createHash("sha256").update(content, "utf8").digest("hex"),
         truncated: text.length < content.length,
       });
       if (text.length < content.length) omitted += 1;

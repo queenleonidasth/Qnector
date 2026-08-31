@@ -18,6 +18,21 @@ extraResources:
     to: uia-helper/qnector-uia.exe
   - from: ../../tools/everything-cli/es.exe
     to: everything-cli/es.exe
+  - from: ../../tools/ripgrep
+    to: ripgrep
+    filter:
+      - rg.exe
+      - LICENSE-MIT
+      - UNLICENSE
+      - README.md
+  - from: ../../tools/tunnel-client
+    to: openai-tunnel
+    filter:
+      - "*.exe"
+      - LICENSE
+      - NOTICE
+      - "*.txt"
+      - "*.json"
   - from: ../../node_modules/typescript/lib
     to: typescript-lib
     filter:

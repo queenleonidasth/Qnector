@@ -44,6 +44,15 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
           this.localUrl,
         ],
         this.options.runtimeApiKey,
+        "OPENAI_TUNNEL_INIT_FAILED",
+      );
+    }
+    if (this.options.runtimeApiKey) {
+      await runClientCommand(
+        this.options.executable,
+        ["doctor", "--profile", profile, "--explain"],
+        this.options.runtimeApiKey,
+        "OPENAI_TUNNEL_DOCTOR_FAILED",
       );
     }
     this.child = spawn(this.options.executable, ["run", "--profile", profile], {
@@ -77,6 +86,7 @@ function runClientCommand(
   executable: string,
   args: string[],
   runtimeApiKey: string,
+  errorCode: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
@@ -91,7 +101,7 @@ function runClientCommand(
     child.once("error", reject);
     child.once("exit", (code) => {
       if (code === 0) return resolve();
-      reject(new Error(`OPENAI_TUNNEL_INIT_FAILED: ${stderr.trim() || code}`));
+      reject(new Error(`${errorCode}: ${stderr.trim() || code}`));
     });
   });
 }

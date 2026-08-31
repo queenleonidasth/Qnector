@@ -40,7 +40,7 @@ function defaultShell(): QnectorConfig["shell"] {
 
 export function defaultConfig(workspace = process.cwd()): QnectorConfig {
   const normalizedWorkspace = path.resolve(workspace);
-  const mode: TransportMode = "cloudflare-quick";
+  const mode: TransportMode = "openai-tunnel";
   return {
     version: 1,
     deviceId: randomUUID(),
@@ -57,6 +57,7 @@ export function defaultConfig(workspace = process.cwd()): QnectorConfig {
       startAtLogin: false,
       globalShortcut: "CommandOrControl+Shift+Q",
       globalShortcutEnabled: true,
+      setupCompleted: false,
       theme: "system",
     },
     memory: {
@@ -90,7 +91,16 @@ export async function loadConfig(
   try {
     const raw = await readFile(file, "utf8");
     const parsed = configSchema.safeParse(JSON.parse(raw));
-    if (parsed.success) return parsed.data as QnectorConfig;
+    if (parsed.success) {
+      const loaded = parsed.data as QnectorConfig;
+      return {
+        ...loaded,
+        ui: {
+          ...loaded.ui,
+          setupCompleted: loaded.ui.setupCompleted ?? true,
+        },
+      };
+    }
   } catch {
     // First run or a partially written config: fall through to defaults.
   }

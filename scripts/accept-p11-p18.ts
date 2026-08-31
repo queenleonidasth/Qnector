@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,8 @@ import * as XLSX from "xlsx";
 import { ActivityLogger, defaultConfig } from "../packages/core/src/index.js";
 import { QnectorRuntime } from "../packages/mcp-server/src/server.js";
 import type { ToolResult } from "../packages/shared/src/types.js";
+
+XLSX.set_fs(fs);
 
 const projectRoot = path.resolve(import.meta.dirname, "..");
 const root = await mkdtemp(path.join(os.tmpdir(), "qnector-p11-p18-"));

@@ -1,7 +1,7 @@
 import type { MemoryRecall } from "@qnector/core";
 import type { ActivityEntry } from "@qnector/shared";
 
-const MAX_BOOTSTRAP_BYTES = 8_000;
+const MAX_BOOTSTRAP_BYTES = 4_000;
 
 export function buildSessionBootstrapInstructions(
   memory: MemoryRecall,
@@ -35,16 +35,16 @@ export function buildSessionBootstrapInstructions(
   const active = memory.state.active;
   if (active) {
     lines.push("", `Current task: ${clip(active.currentTask, 1_000)}`);
-    pushList(lines, "Completed steps", active.completedSteps, 8, 320);
-    pushList(lines, "Pending steps", active.pendingSteps, 12, 320);
+    pushList(lines, "Completed steps", active.completedSteps, 5, 260);
+    pushList(lines, "Pending steps", active.pendingSteps, 8, 260);
     if (active.criticalContext) {
-      lines.push("", "Critical context:", clip(active.criticalContext, 2_000));
+      lines.push("", "Critical context:", clip(active.criticalContext, 320));
     }
   }
 
   const working = recentActivity
     .filter((entry) => entry.status !== "running" && entry.tool !== "memory")
-    .slice(-8)
+    .slice(-5)
     .reverse();
   if (working.length > 0) {
     lines.push("", "Recent working set:");
@@ -55,7 +55,7 @@ export function buildSessionBootstrapInstructions(
     }
   }
 
-  const changes = memory.state.recentChanges.slice(0, 6);
+  const changes = memory.state.recentChanges.slice(0, 4);
   if (changes.length > 0) {
     lines.push("", "Recent Qnector changes:");
     for (const change of changes) {
@@ -66,7 +66,7 @@ export function buildSessionBootstrapInstructions(
     }
   }
 
-  const facts = memory.state.facts.slice(0, 12);
+  const facts = memory.state.facts.slice(0, 6);
   if (facts.length > 0) {
     lines.push("", "Core facts / decisions / rules:");
     for (const fact of facts) {

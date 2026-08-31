@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import AdmZip from "adm-zip";
@@ -6,6 +7,7 @@ import * as XLSXImport from "xlsx";
 const XLSX =
   (XLSXImport as typeof XLSXImport & { default?: typeof XLSXImport }).default ??
   XLSXImport;
+XLSX.set_fs(fs);
 import type { ToolAttachment } from "@qnector/shared";
 
 export type DocumentKind =

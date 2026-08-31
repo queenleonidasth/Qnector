@@ -9,6 +9,17 @@ import type {
   ToolResult,
 } from "@qnector/shared";
 
+export interface ConnectionSetupStatus {
+  mode: TransportConfig["mode"];
+  setupCompleted: boolean;
+  clientPath: string;
+  clientAvailable: boolean;
+  profile: string;
+  tunnelIdConfigured: boolean;
+  runtimeApiKeyConfigured: boolean;
+  bridge: TransportSnapshot;
+}
+
 export interface QnectorApi {
   getStatus(): Promise<
     ServerStatus & { publicUrl?: string; bridge: TransportSnapshot }
@@ -43,6 +54,7 @@ export interface QnectorApi {
   openPath(path: string): Promise<void>;
   openUrl(url: string): Promise<void>;
   getConfig(): Promise<QnectorConfig>;
+  getConnectionSetup(): Promise<ConnectionSetupStatus>;
   updateConfig(patch: {
     host?: string;
     localPort?: number;

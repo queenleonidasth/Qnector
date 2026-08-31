@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -14,6 +15,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_MAX_RESULTS = 200;
+let cachedRipgrepExecutable: string | null | undefined;
 
 export const workspaceDefinition: ToolDefinition = {
   name: "workspace",
@@ -77,6 +79,11 @@ export const workspaceDefinition: ToolDefinition = {
       maxResults: { type: "integer", minimum: 1 },
       offset: { type: "integer", minimum: 0 },
       includeHidden: { type: "boolean" },
+      details: {
+        type: "boolean",
+        description:
+          "Return expanded project/memory context. Defaults to false for a compact high-signal summary.",
+      },
     },
     required: ["action"],
   },
@@ -431,56 +438,198 @@ export async function executeWorkspace(
     }
     if (action === "grep") {
       const pattern = stringInput(object, "pattern", true)!;
-      const regex = new RegExp(pattern, "gm");
-      const entries = (await walk(root, includeHidden, 20_000)).filter(
-        (entry) =>
-          entry.type === "file" &&
-          (!object.glob || matchGlob(entry.relative, String(object.glob))),
-      );
-      const matches: Array<{ path: string; line: number; text: string }> = [];
-      for (const entry of entries) {
-        if (matches.length >= offset + maxResults) break;
-        try {
-          const text = await readFile(entry.absolute, "utf8");
-          for (const [index, line] of text.split(/\r?\n/).entries()) {
-            regex.lastIndex = 0;
-            if (regex.test(line))
-              matches.push({
-                path: entry.relative,
-                line: index + 1,
-                text: line.slice(0, 400),
-              });
-            if (matches.length >= offset + maxResults) break;
-          }
-        } catch {
-          // Ignore binary/unreadable files during search.
-        }
-      }
+      const glob = stringInput(object, "glob");
+      const requiredMatches = offset + maxResults + 1;
+      const ripgrep = await tryRipgrep({
+        root,
+        pattern,
+        glob,
+        includeHidden,
+        maxMatches: requiredMatches,
+      });
+      const matches =
+        ripgrep ??
+        (await grepWithNode({
+          root,
+          pattern,
+          glob,
+          includeHidden,
+          maxMatches: requiredMatches,
+        }));
+      const hasMore = matches.length > offset + maxResults;
       const selected = matches.slice(offset, offset + maxResults);
       return {
-        summary: `grep found ${selected.length} match(es)`,
+        summary: `grep found ${selected.length} match(es) via ${ripgrep ? "ripgrep" : "Node fallback"}`,
         data: {
           matches: selected,
           total: matches.length,
+          totalExact: !hasMore,
           offset,
           maxResults,
-          truncated: matches.length >= offset + maxResults,
+          provider: ripgrep ? "ripgrep" : "node",
+          truncated: hasMore,
         },
-        truncated: matches.length >= offset + maxResults,
-        nextCursor:
-          matches.length >= offset + maxResults
-            ? offset + selected.length
-            : null,
+        truncated: hasMore,
+        nextCursor: hasMore ? offset + selected.length : null,
       };
     }
     if (action === "summary") {
       return {
         summary: `Summary for ${root}`,
-        data: await projectSummary(root, context),
+        data: await projectSummary(
+          root,
+          context,
+          booleanInput(object, "details", false),
+        ),
       };
     }
     throw new Error(`INVALID_ACTION: Unknown workspace action '${action}'`);
   });
+}
+
+interface GrepMatch {
+  path: string;
+  line: number;
+  text: string;
+}
+
+interface GrepOptions {
+  root: string;
+  pattern: string;
+  glob?: string;
+  includeHidden: boolean;
+  maxMatches: number;
+}
+
+async function tryRipgrep(options: GrepOptions): Promise<GrepMatch[] | null> {
+  let rootInfo;
+  try {
+    rootInfo = await stat(options.root);
+  } catch {
+    return null;
+  }
+  if (!rootInfo.isDirectory()) return null;
+
+  const args = [
+    "--line-number",
+    "--with-filename",
+    "--no-heading",
+    "--color",
+    "never",
+    "--no-messages",
+    "--max-columns",
+    "1000",
+    "--max-columns-preview",
+  ];
+  if (options.includeHidden) args.push("--hidden");
+  for (const excluded of [
+    "!node_modules/**",
+    "!.git/**",
+    "!dist/**",
+    "!release/**",
+  ]) {
+    args.push("-g", excluded);
+  }
+  if (options.glob) args.push("-g", options.glob.replaceAll("\\", "/"));
+  args.push("--", options.pattern, ".");
+
+  const executable = await resolveRipgrepExecutable();
+  if (!executable) return null;
+  try {
+    const result = await execFileAsync(executable, args, {
+      cwd: options.root,
+      windowsHide: true,
+      maxBuffer: 4_000_000,
+    });
+    return parseRipgrepOutput(result.stdout, options.maxMatches);
+  } catch (error) {
+    const candidate = error as { code?: string | number; stdout?: string };
+    if (candidate.code === 1) return [];
+    if (candidate.code === "ENOENT") return null;
+    // Keep JavaScript regex compatibility if rg rejects a pattern or the output
+    // exceeds the bounded buffer.
+    return null;
+  }
+}
+
+async function resolveRipgrepExecutable(): Promise<string | null> {
+  if (cachedRipgrepExecutable !== undefined) return cachedRipgrepExecutable;
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
+    .resourcesPath;
+  const candidates = [
+    process.env.QNECTOR_RIPGREP_PATH,
+    process.env.QNECTOR_RG_PATH,
+    resourcesPath ? path.join(resourcesPath, "ripgrep", "rg.exe") : undefined,
+    process.platform === "win32"
+      ? path.join(process.cwd(), "tools", "ripgrep", "rg.exe")
+      : undefined,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      cachedRipgrepExecutable = candidate;
+      return candidate;
+    }
+  }
+  const locator = process.platform === "win32" ? "where.exe" : "which";
+  const name = process.platform === "win32" ? "rg.exe" : "rg";
+  try {
+    const result = await execFileAsync(locator, [name], { windowsHide: true });
+    const located = result.stdout
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .find(Boolean);
+    cachedRipgrepExecutable = located ?? null;
+  } catch {
+    cachedRipgrepExecutable = null;
+  }
+  return cachedRipgrepExecutable;
+}
+
+function parseRipgrepOutput(stdout: string, maxMatches: number): GrepMatch[] {
+  const matches: GrepMatch[] = [];
+  for (const row of stdout.split(/\r?\n/)) {
+    if (!row) continue;
+    const match = /^(.*?):(\d+):(.*)$/.exec(row);
+    if (!match) continue;
+    matches.push({
+      path: path.normalize(match[1]!.replace(/^\.\//, "")),
+      line: Number(match[2]),
+      text: match[3]!.slice(0, 400),
+    });
+    if (matches.length >= maxMatches) break;
+  }
+  return matches;
+}
+
+async function grepWithNode(options: GrepOptions): Promise<GrepMatch[]> {
+  const regex = new RegExp(options.pattern, "gm");
+  const entries = (
+    await walk(options.root, options.includeHidden, 20_000)
+  ).filter(
+    (entry) =>
+      entry.type === "file" &&
+      (!options.glob || matchGlob(entry.relative, options.glob)),
+  );
+  const matches: GrepMatch[] = [];
+  for (const entry of entries) {
+    if (matches.length >= options.maxMatches) break;
+    try {
+      const text = await readFile(entry.absolute, "utf8");
+      for (const [index, line] of text.split(/\r?\n/).entries()) {
+        regex.lastIndex = 0;
+        if (regex.test(line))
+          matches.push({
+            path: entry.relative,
+            line: index + 1,
+            text: line.slice(0, 400),
+          });
+        if (matches.length >= options.maxMatches) break;
+      }
+    } catch {
+      // Ignore binary/unreadable files during search.
+    }
+  }
+  return matches;
 }
 
 async function walk(
@@ -596,6 +745,7 @@ function toTree(entries: WalkEntry[]): Array<{
 async function projectSummary(
   root: string,
   context: ToolContext,
+  details = false,
 ): Promise<Record<string, unknown>> {
   const manifests = [
     "package.json",
@@ -660,26 +810,29 @@ async function projectSummary(
   ) {
     try {
       const memory = await context.memory.recall({
-        checkpointLimit: 10,
-        factLimit: 20,
-        changeLimit: 20,
+        checkpointLimit: details ? 10 : 1,
+        factLimit: details ? 20 : 8,
+        changeLimit: details ? 20 : 6,
       });
-      summary.memory = capMemoryBlock({
-        available: memory.available,
-        workspaceId: memory.workspaceId,
-        updatedAt: memory.updatedAt,
-        lastCheckpointAt: memory.checkpoints[0]?.createdAt ?? null,
-        counts: memory.counts,
-        truncated: memory.truncated,
-        sanitized: memory.sanitized,
-        currentTask: memory.state.active?.currentTask ?? null,
-        completedSteps: memory.state.active?.completedSteps ?? [],
-        pendingSteps: memory.state.active?.pendingSteps ?? [],
-        criticalContext: memory.state.active?.criticalContext ?? null,
-        coreFacts: memory.state.facts,
-        recentChanges: memory.state.recentChanges,
-        ...(memory.warning ? { warning: memory.warning } : {}),
-      });
+      summary.memory = capMemoryBlock(
+        {
+          available: memory.available,
+          workspaceId: memory.workspaceId,
+          updatedAt: memory.updatedAt,
+          lastCheckpointAt: memory.checkpoints[0]?.createdAt ?? null,
+          counts: memory.counts,
+          truncated: memory.truncated,
+          sanitized: memory.sanitized,
+          currentTask: memory.state.active?.currentTask ?? null,
+          completedSteps: memory.state.active?.completedSteps ?? [],
+          pendingSteps: memory.state.active?.pendingSteps ?? [],
+          criticalContext: memory.state.active?.criticalContext ?? null,
+          coreFacts: memory.state.facts,
+          recentChanges: memory.state.recentChanges,
+          ...(memory.warning ? { warning: memory.warning } : {}),
+        },
+        details ? 12_000 : 6_000,
+      );
     } catch (error) {
       summary.memory = {
         available: false,
@@ -702,8 +855,8 @@ function comparablePath(value: string): string {
 
 function capMemoryBlock(
   value: Record<string, unknown>,
+  maxBytes = 12_000,
 ): Record<string, unknown> {
-  const maxBytes = 12_000;
   const result = JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
   const byteSize = (): number =>
     Buffer.byteLength(JSON.stringify(result), "utf8");

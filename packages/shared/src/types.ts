@@ -35,6 +35,7 @@ export interface UiConfig {
   startAtLogin?: boolean;
   globalShortcut?: string;
   globalShortcutEnabled?: boolean;
+  setupCompleted?: boolean;
   theme: "system" | "light" | "dark";
 }
 

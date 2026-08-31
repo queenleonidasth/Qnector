@@ -85,6 +85,166 @@ describe("Qnector grouped tools", () => {
     );
   });
 
+  it("runs independent tool calls through one bounded parallel batch", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-"));
+    await writeFile(path.join(root, "alpha.txt"), "alpha\n");
+    await writeFile(path.join(root, "beta.txt"), "beta\n");
+    const context = makeContext(defaultConfig(root));
+    const result = await new ToolRegistry().call("system", context, {
+      action: "parallel",
+      maxConcurrency: 3,
+      calls: [
+        { id: "status", tool: "system", input: { action: "status" } },
+        {
+          id: "alpha",
+          tool: "files",
+          input: { action: "read", path: "alpha.txt" },
+        },
+        {
+          id: "beta",
+          tool: "files",
+          input: { action: "read", path: "beta.txt" },
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    const batch = (
+      result.data as {
+        data?: { results?: Array<{ id?: string; result: { ok: boolean } }> };
+      }
+    )?.data;
+    expect(batch?.results?.map((entry) => entry.id)).toEqual([
+      "status",
+      "alpha",
+      "beta",
+    ]);
+    expect(batch?.results?.every((entry) => entry.result.ok)).toBe(true);
+    expect(JSON.stringify(result)).toContain('"maxConcurrency":3');
+  });
+
+  it("rejects recursive parallel fan-out", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-recursive-"));
+    const context = makeContext(defaultConfig(root));
+    const result = await new ToolRegistry().call("system", context, {
+      action: "parallel",
+      calls: [
+        { tool: "system", input: { action: "status" } },
+        {
+          tool: "system",
+          input: {
+            action: "parallel",
+            calls: [
+              { tool: "system", input: { action: "status" } },
+              { tool: "system", input: { action: "status" } },
+            ],
+          },
+        },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("INVALID_INPUT");
+  });
+
+  it("preserves image attachments returned by parallel subcalls", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-image-"));
+    const image = pngFixture(3, 2);
+    await writeFile(path.join(root, "preview.png"), image);
+    const result = await new ToolRegistry().call(
+      "system",
+      makeContext(defaultConfig(root)),
+      {
+        action: "parallel",
+        calls: [
+          { tool: "system", input: { action: "status" } },
+          {
+            tool: "files",
+            input: { action: "preview", path: "preview.png" },
+          },
+        ],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.attachments).toHaveLength(1);
+    expect(result.attachments?.[0]).toMatchObject({
+      mimeType: "image/png",
+      width: 3,
+      height: 2,
+    });
+    expect(JSON.stringify(result.data)).not.toContain(image.toString("base64"));
+  });
+
+  it("uses one-call batch reads and bounded workspace grep", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-fast-read-"));
+    await writeFile(path.join(root, "alpha.txt"), "needle alpha\n");
+    await writeFile(path.join(root, "beta.txt"), "needle beta\n");
+    const context = makeContext(defaultConfig(root));
+    const registry = new ToolRegistry();
+
+    const batch = await registry.call("files", context, {
+      action: "read_many",
+      paths: ["alpha.txt", "beta.txt"],
+      maxChars: 10_000,
+    });
+    expect(batch.ok).toBe(true);
+    expect(JSON.stringify(batch.data)).toContain("needle alpha");
+    expect(JSON.stringify(batch.data)).toContain("needle beta");
+
+    const grep = await registry.call("workspace", context, {
+      action: "grep",
+      pattern: "needle",
+      maxResults: 10,
+    });
+    expect(grep.ok).toBe(true);
+    expect(JSON.stringify(grep.data)).toContain("alpha.txt");
+    expect(JSON.stringify(grep.data)).toContain("beta.txt");
+    expect(["ripgrep", "node"]).toContain(
+      (grep.data as { data?: { provider?: string } }).data?.provider ?? "",
+    );
+  });
+
+  it("paginates base64 reads so large binary files stay bounded", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-base64-page-"));
+    await writeFile(
+      path.join(root, "binary.bin"),
+      Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+    );
+    const result = await new ToolRegistry().call(
+      "files",
+      makeContext(defaultConfig(root)),
+      { action: "read", path: "binary.bin", encoding: "base64", limitBytes: 4 },
+    );
+    expect(result.ok).toBe(true);
+    const payload = (result.data as { data: Record<string, unknown> }).data;
+    expect(payload.contentBase64).toBe(
+      Buffer.from([0, 1, 2, 3]).toString("base64"),
+    );
+    expect(payload.bytes).toBe(4);
+    expect(payload.totalBytes).toBe(10);
+    expect(payload.nextOffsetBytes).toBe(4);
+    expect(result.meta.truncated).toBe(true);
+    expect(result.meta.nextCursor).toBe(4);
+
+    const next = await new ToolRegistry().call(
+      "files",
+      makeContext(defaultConfig(root)),
+      {
+        action: "read",
+        path: "binary.bin",
+        encoding: "base64",
+        offsetBytes: 8,
+        limitBytes: 4,
+      },
+    );
+    const nextPayload = (next.data as { data: Record<string, unknown> }).data;
+    expect(nextPayload.contentBase64).toBe(
+      Buffer.from([8, 9]).toString("base64"),
+    );
+    expect(nextPayload.bytes).toBe(2);
+    expect(next.meta.truncated).toBe(false);
+    expect(next.meta.nextCursor).toBeNull();
+  });
+
   it("previews PNG, JPEG, and WEBP files as image attachments", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-preview-"));
     const context = makeContext(defaultConfig(root));
@@ -458,6 +618,28 @@ describe("Qnector grouped tools", () => {
     expect(JSON.stringify(result)).toContain("report-final.xlsx");
     expect(JSON.stringify(result)).not.toContain("report-notes.txt");
     expect(JSON.stringify(result)).toContain("bounded");
+  });
+
+  it("resolves bundled ripgrep through system.which on Windows", async () => {
+    if (process.platform !== "win32") return;
+    root = await mkdtemp(path.join(tmpdir(), "qnector-which-rg-"));
+    const ripgrepPath = path.join(root, "rg.exe");
+    await writeFile(ripgrepPath, "test executable placeholder");
+    const previous = process.env.QNECTOR_RIPGREP_PATH;
+    process.env.QNECTOR_RIPGREP_PATH = ripgrepPath;
+    try {
+      const result = await new ToolRegistry().call(
+        "system",
+        makeContext(defaultConfig(root)),
+        { action: "which", name: "rg" },
+      );
+      expect(result.ok).toBe(true);
+      const payload = result.data as { data?: { path?: string[] } } | undefined;
+      expect(payload?.data?.path).toContain(ripgrepPath);
+    } finally {
+      if (previous === undefined) delete process.env.QNECTOR_RIPGREP_PATH;
+      else process.env.QNECTOR_RIPGREP_PATH = previous;
+    }
   });
 
   it("routes semantic Windows UI Automation through the computer tool", async () => {

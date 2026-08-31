@@ -40,4 +40,29 @@ describe("desktop UI overflow guards", () => {
       /\.dock-pill-btn \{[\s\S]*?min-width:\s*0;[\s\S]*?overflow:\s*hidden;/,
     );
   });
+
+  it("keeps the animated activity queue scrollable through older calls", async () => {
+    const css = await styles();
+    expect(css).toMatch(
+      /\.activity-stream \{[\s\S]*?overflow-y:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;[\s\S]*?transparent 0,[\s\S]*?transparent 100%/,
+    );
+    expect(css).toMatch(
+      /\.activity-track \{[\s\S]*?position:\s*relative;[\s\S]*?min-height:\s*100%;/,
+    );
+    expect(css).toMatch(
+      /\.activity-item \{[\s\S]*?position:\s*absolute;[\s\S]*?height:\s*44px;[\s\S]*?transform 100ms/,
+    );
+    expect(css).toContain("@keyframes activityQueueReveal");
+  });
+
+  it("gives drawers and runtime diagnostics a real vertical scroll region", async () => {
+    const css = await styles();
+    expect(css).toMatch(
+      /\.drawer-content \{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;[\s\S]*?overflow-y:\s*auto;/,
+    );
+    expect(css).toMatch(
+      /\.runtime-scroll \{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;[\s\S]*?overflow-y:\s*auto;/,
+    );
+    expect(css).toMatch(/\.runtime-footer \{[\s\S]*?flex:\s*0 0 auto;/);
+  });
 });

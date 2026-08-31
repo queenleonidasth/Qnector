@@ -9,6 +9,7 @@ tools/uia-helper/obj/
 tools/uia-helper/publish/
 tools/tunnel-client/*.exe
 tools/everything-cli/*.exe
+tools/ripgrep/*.exe
 .env
 .env.*
 !.env.example

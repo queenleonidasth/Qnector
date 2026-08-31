@@ -14,7 +14,14 @@ export interface BuildIdentity {
   sourceRevision: string | null;
 }
 
-export async function getBuildIdentity(): Promise<BuildIdentity> {
+let cachedBuildIdentity: Promise<BuildIdentity> | undefined;
+
+export function getBuildIdentity(): Promise<BuildIdentity> {
+  cachedBuildIdentity ??= loadBuildIdentity();
+  return cachedBuildIdentity;
+}
+
+async function loadBuildIdentity(): Promise<BuildIdentity> {
   const executablePath = resolveExecutablePath();
   const info = await stat(executablePath).catch(() => null);
   const builtAt =

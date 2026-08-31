@@ -100,16 +100,27 @@ export async function bootstrap(): Promise<void> {
     broadcast("bridge:state", statusWithBridge(snapshot)),
   );
   broadcast("bridge:state", statusWithBridge(transport.getSnapshot()));
-  void connectBridge().catch((error: unknown) => {
+  if (config.ui.setupCompleted !== false) {
+    void connectBridge().catch((error: unknown) => {
+      broadcast(
+        "bridge:state",
+        statusWithBridge({
+          state: "error",
+          mode: config.transport.mode,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    });
+  } else {
     broadcast(
       "bridge:state",
       statusWithBridge({
-        state: "error",
+        state: "disconnected",
         mode: config.transport.mode,
-        message: error instanceof Error ? error.message : String(error),
+        message: "Complete Connection Setup to start the OpenAI tunnel.",
       }),
     );
-  });
+  }
 }
 
 function getResourcePath(relativePath: string): string {
@@ -213,6 +224,7 @@ function registerIpc(): void {
     ),
   );
   ipcMain.handle("config:get", () => runtime?.getConfig());
+  ipcMain.handle("setup:inspect", () => inspectConnectionSetup());
   ipcMain.handle("config:update", (_event, patch: ConfigPatch) =>
     updateConfig(patch),
   );
@@ -436,10 +448,6 @@ function makeTransport(config: QnectorConfig): TransportAdapter {
         authtoken: config.transport.ngrokAuthtoken,
       });
     case "openai-tunnel":
-      if (!config.transport.openaiTunnelClientPath)
-        throw new Error(
-          "openaiTunnelClientPath is required for openai-tunnel transport",
-        );
       return new OpenAiTunnelAdapter(localUrl, {
         executable: resolveOpenAiTunnelClientExecutable(
           config.transport.openaiTunnelClientPath,
@@ -494,21 +502,59 @@ function resolveCloudflaredExecutable(configured?: string): string {
 function resolveOpenAiTunnelClientExecutable(configured?: string): string {
   if (configured?.trim()) return configured.trim();
   if (process.platform !== "win32") return "tunnel-client";
+  const directCandidates = [
+    path.join(process.resourcesPath, "openai-tunnel", "tunnel-client.exe"),
+    path.join(process.resourcesPath, "tunnel-client.exe"),
+    path.resolve(process.cwd(), "tools", "tunnel-client", "tunnel-client.exe"),
+  ];
   const roots = [
-    process.resourcesPath,
     path.join(process.resourcesPath, "bin"),
     process.env.LOCALAPPDATA,
     process.env.ProgramFiles,
     process.env["ProgramFiles(x86)"],
   ].filter((value): value is string => Boolean(value));
-  const candidates = roots.flatMap((root) => [
-    path.join(root, "tunnel-client.exe"),
-    path.join(root, "OpenAI", "tunnel-client.exe"),
-    path.join(root, "Qnector", "tunnel-client.exe"),
-  ]);
+  const candidates = [
+    ...directCandidates,
+    ...roots.flatMap((root) => [
+      path.join(root, "tunnel-client.exe"),
+      path.join(root, "OpenAI", "tunnel-client.exe"),
+      path.join(root, "Qnector", "tunnel-client.exe"),
+    ]),
+  ];
   return (
     candidates.find((candidate) => existsSync(candidate)) ?? "tunnel-client.exe"
   );
+}
+
+function inspectConnectionSetup(): {
+  mode: QnectorConfig["transport"]["mode"];
+  setupCompleted: boolean;
+  clientPath: string;
+  clientAvailable: boolean;
+  profile: string;
+  tunnelIdConfigured: boolean;
+  runtimeApiKeyConfigured: boolean;
+  bridge: TransportSnapshot;
+} {
+  const config = runtime!.getConfig();
+  const clientPath = resolveOpenAiTunnelClientExecutable(
+    config.transport.openaiTunnelClientPath,
+  );
+  return {
+    mode: config.transport.mode,
+    setupCompleted: config.ui.setupCompleted === true,
+    clientPath,
+    clientAvailable: existsSync(clientPath),
+    profile: config.transport.openaiProfile?.trim() || "qnector",
+    tunnelIdConfigured: Boolean(config.transport.openaiTunnelId?.trim()),
+    runtimeApiKeyConfigured: Boolean(
+      config.transport.openaiRuntimeApiKey?.trim(),
+    ),
+    bridge: transport?.getSnapshot() ?? {
+      state: "disconnected",
+      mode: config.transport.mode,
+    },
+  };
 }
 
 function statusWithBridge(snapshot: TransportSnapshot | undefined): ReturnType<

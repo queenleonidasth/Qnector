@@ -6,7 +6,7 @@ import {
 } from "./session-bootstrap.js";
 
 describe("session memory bootstrap", () => {
-  it("formats saved continuity context and stays within the 8 KB budget", () => {
+  it("formats saved continuity context and stays within the 4 KB budget", () => {
     const now = "2026-08-29T14:30:00.000Z";
     const active = {
       currentTask: "Continue Qnector development",
@@ -67,7 +67,7 @@ describe("session memory bootstrap", () => {
     expect(result).toContain("rule-0");
     expect(result).toContain("Recent working set");
     expect(result).toContain("Updated runtime dashboard");
-    expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(8_000);
+    expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(4_000);
   });
 
   it("reports empty memory and non-fatal memory errors clearly", () => {

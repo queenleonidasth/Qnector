@@ -24,7 +24,7 @@ const execFileAsync = promisify(execFile);
 export const systemDefinition: ToolDefinition = {
   name: "system",
   description:
-    "Inspect the local computer and Qnector bridge, locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use those visible actions only when intentionally showing final output to the user, not for intermediate QC. Use screen_capture for headless visual inspection. No model API is used.",
+    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
   inputSchema: {
     type: "object",
     properties: {
@@ -33,6 +33,7 @@ export const systemDefinition: ToolDefinition = {
         description:
           "Use screen_capture with source primary/screen/window to capture the current display; use window_list first when a specific window is needed.",
         enum: [
+          "parallel",
           "info",
           "status",
           "build_info",
@@ -56,6 +57,50 @@ export const systemDefinition: ToolDefinition = {
           "window_list",
           "window_focus",
         ],
+      },
+      calls: {
+        type: "array",
+        minItems: 2,
+        maxItems: 12,
+        description:
+          "Independent Qnector operations to execute concurrently in one MCP round-trip. Do not use system.parallel inside calls. Preserve dependent operations as separate sequential calls.",
+        items: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description:
+                "Optional stable label for matching a result to this call",
+            },
+            tool: {
+              type: "string",
+              enum: [
+                "system",
+                "workspace",
+                "files",
+                "process",
+                "git",
+                "memory",
+                "browser",
+                "computer",
+              ],
+            },
+            input: {
+              type: "object",
+              additionalProperties: true,
+              description: "Normal input object for the selected Qnector tool",
+            },
+          },
+          required: ["tool", "input"],
+          additionalProperties: false,
+        },
+      },
+      maxConcurrency: {
+        type: "integer",
+        minimum: 1,
+        maximum: 8,
+        description:
+          "Maximum subcalls running at once; defaults to 6. Results remain in calls[] input order.",
       },
       name: { type: "string", description: "Executable name for which" },
       query: {
@@ -246,23 +291,35 @@ export async function executeSystem(
       }
       if (action === "context_snapshot") {
         const config = context.getConfig();
-        const [build, memory, release, nativeQnector] = await Promise.all([
-          getBuildIdentity(),
-          context.memory
-            ?.recall({ checkpointLimit: 1, factLimit: 8, changeLimit: 8 })
-            .catch(() => undefined),
-          context.releaseManager
-            ?.status(config.activeWorkspace)
-            .catch(() => undefined),
-          context.nativeProcess
-            ?.list({ query: "Qnector", maxResults: 20 })
-            .catch(() => undefined),
-        ]);
-        const windows = await context.platform?.listWindows().catch(() => []);
+        const details = booleanInput(object, "details", false);
+        const [build, memory, release, nativeQnector, windows] =
+          await Promise.all([
+            getBuildIdentity(),
+            context.memory
+              ?.recall({
+                checkpointLimit: 1,
+                factLimit: details ? 8 : 4,
+                changeLimit: details ? 8 : 4,
+              })
+              .catch(() => undefined),
+            details
+              ? context.releaseManager
+                  ?.status(config.activeWorkspace)
+                  .catch(() => undefined)
+              : Promise.resolve(undefined),
+            details
+              ? context.nativeProcess
+                  ?.list({ query: "Qnector", maxResults: 20 })
+                  .catch(() => undefined)
+              : Promise.resolve(undefined),
+            details
+              ? context.uiAutomation?.windows(30).catch(() => [])
+              : Promise.resolve([]),
+          ]);
         const recentActivity = context.activity
           .list()
           .filter((entry) => entry.status !== "running")
-          .slice(-20)
+          .slice(details ? -20 : -8)
           .reverse()
           .map((entry) => ({
             timestamp: entry.timestamp,
@@ -272,9 +329,10 @@ export async function executeSystem(
             summary: entry.summary ?? entry.error?.message ?? "",
           }));
         return {
-          summary: `Context snapshot for ${config.activeWorkspace}`,
+          summary: `Context snapshot for ${config.activeWorkspace}${details ? " (expanded)" : " (compact)"}`,
           data: {
             capturedAt: new Date().toISOString(),
+            mode: details ? "expanded" : "compact",
             machine: {
               hostname: os.hostname(),
               platform: process.platform,
@@ -291,9 +349,13 @@ export async function executeSystem(
                   facts: memory.state.facts,
                 }
               : null,
-            managedProcesses: context.processManager.list().slice(-50),
-            nativeQnectorProcesses: nativeQnector?.processes ?? [],
-            windows: (windows ?? []).slice(0, 30),
+            managedProcesses: context.processManager
+              .list()
+              .slice(details ? -50 : -15),
+            nativeQnectorProcesses: details
+              ? (nativeQnector?.processes ?? [])
+              : [],
+            windows: details ? (windows ?? []) : [],
             recentActivity,
             capabilities: {
               workflow: Boolean(context.workflowManager),
@@ -504,21 +566,10 @@ export async function executeSystem(
       }
       if (action === "which") {
         const name = stringInput(object, "name", true)!;
-        const command = process.platform === "win32" ? "where.exe" : "which";
-        try {
-          const result = await execFileAsync(command, [name], {
-            windowsHide: true,
-          });
-          return {
-            summary: `Located ${name}`,
-            data: {
-              name,
-              path: result.stdout.trim().split(/\r?\n/).filter(Boolean),
-            },
-          };
-        } catch {
-          return { summary: `${name} was not found`, data: { name, path: [] } };
-        }
+        const located = await locateExecutable(name);
+        return located
+          ? { summary: `Located ${name}`, data: { name, path: [located] } }
+          : { summary: `${name} was not found`, data: { name, path: [] } };
       }
       if (action === "search_files") {
         if (!context.fileSearch)
@@ -632,7 +683,7 @@ export async function executeSystem(
           throw new Error(
             `INVALID_INPUT: unsupported capture source '${source}'`,
           );
-        const format = stringInput(object, "format") ?? "png";
+        const format = stringInput(object, "format") ?? "jpeg";
         if (!["png", "jpeg"].includes(format))
           throw new Error(
             `INVALID_INPUT: unsupported capture format '${format}'`,
@@ -643,9 +694,8 @@ export async function executeSystem(
             ? { sourceId: stringInput(object, "sourceId") }
             : {}),
           format: format as "png" | "jpeg",
-          ...(typeof object.maxWidth === "number"
-            ? { maxWidth: object.maxWidth }
-            : {}),
+          maxWidth:
+            typeof object.maxWidth === "number" ? object.maxWidth : 1_600,
         });
         return {
           summary: `Captured ${attachment.mimeType} image (${attachment.sizeBytes ?? 0} bytes)`,
@@ -660,10 +710,27 @@ export async function executeSystem(
         };
       }
       if (action === "window_list") {
+        if (context.uiAutomation) {
+          try {
+            const semanticWindows = await context.uiAutomation.windows(100);
+            const windows = semanticWindows.map((entry) => ({
+              id: `window_${entry.processId}`,
+              title: entry.name,
+              processName: "",
+              pid: entry.processId,
+            }));
+            return {
+              summary: `Listed ${windows.length} window(s) via native UI Automation`,
+              data: { windows, provider: "ui-automation" },
+            };
+          } catch {
+            // Fall back to the platform implementation for compatibility.
+          }
+        }
         const windows = await requirePlatform(context).listWindows();
         return {
           summary: `Listed ${windows.length} window(s)`,
-          data: { windows },
+          data: { windows, provider: "platform" },
         };
       }
       if (action === "window_focus") {
@@ -727,6 +794,28 @@ async function locateExecutable(name: string): Promise<string | null> {
       return name;
     } catch {
       return null;
+    }
+  }
+  if (
+    process.platform === "win32" &&
+    ["rg", "rg.exe"].includes(name.toLowerCase())
+  ) {
+    const resourcesPath = (
+      process as NodeJS.Process & { resourcesPath?: string }
+    ).resourcesPath;
+    const candidates = [
+      process.env.QNECTOR_RIPGREP_PATH,
+      process.env.QNECTOR_RG_PATH,
+      resourcesPath ? path.join(resourcesPath, "ripgrep", "rg.exe") : undefined,
+      path.join(process.cwd(), "tools", "ripgrep", "rg.exe"),
+    ].filter((candidate): candidate is string => Boolean(candidate));
+    for (const candidate of candidates) {
+      try {
+        await stat(candidate);
+        return candidate;
+      } catch {
+        // Continue to PATH lookup.
+      }
     }
   }
   const command = process.platform === "win32" ? "where.exe" : "which";
