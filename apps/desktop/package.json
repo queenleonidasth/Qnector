@@ -1,14 +1,14 @@
 {
   "name": "@qnector/desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Qnector local ChatGPT MCP bridge",
   "author": "Qnector",
   "dependencies": {
-    "@qnector/shared": "workspace:*",
     "@qnector/core": "workspace:*",
     "@qnector/mcp-server": "workspace:*",
+    "@qnector/shared": "workspace:*",
     "@qnector/transports": "workspace:*",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

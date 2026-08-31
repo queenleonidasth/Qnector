@@ -126,6 +126,7 @@ function App(): React.ReactElement {
   >(null);
   const [isClosingDrawer, setIsClosingDrawer] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
@@ -368,16 +369,22 @@ function App(): React.ReactElement {
 
   const disconnect = async (): Promise<void> => {
     setBusy(true);
+    setIsDisconnecting(true);
+    setError(undefined);
     try {
       await window.qnector.disconnect();
       setBridge(fallbackBridge);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
+      setHoldProgress(0);
+      setIsDisconnecting(false);
       setBusy(false);
     }
   };
 
   const startHold = () => {
-    if (bridge.state !== "connected" || busy) return;
+    if (bridge.state !== "connected" || busy || isDisconnecting) return;
     setIsHolding(true);
     holdStartRef.current = performance.now();
 
@@ -392,7 +399,8 @@ function App(): React.ReactElement {
       } else {
         didLongPressRef.current = true;
         setIsHolding(false);
-        setHoldProgress(0);
+        // Keep the ring full while the async disconnect is in progress.
+        setHoldProgress(1);
         holdStartRef.current = null;
         setBurstFlash(true);
         window.setTimeout(() => setBurstFlash(false), 700);
@@ -406,6 +414,7 @@ function App(): React.ReactElement {
   };
 
   const cancelHold = () => {
+    if (isDisconnecting) return;
     if (!isHolding && holdProgress === 0) return;
     setIsHolding(false);
     setHoldProgress(0);
@@ -532,15 +541,28 @@ function App(): React.ReactElement {
         throw new Error(
           snapshot.message || "OpenAI tunnel did not reach connected state.",
         );
-      const completed = await window.qnector.updateConfig({
-        ui: { ...saved.ui, setupCompleted: true },
-      });
-      setConfig(completed);
       setBridge(snapshot);
       const latest = await window.qnector.getStatus();
       setStatus(latest);
       setSetupInfo(await window.qnector.getConnectionSetup());
       setSetupStep(2);
+    } catch (reason) {
+      setSetupError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSetupBusy(false);
+    }
+  };
+
+  const completeChatGptSetup = async (): Promise<void> => {
+    if (!config) return;
+    setSetupBusy(true);
+    setSetupError(undefined);
+    try {
+      const completed = await window.qnector.updateConfig({
+        ui: { ...config.ui, setupCompleted: true },
+      });
+      setConfig(completed);
+      setSetupStep(3);
     } catch (reason) {
       setSetupError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -584,6 +606,8 @@ function App(): React.ReactElement {
 
   const isConnected = bridge.state === "connected";
   const isConnecting = bridge.state === "connecting";
+  const disconnectRingActive = isHolding || isDisconnecting;
+  const disconnectRingProgress = isDisconnecting ? 1 : holdProgress;
 
   const effectiveUrl =
     bridge.publicUrl ?? (isConnected ? status?.localUrl : undefined);
@@ -655,7 +679,10 @@ function App(): React.ReactElement {
       <main className="app-main">
         <section className="glass-card hero-glass-section">
           <div className="orb-stage">
-            <svg className="charge-svg-ring" viewBox="0 0 130 130">
+            <svg
+              className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}
+              viewBox="0 0 130 130"
+            >
               <defs>
                 <linearGradient
                   id="goldFireGrad"
@@ -677,7 +704,7 @@ function App(): React.ReactElement {
                 className="charge-meter"
                 style={{
                   strokeDasharray: 364.42,
-                  strokeDashoffset: 364.42 * (1 - holdProgress),
+                  strokeDashoffset: 364.42 * (1 - disconnectRingProgress),
                 }}
               />
             </svg>
@@ -687,11 +714,13 @@ function App(): React.ReactElement {
             {burstFlash && <div className="burst-flash-ring" />}
 
             <div
-              className={`glass-sphere-enclosure ${isHolding ? "holding" : ""}`}
+              className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}
               title={
-                isConnected
-                  ? "Hold for 3 seconds to disconnect"
-                  : "Click to connect"
+                isDisconnecting
+                  ? "Disconnecting from ChatGPT"
+                  : isConnected
+                    ? "Hold for 3 seconds to disconnect"
+                    : "Click to connect"
               }
               onClick={handleOrbClick}
               onMouseDown={startHold}
@@ -705,15 +734,17 @@ function App(): React.ReactElement {
                 className={`liquid-gold-core ${
                   isHolding
                     ? "charging"
-                    : isConnecting
-                      ? "connecting"
-                      : isConnected
-                        ? "connected"
-                        : "disconnected"
+                    : isDisconnecting
+                      ? "disconnecting"
+                      : isConnecting
+                        ? "connecting"
+                        : isConnected
+                          ? "connected"
+                          : "disconnected"
                 }`}
               />
               <div className="glass-glare" />
-              {isConnected && !isHolding && (
+              {isConnected && !isHolding && !isDisconnecting && (
                 <>
                   <div className="orbit-spark spark-1" />
                   <div className="orbit-spark spark-2" />
@@ -725,18 +756,22 @@ function App(): React.ReactElement {
           <h2 className="hero-state-title">
             {isHolding
               ? `DISCONNECTING (${((1 - holdProgress) * 3).toFixed(1)}s)`
-              : isConnected
-                ? "BRIDGE: ACTIVE"
-                : isConnecting
-                  ? "ESTABLISHING BRIDGE…"
-                  : "BRIDGE: DORMANT"}
+              : isDisconnecting
+                ? "DISCONNECTING…"
+                : isConnected
+                  ? "BRIDGE: ACTIVE"
+                  : isConnecting
+                    ? "ESTABLISHING BRIDGE…"
+                    : "BRIDGE: DORMANT"}
           </h2>
           <p className="hero-state-sub">
             {isHolding
               ? "Keep holding the orb to confirm disconnection…"
-              : isConnected
-                ? "Connected to ChatGPT · Full System Access"
-                : "Expose local computer & workspace to ChatGPT"}
+              : isDisconnecting
+                ? "Closing the tunnel and local bridge cleanly…"
+                : isConnected
+                  ? "Connected to ChatGPT · Full System Access"
+                  : "Expose local computer & workspace to ChatGPT"}
           </p>
 
           <div className="endpoint-glass-box">
@@ -759,6 +794,7 @@ function App(): React.ReactElement {
           {isConnected ? (
             <button
               className="btn-liquid-action"
+              disabled={isDisconnecting}
               onClick={() => void openChatGPT()}
             >
               <span>↗ Open in ChatGPT</span>
@@ -777,11 +813,15 @@ function App(): React.ReactElement {
             </button>
           )}
 
-          <div className={`hold-hint-pill ${isHolding ? "active" : ""}`}>
+          <div
+            className={`hold-hint-pill ${disconnectRingActive ? "active" : ""}`}
+          >
             {isHolding ? (
               <span>
                 ⚡ Disconnecting in {((1 - holdProgress) * 3).toFixed(1)}s
               </span>
+            ) : isDisconnecting ? (
+              <span>⚡ Disconnecting Bridge…</span>
             ) : isConnected ? (
               <span>⏳ Hold orb 3s to Disconnect</span>
             ) : (
@@ -889,11 +929,11 @@ function App(): React.ReactElement {
                 <span className="setup-kicker">FIRST-RUN CONNECTION</span>
                 <h2>OpenAI Tunnel Setup</h2>
               </div>
-              <div className="setup-step-badge">{setupStep + 1} / 3</div>
+              <div className="setup-step-badge">{setupStep + 1} / 4</div>
             </div>
 
             <div className="setup-progress" aria-hidden="true">
-              {[0, 1, 2].map((step) => (
+              {[0, 1, 2, 3].map((step) => (
                 <span
                   key={step}
                   className={step <= setupStep ? "active" : ""}
@@ -1019,26 +1059,65 @@ function App(): React.ReactElement {
             )}
 
             {setupStep === 2 && (
-              <div className="setup-body setup-success">
-                <div className="setup-success-ring">✓</div>
+              <div className="setup-body">
                 <div className="setup-copy-block">
-                  <h3>OpenAI Tunnel is connected</h3>
+                  <h3>Add Qnector to ChatGPT Web</h3>
                   <p>
-                    Keep Qnector running while ChatGPT uses the connector. The
-                    tunnel client is supervised by Qnector and starts with the
-                    saved profile.
+                    The tunnel is healthy. Now finish the ChatGPT-side connector
+                    so GPT can discover and call Qnector tools.
                   </p>
                 </div>
                 <div className="setup-connected-card">
                   <span className="item-bead success" />
                   <div>
-                    <strong>{setupInfo?.profile ?? setupProfile}</strong>
+                    <strong>OpenAI Tunnel connected</strong>
                     <small>
-                      {setupInfo?.bridge.message ??
-                        "OpenAI tunnel-client running"}
+                      {setupTunnelId || setupInfo?.profile || setupProfile}
                     </small>
                   </div>
                 </div>
+                <ol className="setup-instruction-list">
+                  <li>
+                    <span>1</span>
+                    <div>
+                      <strong>Open ChatGPT Connector Settings</strong>
+                      <small>
+                        In newer UI versions this may appear under Settings →
+                        Apps → Create / Developer mode.
+                      </small>
+                    </div>
+                  </li>
+                  <li>
+                    <span>2</span>
+                    <div>
+                      <strong>Create a Qnector connector</strong>
+                      <small>
+                        Choose <b>Connection: Tunnel</b>, then select your
+                        tunnel or paste the Tunnel ID shown above.
+                      </small>
+                    </div>
+                  </li>
+                  <li>
+                    <span>3</span>
+                    <div>
+                      <strong>Scan / refresh tools and save</strong>
+                      <small>
+                        Confirm Qnector exposes system, workspace, files,
+                        process, git, memory, browser and computer.
+                      </small>
+                    </div>
+                  </li>
+                  <li>
+                    <span>4</span>
+                    <div>
+                      <strong>Enable Qnector in a chat</strong>
+                      <small>
+                        Start a new chat, select Qnector from Apps / tools, or
+                        @mention Qnector when you want GPT to use this PC.
+                      </small>
+                    </div>
+                  </li>
+                </ol>
                 <button
                   className="setup-primary wide"
                   type="button"
@@ -1049,17 +1128,43 @@ function App(): React.ReactElement {
                   Open ChatGPT Connector Settings ↗
                 </button>
                 <div className="setup-note">
-                  Create or verify the ChatGPT connector only while
-                  tunnel-client is running. Qnector must stay running for
-                  connector discovery and MCP calls.
+                  Keep Qnector running while you create the connector, scan
+                  tools, and use it later. The tunnel daemon is the bridge
+                  between ChatGPT and this local MCP server.
                 </div>
+              </div>
+            )}
+
+            {setupStep === 3 && (
+              <div className="setup-body setup-success">
+                <div className="setup-success-ring">✓</div>
+                <div className="setup-copy-block">
+                  <h3>Qnector is ready for ChatGPT</h3>
+                  <p>
+                    First-run setup is complete. Keep Qnector connected, then
+                    select or @mention Qnector whenever a chat needs local
+                    tools.
+                  </p>
+                </div>
+                <div className="setup-note">
+                  Quick test: ask GPT to use Qnector, call <b>system info</b>,
+                  inspect the active workspace, and report Git status without
+                  changing files.
+                </div>
+                <button
+                  className="setup-primary wide"
+                  type="button"
+                  onClick={() => void openChatGPT()}
+                >
+                  Open ChatGPT ↗
+                </button>
               </div>
             )}
 
             {setupError && <div className="setup-error">{setupError}</div>}
 
             <div className="setup-footer">
-              {setupStep > 0 && setupStep < 2 ? (
+              {setupStep > 0 && setupStep < 3 ? (
                 <button
                   className="setup-secondary"
                   type="button"
@@ -1077,7 +1182,7 @@ function App(): React.ReactElement {
                   type="button"
                   onClick={() => setSetupOpen(false)}
                 >
-                  {setupStep === 2 ? "Close" : "Not now"}
+                  {setupStep === 3 ? "Close" : "Not now"}
                 </button>
               )}
 
@@ -1105,6 +1210,16 @@ function App(): React.ReactElement {
                 </button>
               )}
               {setupStep === 2 && (
+                <button
+                  className="setup-primary"
+                  type="button"
+                  disabled={setupBusy}
+                  onClick={() => void completeChatGptSetup()}
+                >
+                  {setupBusy ? "Saving…" : "I've added Qnector"}
+                </button>
+              )}
+              {setupStep === 3 && (
                 <button
                   className="setup-primary"
                   type="button"

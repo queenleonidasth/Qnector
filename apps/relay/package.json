@@ -1,11 +1,11 @@
 {
   "name": "@qnector/relay",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@qnector/shared": "workspace:*",
     "@fastify/cors": "^11.3.0",
+    "@qnector/shared": "workspace:*",
     "fastify": "^5.12.1",
     "ws": "^8.21.3"
   },
