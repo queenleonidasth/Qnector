@@ -65,7 +65,7 @@ try {
   if ($statusCode -ne 404) { throw }
 
   $notes = if ($NotesPath) {
-    Get-Content -LiteralPath $NotesPath -Raw
+    [IO.File]::ReadAllText([IO.Path]::GetFullPath($NotesPath), [Text.Encoding]::UTF8)
   } else {
     "Qnector $tag release. See the repository history for details."
   }
