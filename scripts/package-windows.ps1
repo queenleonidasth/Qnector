@@ -24,7 +24,7 @@ if (Test-Path -LiteralPath $releaseDir) {
 }
 Push-Location (Join-Path $projectRoot "apps/desktop")
 try {
-  npx electron-builder --config electron-builder.yml "--config.directories.output=$releaseDir"
+  npx electron-builder --config electron-builder.yml --config.npmRebuild=false "--config.directories.output=$releaseDir"
 } finally {
   Pop-Location
 }
