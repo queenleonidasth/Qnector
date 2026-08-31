@@ -1,6 +1,6 @@
 {
   "name": "qnector",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Personal full-access desktop bridge between ChatGPT MCP and a local Windows computer",
   "type": "module",
