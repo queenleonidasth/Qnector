@@ -31,8 +31,8 @@ if (-not $ReleaseDir) {
 $ReleaseDir = [IO.Path]::GetFullPath($ReleaseDir)
 
 $assets = @(
-  Join-Path $ReleaseDir "Qnector-$Version-win-x64-setup.exe",
-  Join-Path $ReleaseDir "Qnector-$Version-win-x64-portable.exe"
+  (Join-Path $ReleaseDir "Qnector-$Version-win-x64-setup.exe")
+  (Join-Path $ReleaseDir "Qnector-$Version-win-x64-portable.exe")
 )
 foreach ($asset in $assets) {
   if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) { throw "Release asset is missing: $asset" }
