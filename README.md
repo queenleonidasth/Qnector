@@ -1,96 +1,184 @@
 # Qnector
 
-Qnector is a Windows-first personal desktop bridge that exposes the current computer to ChatGPT through MCP. ChatGPT remains the reasoning/model UI; Qnector supplies the local execution, perception, search, code-intelligence and desktop-interaction layer. Qnector does **not** call an OpenAI model API.
+Qnector connects ChatGPT to your Windows computer through MCP. It gives ChatGPT a
+controlled interface for working with local projects, files, terminals, Git,
+browsers, documents, and Windows applications while you keep using ChatGPT as the
+AI interface.
 
-The product source of truth is `../devq.md`. `recommend.md` is the capability/release handoff and `update.md` records implementation decisions.
+Qnector runs locally and does **not** call the OpenAI model API. Tools run with the
+Windows permissions of the user who launches Qnector.
 
-## Current capability surface
+[Download the latest Windows release](https://github.com/queenleonidasth/Qnector/releases/latest)
+· [Connect to ChatGPT](docs/chatgpt-setup.md) · [Tool reference](docs/tool-reference.md)
 
-Qnector intentionally keeps **8 grouped MCP tools**:
+## What Qnector can do
 
-- `system` — runtime/build identity, local release comparison, bounded context snapshot, native process/port intelligence, `doctor`, machine info, Everything-backed filename search, clipboard/toast, screenshots and native window operations.
-- `workspace` — filesystem/project context, TypeScript diagnostics/symbol intelligence, workspace-wide symbols, filesystem watch/wait, generic external LSP adapters, and deterministic local semantic search.
-- `files` — bounded reads, image preview attachments, document inspection/text extraction/PDF rendering/SQLite queries, writes/replaces/patches/copy/move/delete/hash.
-- `process` — foreground/background commands, incremental output, wait-for-port/output/exit, Qnector durable task facade and persistent multi-step workflows.
-- `git` — structured Git operations.
-- `memory` — local persistent workspace checkpoints/facts/export, deterministic recent working set and automatic first-use continuity bootstrap during MCP initialization.
-- `browser` — Chrome/Edge web-app automation + CDP diagnostics, including persistent named dev profiles, semantic Playwright locators, interaction, tab/navigation control, screenshots, console/network observation and performance inspection.
-- `computer` — semantic Windows UI Automation through a bundled C# helper with PowerShell fallback.
+### Work on real projects
 
-Qnector uses the modular MCP TypeScript SDK v2 (`@modelcontextprotocol/server` and `@modelcontextprotocol/node`). `/mcp` supports the modern MCP 2026-07-28 era and legacy 2025-era stateless clients on the same endpoint. Integration tests pin 2026-07-28 with the v2 client package.
+- Read, create, edit, patch, copy, move, and hash local files.
+- Inspect project trees and search file contents or filenames.
+- Run PowerShell, command-line programs, background services, and interactive
+  ConPTY terminal sessions.
+- Wait for processes, ports, output, or filesystem changes without constant
+  polling.
+- Inspect Git status, diffs, history, branches, and other repository state.
 
-At each MCP session-opening handshake — legacy/compatibility `initialize` or modern 2026-07-28 `server/discover` — Qnector reads the active workspace memory and returns a bounded **QNECTOR SESSION BOOTSTRAP** through server instructions. The AI receives the latest checkpoint/current task/pending context without needing a preliminary `memory.recall` call. Normal tool results do not repeat this block. The protocol handshake is the boundary available to Qnector; clients that reuse one MCP connection across several chats do not expose a per-chat ID for Qnector to distinguish.
+### Understand code
 
-## Requirements
+- Report TypeScript diagnostics, symbols, definitions, references, and hover
+  information.
+- Connect to supported external language servers such as Pyright,
+  rust-analyzer, gopls, and clangd.
+- Perform deterministic semantic search locally without an embedding API or
+  vector database.
+- Find files across Windows using Everything when available, with a bounded
+  native fallback.
 
-- Node.js 22 or newer
-- pnpm 10 (`npx pnpm@10.15.0` is fine)
-- Git on PATH for Git workflows
-- Windows packaging of the C# UIA helper requires .NET SDK 8; the generated helper itself is self-contained
-- Everything GUI/service is optional but required for the fast indexed provider. Windows releases bundle `es.exe`; Qnector retains a bounded native fallback if Everything is unavailable.
-- Generic LSP servers are optional external dependencies. Adapters currently recognize Pyright/BasedPyright, rust-analyzer, gopls and clangd.
-- Optional public transports include Cloudflare, ngrok, OpenAI tunnel-client and Qnector Relay.
+### Test web applications
 
-## Quick start
+- Launch and control an isolated Chrome or Edge development profile.
+- Navigate pages and tabs; find elements by role, text, label, placeholder,
+  test ID, or CSS.
+- Click, type, fill forms, select options, upload files, and capture
+  screenshots.
+- Observe console errors, HTTP responses, failed requests, DOM state, styles,
+  and performance data.
+- Keep login state in an optional named Qnector browser profile.
+
+### Inspect documents and Windows applications
+
+- Extract or query text and metadata from PDF, DOCX, XLSX, CSV, JSON, ZIP, and
+  SQLite files.
+- Render PDF pages for visual inspection.
+- Capture screens and inspect visible windows, processes, ports, and executable
+  metadata.
+- Find and operate standard Windows controls through UI Automation: focus,
+  invoke, set values, select, toggle, expand, collapse, scroll, and wait.
+
+### Continue work across chats
+
+- Save project checkpoints, facts, decisions, and pending work locally.
+- Restore a bounded workspace summary during the MCP session handshake.
+- Review recent files, commands, processes, workflows, and errors in the working
+  set.
+- Persist reusable multi-step workflows and inspect their run state.
+
+Qnector exposes these capabilities through eight grouped MCP tools:
+`system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, and
+`computer`.
+
+## Install on Windows
+
+### Requirements
+
+- Windows 10 or Windows 11, x64.
+- A ChatGPT account/workspace that can add a custom MCP app, plugin, or
+  connector.
+- [`cloudflared`](https://developers.cloudflare.com/tunnel/downloads/) installed
+  for the default **Cloudflare Quick** connection. Qnector searches PATH and
+  common Windows install locations. A Cloudflare account is not required for a
+  Quick Tunnel.
+
+Chrome or Edge is needed only for browser automation. Git, Everything, and
+external language servers are optional and enable their corresponding features.
+The release already contains the UI Automation helper, Everything CLI client,
+and TypeScript runtime libraries.
+
+### Option A: Setup installer (recommended)
+
+1. Open the [latest release](https://github.com/queenleonidasth/Qnector/releases/latest).
+2. Download the file ending in `win-x64-setup.exe`.
+3. Run the installer and choose an installation folder.
+4. Start **Qnector** from the Start menu.
+
+### Option B: Portable application
+
+1. Open the [latest release](https://github.com/queenleonidasth/Qnector/releases/latest).
+2. Download the file ending in `win-x64-portable.exe`.
+3. Move it to a permanent folder before enabling **Auto Start**.
+4. Run the executable directly; no installation is required.
+
+The current Windows binaries are not code-signed, so SmartScreen may display an
+**Unknown publisher** warning. Verify the SHA-256 value against the release notes
+before running the file:
 
 ```powershell
+Get-FileHash .\Qnector-*-win-x64-setup.exe -Algorithm SHA256
+```
+
+## First-time setup
+
+1. Open Qnector and select **Workspace → Choose Folder**.
+2. Keep **Settings → Tunnel Mode** on **Cloudflare Quick (Auto)** unless you
+   already use another supported transport.
+3. Click the orb or **Connect to Bridge**.
+4. Wait until the status changes to **BRIDGE: ACTIVE** and an HTTPS MCP URL
+   appears.
+5. Click **COPY** to copy the URL, or select **Open in ChatGPT**.
+6. In ChatGPT, enable Developer Mode if required, create a custom MCP
+   app/plugin/connector named `Qnector`, and paste the URL ending in `/mcp`.
+7. Confirm that ChatGPT discovers all eight Qnector tools, then enable Qnector
+   in a new chat.
+
+ChatGPT changes its connector labels periodically. See the detailed
+[ChatGPT connection guide](docs/chatgpt-setup.md) if the menu names differ.
+
+Try a read-only request first:
+
+```text
+Use Qnector to inspect the active workspace, summarize the project, and report
+the current Git status. Do not change any files.
+```
+
+Then test a write workflow:
+
+```text
+Use Qnector to create qnector-test.txt in the active workspace, read it back,
+and show the Git diff.
+```
+
+## Everyday use
+
+- **Show or hide Qnector:** press `Ctrl+Shift+Q`.
+- **Run in the background:** enable **Settings → Minimize to Tray**.
+- **Launch with Windows:** enable **Settings → Auto Start**.
+- **Change projects:** open **Workspace → Choose Folder**.
+- **Review health:** open the **Runtime** drawer for build, capability, process,
+  and workflow status.
+- **Disconnect:** hold the orb for three seconds.
+
+Qnector listens locally at `http://127.0.0.1:8787/mcp`. Health and readiness are
+available at `/healthz` and `/readyz`.
+
+## Build from source
+
+Source development requires Node.js 22+, Git, and pnpm 10. The Windows packaging
+step also requires .NET SDK 8 to build the self-contained UI Automation helper.
+
+```powershell
+git clone https://github.com/queenleonidasth/Qnector.git
+cd Qnector
 npx pnpm@10.15.0 install
 npx pnpm@10.15.0 build
+npx pnpm@10.15.0 dev:desktop
+```
+
+Run the MCP server without the desktop UI:
+
+```powershell
 npx pnpm@10.15.0 dev:mcp
 ```
 
-Local MCP endpoint: `http://127.0.0.1:8787/mcp`  
-Health endpoint: `http://127.0.0.1:8787/healthz`
-
-Run the Electron desktop shell after building:
-
-```powershell
-npx pnpm@10.15.0 --filter @qnector/desktop start
-```
-
-Build installer + portable Windows artifacts:
+Build the Setup and Portable Windows packages:
 
 ```powershell
 npx pnpm@10.15.0 package:windows
 ```
 
-If an already-running portable locks `apps/desktop/release`, the packaging script writes to `apps/desktop/release/retry-YYYYMMDD-HHMMSS/`.
+Artifacts are written to `apps/desktop/release`. If a running portable build
+locks that directory, the packaging script uses a timestamped `retry-*` folder.
 
-## P1–P10 upgrade highlights
-
-### Runtime identity / doctor
-
-`system.build_info` identifies the actual executable with build time/path/SHA-256. `system.doctor` provides one bounded health report for the main runtime capabilities. `system.everything_status` reports the indexed-search provider state.
-
-### Event-driven process and filesystem waits
-
-`process.wait_for_port`, `wait_for_output`, and `wait_for_exit` avoid repeated client polling. `workspace.watch`, `watch_events`, `unwatch`, `wait_for_file`, and `wait_for_change` cover build/export/file workflows. `process.task_start/get/list/cancel` is Qnector's durable process facade, not the deprecated legacy MCP Tasks wire protocol.
-
-### Code intelligence, LSP and local semantic search
-
-TypeScript projects support `diagnostics`, `document_symbols`, `workspace_symbols`, `definition`, `references`, `hover`, and read-only `rename_locations`. Generic LSP actions (`lsp_*`) can use supported external language servers. `workspace.semantic_search` uses the deterministic local `local-hashed-vector-v1` engine; it uses no network embedding service or model API.
-
-### Everything indexed search
-
-`system.search_files` supports `provider: auto | everything | fallback`. Packaged Windows builds bundle Voidtools `es.exe` as the CLI client, while an installed/running Everything database/service supplies the index. Native fallback is bounded and remains available.
-
-### Windows UI Automation
-
-`computer` supports `windows`, `inspect`, `find`, `invoke`, `set_value`, `focus`, `select`, `toggle`, `expand`, `collapse`, `scroll_into_view`, `range_value`, and bounded `wait`. Windows builds prefer the bundled self-contained C# helper `resources/uia-helper/qnector-uia.exe`; PowerShell/.NET UI Automation remains a compatibility fallback. Raw coordinate mouse control, general-purpose synthetic keyboard input, remote desktop and ChatGPT-session automation remain out of scope.
-
-### Managed browser automation + diagnostics
-
-`browser` can now drive normal HTTP/HTTPS web apps through Chrome/Edge while the CDP endpoint remains local to Qnector. It uses `playwright-core` over the existing managed browser, so no second Chromium binary is bundled. Semantic locators support CSS, text, role/name, label, placeholder and test ID; actions cover navigation/history/tabs, click/double-click/hover/focus, fill/type/press/select/check, scrolling, state reads/waits and file upload. `observeMs` can capture bounded console errors plus HTTP responses/request failures around an interaction for web-app debugging.
-
-`browser.launch` still defaults to a disposable dedicated profile, but `profile` + `persistentProfile: true` creates a named Qnector development profile that keeps web-app login state across close/restart. `open_url` opens normal web URLs, `open_local` remains compatible, and `profile_reset` removes a named persistent profile. Existing screenshot, DOM, styles, read-only evaluate, request summary and performance diagnostics remain available.
-
-## P11–P18 expansion (P13 intentionally skipped)
-
-The second capability expansion keeps the same 8-tool contract. `system.context_snapshot` supplies a one-call machine/workspace picture; native process actions expose PID/path/version/resource/port context; `process.workflow_*` persists reusable multi-step workflows and run state; `files.inspect/extract_text/render/document_query` adds local document intelligence; `memory.working_set` and session bootstrap surface recent activity automatically; `system.release_status` compares running/package/source state; and the desktop app includes a Runtime drawer for release health, capability checks, active processes and workflow runs. P13 legacy UI/OCR expansion was intentionally not implemented.
-
-## Validation
-
-Run the full source gates:
+## Validate a source checkout
 
 ```powershell
 npx pnpm@10.15.0 typecheck
@@ -101,15 +189,26 @@ npx pnpm@10.15.0 build
 npx pnpm@10.15.0 smoke:mcp
 npx pnpm@10.15.0 accept:p1-p10
 npx pnpm@10.15.0 accept:p11-p18
+npx pnpm@10.15.0 accept:p23
 npx pnpm@10.15.0 accept:browser
 ```
 
-`accept:p1-p10` is a real local acceptance harness. It exercises event waits/tasks, managed Chrome against a localhost fixture, TypeScript workspace symbols, the C# UIA helper, Everything indexed search, a real Pyright language server when installed, and local semantic search. `accept:p11-p18` verifies context/native process intelligence, local release comparison, persistent workflows, JSON/CSV/DOCX/XLSX/ZIP/SQLite document handling, real PDF text/render output, automatic working-set capture and the observability health checks. `accept:browser` launches a real Chrome/Edge instance and verifies persistent profiles plus Playwright find/fill/type/select/check/upload/press/click, API+console observation, waits/reads, navigation history, tab control and normal external web targets. MCP server integration tests separately verify legacy stateless traffic and a client pinned to modern protocol `2026-07-28`.
+The acceptance suites exercise real local processes, ConPTY, filesystem events,
+Chrome/Edge, TypeScript intelligence, UI Automation, Everything, documents,
+workflows, memory, release comparison, and MCP compatibility.
 
-For the ChatGPT account compatibility gate, see `docs/plus-compatibility.md` and run `npx pnpm@10.15.0 test:plus`.
+## Security and scope
 
-## Design boundaries
+Qnector is a personal full-access bridge, not a sandbox. Its tools inherit your
+Windows account permissions, and the selected workspace is the default working
+context rather than an access boundary. Only run it on a computer and workspace
+you trust, review ChatGPT confirmations, and disconnect the bridge when it is not
+needed.
 
-Qnector intentionally has no local permission profiles, approval queue, sandbox, RBAC or command allowlist. Tools execute with the OS rights of the user who launched Qnector. Active workspace is default context/cwd, not an access boundary. Tool annotations remain truthful so the ChatGPT product can apply its own controls.
+Qnector does not automate ChatGPT itself, retrieve ChatGPT cookies, or bypass
+product confirmations. Managed browser profiles are intended for web application
+development and testing.
 
-Browser automation uses dedicated Qnector development profiles and may target normal HTTP/HTTPS web apps. It is intended for application development/testing workflows rather than automating the ChatGPT session itself.
+For implementation details, see the [complete tool reference](docs/tool-reference.md),
+[relay deployment guide](docs/relay-deployment.md), and
+[ChatGPT compatibility checklist](docs/plus-compatibility.md).
