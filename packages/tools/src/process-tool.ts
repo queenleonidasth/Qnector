@@ -187,8 +187,11 @@ export async function executeProcess(
         };
       }
       if (action === "pty_start") {
-        const cwd = context.workspace.resolve(stringInput(object, "cwd") ?? ".");
-        const shellValue = stringInput(object, "shell") as ProcessShell | undefined;
+        const cwd = context.workspace.resolve(
+          stringInput(object, "cwd") ?? ".",
+        );
+        const shellValue = stringInput(object, "shell") as
+          ProcessShell | undefined;
         const shell =
           shellValue && ["powershell", "cmd", "direct"].includes(shellValue)
             ? shellValue
@@ -214,7 +217,10 @@ export async function executeProcess(
         const result = context.ptyManager.read(
           ptyId,
           Math.max(0, numberInput(object, "cursor", 0)),
-          Math.max(1, Math.min(numberInput(object, "maxChars", 20_000), 100_000)),
+          Math.max(
+            1,
+            Math.min(numberInput(object, "maxChars", 20_000), 100_000),
+          ),
         );
         return {
           summary: `Read ${result.text.length} characters from ${ptyId}`,
@@ -239,7 +245,9 @@ export async function executeProcess(
         const cols = numberInput(object, "cols", Number.NaN);
         const rows = numberInput(object, "rows", Number.NaN);
         if (!Number.isFinite(cols) || !Number.isFinite(rows))
-          throw new Error("INVALID_INPUT: cols and rows are required for pty_resize");
+          throw new Error(
+            "INVALID_INPUT: cols and rows are required for pty_resize",
+          );
         const snapshot = context.ptyManager.resize(ptyId, cols, rows);
         return {
           summary: `Resized ${ptyId} to ${snapshot.cols}x${snapshot.rows}`,
@@ -466,11 +474,18 @@ function outputMode(
   return value;
 }
 
-
-function environmentInput(object: Record<string, unknown>): Record<string, string> {
+function environmentInput(
+  object: Record<string, unknown>,
+): Record<string, string> {
   const env: Record<string, string> = {};
-  if (object.env && typeof object.env === "object" && !Array.isArray(object.env)) {
-    for (const [key, value] of Object.entries(object.env as Record<string, unknown>)) {
+  if (
+    object.env &&
+    typeof object.env === "object" &&
+    !Array.isArray(object.env)
+  ) {
+    for (const [key, value] of Object.entries(
+      object.env as Record<string, unknown>,
+    )) {
       if (typeof value === "string") env[key] = value;
     }
   }

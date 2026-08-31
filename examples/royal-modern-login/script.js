@@ -16,8 +16,12 @@
   const authChamber = document.querySelector(".auth-chamber");
 
   const STORAGE_KEY = "aurelle.rememberedEmail";
-  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const desktopPointerQuery = window.matchMedia("(pointer: fine) and (min-width: 1024px)");
+  const reducedMotionQuery = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  );
+  const desktopPointerQuery = window.matchMedia(
+    "(pointer: fine) and (min-width: 1024px)",
+  );
   let toastTimer = null;
   let successTimer = null;
 
@@ -139,10 +143,13 @@
       authChamber?.classList.add("is-auth-success");
     });
 
-    successTimer = window.setTimeout(() => {
-      submitButton.classList.remove("is-success");
-      authChamber?.classList.remove("is-auth-success");
-    }, reducedMotionQuery.matches ? 180 : 1150);
+    successTimer = window.setTimeout(
+      () => {
+        submitButton.classList.remove("is-success");
+        authChamber?.classList.remove("is-auth-success");
+      },
+      reducedMotionQuery.matches ? 180 : 1150,
+    );
   };
 
   const setupSovereignParallax = () => {
@@ -153,12 +160,30 @@
     const current = { x: 0, y: 0 };
 
     const writeMotion = () => {
-      brandPanel.style.setProperty("--glow-x", `${(current.x * 4).toFixed(2)}px`);
-      brandPanel.style.setProperty("--glow-y", `${(current.y * 4).toFixed(2)}px`);
-      brandPanel.style.setProperty("--grid-x", `${(current.x * 6).toFixed(2)}px`);
-      brandPanel.style.setProperty("--grid-y", `${(current.y * 6).toFixed(2)}px`);
-      brandPanel.style.setProperty("--orbit-x", `${(current.x * 12).toFixed(2)}px`);
-      brandPanel.style.setProperty("--orbit-y", `${(current.y * 12).toFixed(2)}px`);
+      brandPanel.style.setProperty(
+        "--glow-x",
+        `${(current.x * 4).toFixed(2)}px`,
+      );
+      brandPanel.style.setProperty(
+        "--glow-y",
+        `${(current.y * 4).toFixed(2)}px`,
+      );
+      brandPanel.style.setProperty(
+        "--grid-x",
+        `${(current.x * 6).toFixed(2)}px`,
+      );
+      brandPanel.style.setProperty(
+        "--grid-y",
+        `${(current.y * 6).toFixed(2)}px`,
+      );
+      brandPanel.style.setProperty(
+        "--orbit-x",
+        `${(current.x * 12).toFixed(2)}px`,
+      );
+      brandPanel.style.setProperty(
+        "--orbit-y",
+        `${(current.y * 12).toFixed(2)}px`,
+      );
     };
 
     const tick = () => {
@@ -167,7 +192,10 @@
       current.y += (target.y - current.y) * lerp;
       writeMotion();
 
-      if (Math.abs(target.x - current.x) > 0.002 || Math.abs(target.y - current.y) > 0.002) {
+      if (
+        Math.abs(target.x - current.x) > 0.002 ||
+        Math.abs(target.y - current.y) > 0.002
+      ) {
         frameId = requestAnimationFrame(tick);
       } else {
         current.x = target.x;
@@ -187,21 +215,34 @@
       startFrame();
     };
 
-    brandPanel.addEventListener("pointermove", (event) => {
-      if (reducedMotionQuery.matches || !desktopPointerQuery.matches) return;
-      const rect = brandPanel.getBoundingClientRect();
-      target.x = Math.max(-1, Math.min(1, ((event.clientX - rect.left) / rect.width) * 2 - 1));
-      target.y = Math.max(-1, Math.min(1, ((event.clientY - rect.top) / rect.height) * 2 - 1));
-      startFrame();
-    }, { passive: true });
+    brandPanel.addEventListener(
+      "pointermove",
+      (event) => {
+        if (reducedMotionQuery.matches || !desktopPointerQuery.matches) return;
+        const rect = brandPanel.getBoundingClientRect();
+        target.x = Math.max(
+          -1,
+          Math.min(1, ((event.clientX - rect.left) / rect.width) * 2 - 1),
+        );
+        target.y = Math.max(
+          -1,
+          Math.min(1, ((event.clientY - rect.top) / rect.height) * 2 - 1),
+        );
+        startFrame();
+      },
+      { passive: true },
+    );
 
-    brandPanel.addEventListener("pointerleave", resetParallax, { passive: true });
+    brandPanel.addEventListener("pointerleave", resetParallax, {
+      passive: true,
+    });
     reducedMotionQuery.addEventListener?.("change", resetParallax);
     desktopPointerQuery.addEventListener?.("change", resetParallax);
   };
 
   emailInput.addEventListener("input", () => {
-    if (emailInput.getAttribute("aria-invalid") === "true") validateEmail(false);
+    if (emailInput.getAttribute("aria-invalid") === "true")
+      validateEmail(false);
     setMessage();
   });
 
@@ -210,7 +251,8 @@
   });
 
   passwordInput.addEventListener("input", () => {
-    if (passwordInput.getAttribute("aria-invalid") === "true") validatePassword(false);
+    if (passwordInput.getAttribute("aria-invalid") === "true")
+      validatePassword(false);
     setMessage();
   });
 
@@ -222,7 +264,10 @@
     const isVisible = passwordInput.type === "text";
     passwordInput.type = isVisible ? "password" : "text";
     passwordToggle.setAttribute("aria-pressed", String(!isVisible));
-    passwordToggle.setAttribute("aria-label", isVisible ? "Show password" : "Hide password");
+    passwordToggle.setAttribute(
+      "aria-label",
+      isVisible ? "Show password" : "Hide password",
+    );
     passwordInput.focus({ preventScroll: true });
   });
 
@@ -234,7 +279,10 @@
     const passwordValid = validatePassword(true);
 
     if (!emailValid || !passwordValid) {
-      setMessage("Please review the highlighted fields before continuing.", "error");
+      setMessage(
+        "Please review the highlighted fields before continuing.",
+        "error",
+      );
       (emailValid ? passwordInput : emailInput).focus();
       return;
     }
@@ -247,8 +295,13 @@
 
     setLoading(false);
     playSuccessMotion();
-    setMessage(`Welcome back. Demo sign-in accepted for ${emailInput.value.trim()}.`, "success");
-    showToast("Demo authentication complete — connect this form to your auth API when ready.");
+    setMessage(
+      `Welcome back. Demo sign-in accepted for ${emailInput.value.trim()}.`,
+      "success",
+    );
+    showToast(
+      "Demo authentication complete — connect this form to your auth API when ready.",
+    );
   });
 
   forgotPasswordButton.addEventListener("click", () => {
@@ -256,19 +309,23 @@
     showToast(
       email && emailInput.validity.valid
         ? `Password recovery demo for ${email}.`
-        : "Enter your email first, then password recovery can continue."
+        : "Enter your email first, then password recovery can continue.",
     );
 
     if (!email || !emailInput.validity.valid) emailInput.focus();
   });
 
   requestAccessButton.addEventListener("click", () => {
-    showToast("Access-request flow is ready to be connected to your membership system.");
+    showToast(
+      "Access-request flow is ready to be connected to your membership system.",
+    );
   });
 
   ssoButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      showToast(`${button.dataset.provider} sign-in is a visual demo in this prototype.`);
+      showToast(
+        `${button.dataset.provider} sign-in is a visual demo in this prototype.`,
+      );
     });
   });
 

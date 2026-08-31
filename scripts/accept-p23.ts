@@ -34,7 +34,10 @@ try {
       rows: 28,
     }),
   );
-  assert(started.state === "running" && started.pid > 0, "pty_start did not create a running ConPTY session");
+  assert(
+    started.state === "running" && started.pid > 0,
+    "pty_start did not create a running ConPTY session",
+  );
 
   await call(runtime, {
     action: "pty_write",
@@ -56,7 +59,11 @@ try {
     enter: true,
   });
 
-  const interactive = await readUntil(runtime, started.id, "P23_INTERACTIVE_QNECTOR23");
+  const interactive = await readUntil(
+    runtime,
+    started.id,
+    "P23_INTERACTIVE_QNECTOR23",
+  );
   checks.interactiveInput = interactive.includes("P23_INTERACTIVE_QNECTOR23");
 
   const resized = unwrap<{ cols: number; rows: number }>(
@@ -67,7 +74,10 @@ try {
       rows: 40,
     }),
   );
-  assert(resized.cols === 132 && resized.rows === 40, "pty_resize did not persist the requested dimensions");
+  assert(
+    resized.cols === 132 && resized.rows === 40,
+    "pty_resize did not persist the requested dimensions",
+  );
   checks.resize = `${resized.cols}x${resized.rows}`;
 
   const listed = unwrap<{ sessions: Array<{ id: string; state: string }> }>(
@@ -75,7 +85,10 @@ try {
       action: "pty_list",
     }),
   );
-  assert(listed.sessions.some((entry) => entry.id === started.id), "pty_list did not include the active session");
+  assert(
+    listed.sessions.some((entry) => entry.id === started.id),
+    "pty_list did not include the active session",
+  );
   checks.list = listed.sessions.length;
 
   const closed = unwrap<{ state: string }>(
@@ -84,7 +97,10 @@ try {
       ptyId: started.id,
     }),
   );
-  assert(closed.state === "stopped", `pty_close returned unexpected state ${closed.state}`);
+  assert(
+    closed.state === "stopped",
+    `pty_close returned unexpected state ${closed.state}`,
+  );
 
   const closedRead = unwrap<{ state: string; text: string }>(
     await runtime.registry.call("process", runtime.context(), {
@@ -94,7 +110,10 @@ try {
       maxChars: 100_000,
     }),
   );
-  assert(closedRead.state === "stopped", "pty_read did not preserve closed-session history");
+  assert(
+    closedRead.state === "stopped",
+    "pty_read did not preserve closed-session history",
+  );
   checks.closedHistory = closedRead.text.includes("P23_INTERACTIVE_QNECTOR23");
 
   const powershell = unwrap<{ id: string; state: string; executable: string }>(
@@ -122,10 +141,17 @@ try {
     checks: Array<{ name: string; status: string }>;
     healthy: boolean;
   }>(
-    await runtime.registry.call("system", runtime.context(), { action: "doctor" }),
+    await runtime.registry.call("system", runtime.context(), {
+      action: "doctor",
+    }),
   );
-  const ptyDoctor = doctor.checks.find((entry) => entry.name === "interactive-pty");
-  assert(ptyDoctor?.status === "pass", "system.doctor did not report interactive-pty as pass");
+  const ptyDoctor = doctor.checks.find(
+    (entry) => entry.name === "interactive-pty",
+  );
+  assert(
+    ptyDoctor?.status === "pass",
+    "system.doctor did not report interactive-pty as pass",
+  );
   checks.doctor = ptyDoctor;
 
   console.log(JSON.stringify({ ok: true, p23: checks }, null, 2));
@@ -133,8 +159,13 @@ try {
   await rm(root, { recursive: true, force: true });
 }
 
-async function call(runtime: QnectorRuntime, input: Record<string, unknown>): Promise<unknown> {
-  return unwrap(await runtime.registry.call("process", runtime.context(), input));
+async function call(
+  runtime: QnectorRuntime,
+  input: Record<string, unknown>,
+): Promise<unknown> {
+  return unwrap(
+    await runtime.registry.call("process", runtime.context(), input),
+  );
 }
 
 async function readUntil(
@@ -154,7 +185,9 @@ async function readUntil(
     );
     if (result.text.includes(expected)) return result.text;
     if (result.state !== "running")
-      throw new Error(`PTY exited before '${expected}' appeared: ${result.text}`);
+      throw new Error(
+        `PTY exited before '${expected}' appeared: ${result.text}`,
+      );
     await delay(50);
   }
   throw new Error(`Timed out waiting for PTY output '${expected}'`);

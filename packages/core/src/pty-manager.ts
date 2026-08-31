@@ -181,7 +181,9 @@ export class PtyManager {
   public write(ptyId: string, text: string, enter = false): { bytes: number } {
     const managed = this.requireRunning(ptyId);
     if (text.length > 1_000_000)
-      throw new Error("INVALID_INPUT: PTY write text must be 1000000 characters or fewer");
+      throw new Error(
+        "INVALID_INPUT: PTY write text must be 1000000 characters or fewer",
+      );
     const payload = `${text}${enter ? "\r" : ""}`;
     try {
       managed.pty.write(payload);
@@ -211,7 +213,8 @@ export class PtyManager {
 
   public async close(ptyId: string): Promise<PtySnapshot> {
     const managed = this.requireSession(ptyId);
-    if (managed.snapshot.state !== "running") return cloneSnapshot(managed.snapshot);
+    if (managed.snapshot.state !== "running")
+      return cloneSnapshot(managed.snapshot);
     managed.requestedStop = true;
     await this.terminate(managed);
     await Promise.race([managed.exitPromise, delay(2_000)]);
@@ -223,7 +226,9 @@ export class PtyManager {
   }
 
   public list(): PtySnapshot[] {
-    return [...this.sessions.values()].map((entry) => cloneSnapshot(entry.snapshot));
+    return [...this.sessions.values()].map((entry) =>
+      cloneSnapshot(entry.snapshot),
+    );
   }
 
   public snapshot(ptyId: string): PtySnapshot {
@@ -285,7 +290,9 @@ export class PtyManager {
       };
     }
     if (!command)
-      throw new Error("INVALID_INPUT: command is required when PTY shell is direct");
+      throw new Error(
+        "INVALID_INPUT: command is required when PTY shell is direct",
+      );
     const tokens = tokenizeCommand(command);
     const file = tokens[0];
     if (!file) throw new Error("INVALID_INPUT: command is required");

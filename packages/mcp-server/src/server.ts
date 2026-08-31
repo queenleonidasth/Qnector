@@ -156,7 +156,8 @@ export class QnectorRuntime {
     this.workflowManager =
       options.workflowManager ??
       new WorkflowManager(this.processManager, this.fileWatch);
-    this.ptyManager = options.ptyManager ?? new PtyManager(this.config.shell.windows);
+    this.ptyManager =
+      options.ptyManager ?? new PtyManager(this.config.shell.windows);
     this.activity = options.logger ?? new ActivityLogger(activityLogPath());
     this.workspace = new WorkspaceState(this.config);
     this.memory =

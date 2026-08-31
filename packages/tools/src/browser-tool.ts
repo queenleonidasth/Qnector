@@ -166,11 +166,13 @@ export const browserDefinition: ToolDefinition = {
       persistentProfile: { type: "boolean" },
       headless: {
         type: "boolean",
-        description: "Run managed browser without visible UI. Defaults to true.",
+        description:
+          "Run managed browser without visible UI. Defaults to true.",
       },
       presentToUser: {
         type: "boolean",
-        description: "Explicit opt-in required when headless=false or when opening a URL in an already-visible managed browser.",
+        description:
+          "Explicit opt-in required when headless=false or when opening a URL in an already-visible managed browser.",
       },
       url: { type: "string" },
       targetId: { type: "string" },
