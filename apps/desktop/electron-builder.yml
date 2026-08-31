@@ -8,8 +8,8 @@ files:
   - index.html
   - package.json
   - "!dist/**/*.d.ts"
-  - "!dist/**/*.d.ts.map"
-  - "!dist/**/*.js.map"
+  - "!dist/**/*.d.cts"
+  - "!dist/**/*.map"
   - "!dist/**/*.test.*"
   - "!node_modules/@qnector/*/src/**"
   - "!node_modules/@qnector/*/dist/**/*.d.ts"
