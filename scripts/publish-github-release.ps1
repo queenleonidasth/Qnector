@@ -101,7 +101,7 @@ try {
     }
 
     $escapedName = [Uri]::EscapeDataString($file.Name)
-    $uploadUrl = "$uploadBase?name=$escapedName"
+    $uploadUrl = "${uploadBase}?name=$escapedName"
     $stream = [IO.File]::OpenRead($file.FullName)
     try {
       $content = [Net.Http.StreamContent]::new($stream)
