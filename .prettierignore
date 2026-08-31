@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+coverage/
+.turbo/
+tools/uia-helper/bin/
+tools/uia-helper/obj/
+tools/uia-helper/publish/
+tools/tunnel-client/*.spdx.json
+
+.qnector/

@@ -1,0 +1,228 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { ActivityLogger } from "./activity-log.js";
+import { MemoryStore } from "./memory-store.js";
+import { REDACTED_SECRET, sanitizeText } from "./secret-sanitizer.js";
+
+describe("MemoryStore", () => {
+  let root: string | undefined;
+
+  afterEach(async () => {
+    if (root) await rm(root, { recursive: true, force: true });
+    root = undefined;
+  });
+
+  it("persists checkpoints, facts and a sanitized markdown mirror", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-"));
+    const store = new MemoryStore(root, {
+      rootDirectory: path.join(root, "appdata-memory"),
+      workspaceMirror: "memory-md",
+    });
+    await store.saveCheckpoint({
+      currentTask: "Ship memory",
+      completedSteps: ["schema"],
+      pendingSteps: ["docs"],
+      criticalContext: "Bearer sk-test-secret-value-123456789",
+    });
+    await store.upsertNote({
+      key: "api_style",
+      value: "REST",
+      category: "rule",
+    });
+    await store.recordChange({
+      source: "files",
+      summary: "Updated source",
+      paths: ["src/index.ts"],
+    });
+
+    const recalled = await store.recall();
+    expect(recalled.available).toBe(true);
+    expect(recalled.state.active?.criticalContext).toContain(
+      "[REDACTED_SECRET]",
+    );
+    expect(recalled.state.facts[0]?.key).toBe("api_style");
+    expect(
+      await readFile(path.join(root, ".qnector", "MEMORY.md"), "utf8"),
+    ).toContain("[REDACTED_SECRET]");
+    expect(
+      await readFile(path.join(root, "appdata-memory", "index.json"), "utf8"),
+    ).toContain("workspaces");
+  });
+
+  it("recovers from an unreadable state and replaces it on the next write", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-corrupt-"));
+    const storage = path.join(root, "memory");
+    const first = new MemoryStore(root, { rootDirectory: storage });
+    const id = await first
+      .saveCheckpoint({
+        currentTask: "seed",
+        completedSteps: [],
+        pendingSteps: [],
+        criticalContext: "seed",
+      })
+      .then((value) => value.workspaceId);
+    await writeFile(path.join(storage, id, "state.json"), "not-json", "utf8");
+    const second = new MemoryStore(root, { rootDirectory: storage });
+    const recovered = await second.recall();
+    expect(recovered.warning).toContain("unreadable");
+    await second.upsertNote({ key: "fixed", value: "yes" });
+    expect((await second.recall()).warning).toBeUndefined();
+  });
+
+  it("serializes concurrent mutations from multiple store instances", async () => {
+    root = await mkdtemp(
+      path.join(tmpdir(), "qnector-core-memory-concurrent-"),
+    );
+    const storage = path.join(root, "memory");
+    const first = new MemoryStore(root, { rootDirectory: storage });
+    const second = new MemoryStore(root, { rootDirectory: storage });
+    await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        (index % 2 === 0 ? first : second).saveCheckpoint({
+          currentTask: `task-${index}`,
+          completedSteps: [],
+          pendingSteps: [],
+          criticalContext: "concurrent",
+        }),
+      ),
+    );
+    const final = await new MemoryStore(root, {
+      rootDirectory: storage,
+    }).recall();
+    expect(final.counts.checkpoints).toBe(10);
+    expect(final.state.active?.currentTask).toBe("task-11");
+  });
+
+  it("keeps the workspace index intact for parallel workspaces", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-isolation-"));
+    const workspaceA = path.join(root, "a");
+    const workspaceB = path.join(root, "b");
+    await mkdir(workspaceA);
+    await mkdir(workspaceB);
+    const storage = path.join(root, "memory");
+    await Promise.all([
+      new MemoryStore(workspaceA, { rootDirectory: storage }).upsertNote({
+        key: "workspace",
+        value: "a",
+      }),
+      new MemoryStore(workspaceB, { rootDirectory: storage }).upsertNote({
+        key: "workspace",
+        value: "b",
+      }),
+    ]);
+    expect(
+      (
+        await new MemoryStore(workspaceA, { rootDirectory: storage }).getFact({
+          key: "workspace",
+        })
+      )?.value,
+    ).toBe("a");
+    expect(
+      (
+        await new MemoryStore(workspaceB, { rootDirectory: storage }).getFact({
+          key: "workspace",
+        })
+      )?.value,
+    ).toBe("b");
+  });
+});
+
+describe("ActivityLogger", () => {
+  it("exports sanitized JSON and markdown", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-core-activity-"));
+    try {
+      const logger = new ActivityLogger(path.join(root, "activity.jsonl"));
+      await logger.record({
+        tool: "memory",
+        action: "note",
+        argsSummary: JSON.stringify({ password: "super-secret-value" }),
+        status: "success",
+        summary: "Saved note",
+      });
+      expect(logger.export("json")).not.toContain("super-secret-value");
+      expect(logger.export("markdown")).toContain("Qnector Activity Export");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("serializes concurrent writes and compacts an oversized activity log", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "qnector-core-activity-cap-"),
+    );
+    try {
+      const file = path.join(root, "activity.jsonl");
+      const logger = new ActivityLogger(file, 5, 1_500);
+      await Promise.all(
+        Array.from({ length: 30 }, (_, index) =>
+          logger.record({
+            tool: "process",
+            action: "run",
+            argsSummary: JSON.stringify({ index }),
+            status: "success",
+            summary: `entry-${index}-${"x".repeat(80)}`,
+          }),
+        ),
+      );
+      const raw = await readFile(file, "utf8");
+      expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(1_500);
+      for (const line of raw.split(/\r?\n/).filter(Boolean))
+        expect(() => JSON.parse(line)).not.toThrow();
+      const reloaded = new ActivityLogger(file, 5, 1_500);
+      const entries = await reloaded.load();
+      expect(entries).toHaveLength(5);
+      expect(entries.at(-1)?.summary).toContain("entry-29-");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("sanitizes historical entries when loading an activity log", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "qnector-core-activity-load-"),
+    );
+    try {
+      const file = path.join(root, "activity.jsonl");
+      await writeFile(
+        file,
+        `${JSON.stringify({
+          id: "old",
+          timestamp: new Date().toISOString(),
+          tool: "system",
+          action: "env",
+          argsSummary: JSON.stringify({ token: "historical-secret" }),
+          status: "success",
+        })}\n`,
+        "utf8",
+      );
+      const logger = new ActivityLogger(file);
+      const entries = await logger.load();
+      expect(JSON.stringify(entries)).not.toContain("historical-secret");
+      expect(JSON.stringify(entries)).toContain("[REDACTED_SECRET]");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("secret sanitizer", () => {
+  it("redacts common and opaque token formats without masking low-entropy text", () => {
+    const opaque = "aZ3qW7mN9pR2xK8vT4yL6cD1fG5hJ0sU";
+    expect(sanitizeText(`token=${opaque}`).value).toContain(REDACTED_SECRET);
+    expect(
+      sanitizeText("http://localhost:3000/?token=plain-secret").value,
+    ).toContain(REDACTED_SECRET);
+    expect(sanitizeText("a".repeat(48)).value).toBe("a".repeat(48));
+    const hexadecimal = "0123456789abcdef".repeat(4);
+    expect(sanitizeText(hexadecimal).value).toBe(hexadecimal);
+    const normalPath =
+      "C:/Users/QUEEN/backups/qnector-roadmap-complete-20260829-1741";
+    expect(sanitizeText(normalPath).value).toBe(normalPath);
+    const portableName = "Qnector-0.1.0-win-x64-portable.exe";
+    expect(sanitizeText(portableName).value).toBe(portableName);
+    const diagnosticLabel = "DOM/query/inspect/computed_style";
+    expect(sanitizeText(diagnosticLabel).value).toBe(diagnosticLabel);
+  });
+});

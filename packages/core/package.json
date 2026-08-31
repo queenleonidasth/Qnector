@@ -1,0 +1,27 @@
+{
+  "name": "@qnector/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.8",
+    "@qnector/shared": "workspace:*",
+    "adm-zip": "^0.6.0",
+    "node-pty": "^1.1.0",
+    "pdfjs-dist": "^6.3.289",
+    "typescript": "^5.9.3",
+    "xlsx": "^0.18.5"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

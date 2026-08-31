@@ -1,0 +1,66 @@
+{
+  "name": "qnector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal full-access desktop bridge between ChatGPT MCP and a local Windows computer",
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b && vite build --config apps/desktop/vite.config.ts",
+    "build:clean": "pnpm clean && pnpm build",
+    "clean": "tsc -b --clean",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --max-warnings 0",
+    "format:check": "prettier --check .",
+    "dev:mcp": "tsx packages/mcp-server/src/cli.ts",
+    "dev:relay": "tsx apps/relay/src/server.ts",
+    "dev:desktop": "tsx apps/desktop/src/main/dev.ts",
+    "smoke:mcp": "tsx scripts/smoke-mcp.ts",
+    "accept:p1-p10": "tsx scripts/accept-p1-p10.ts",
+    "accept:p11-p18": "tsx scripts/accept-p11-p18.ts",
+    "accept:p23": "tsx scripts/accept-p23.ts",
+    "accept:browser": "tsx scripts/accept-browser-automation.ts",
+    "test:plus": "tsx scripts/test-plus-compatibility.ts",
+    "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@napi-rs/canvas": "^1.0.8",
+    "adm-zip": "^0.6.0",
+    "execa": "^9.6.0",
+    "fastify": "^5.12.1",
+    "pdfjs-dist": "^6.3.289",
+    "ws": "^8.18.1",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "8.68.0",
+    "@typescript-eslint/parser": "8.68.0",
+    "electron": "44.0.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.9.1",
+    "pdf-lib": "^1.17.1",
+    "prettier": "^3.9.6",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.3",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,37 @@
+appId: app.qnector.desktop
+productName: Qnector
+directories:
+  output: release
+files:
+  - dist/**
+  - resources/**
+  - index.html
+  - package.json
+  - "!node_modules/@qnector/*/src/**"
+  - "!node_modules/@qnector/*/dist/**/*.d.ts"
+  - "!node_modules/@qnector/*/dist/**/*.map"
+  - "!node_modules/@qnector/*/dist/**/*.test.*"
+  - "!node_modules/@qnector/*/tsconfig*"
+asar: true
+extraResources:
+  - from: ../../tools/uia-helper/publish/qnector-uia.exe
+    to: uia-helper/qnector-uia.exe
+  - from: ../../tools/everything-cli/es.exe
+    to: everything-cli/es.exe
+  - from: ../../node_modules/typescript/lib
+    to: typescript-lib
+    filter:
+      - "*.d.ts"
+win:
+  icon: resources/icon.ico
+  target:
+    - nsis
+    - portable
+  requestedExecutionLevel: asInvoker
+nsis:
+  artifactName: Qnector-${version}-${os}-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+portable:
+  artifactName: Qnector-${version}-${os}-${arch}-portable.${ext}

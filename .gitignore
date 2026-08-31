@@ -1,0 +1,21 @@
+node_modules/
+dist/
+out/
+release/
+.qnector/
+# Generated/downloaded native assets are intentionally kept out of source control.
+tools/uia-helper/bin/
+tools/uia-helper/obj/
+tools/uia-helper/publish/
+tools/tunnel-client/*.exe
+tools/everything-cli/*.exe
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+*.tsbuildinfo
+**/src/*.js.map
+**/src/*.d.ts.map
+.DS_Store
+Thumbs.db

@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/core" },
+    { "path": "./packages/tools" },
+    { "path": "./packages/mcp-server" },
+    { "path": "./packages/transports" },
+    { "path": "./apps/relay" },
+    { "path": "./apps/desktop" }
+  ]
+}
