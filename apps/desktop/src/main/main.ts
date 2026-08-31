@@ -39,6 +39,7 @@ import {
   LEGACY_WINDOWS_LOGIN_ITEM_NAME,
   WINDOWS_LOGIN_ITEM_NAME,
 } from "./login-item.js";
+import { DesktopUpdater } from "./updater.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
@@ -47,6 +48,7 @@ let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let runtime: QnectorRuntime | undefined;
 let transport: TransportAdapter | undefined;
+let updater: DesktopUpdater | undefined;
 let isQuitting = false;
 let shutdownStarted = false;
 let registeredShortcut: string | undefined;
@@ -86,6 +88,7 @@ export async function bootstrap(): Promise<void> {
     platform: new ElectronPlatformServices(),
   });
   await runtime.start();
+  updater = new DesktopUpdater((state) => broadcast("updater:state", state));
   applyLoginItemSetting(config);
   registerIpc();
   runtime.activity.subscribe((event) => broadcast("activity:new", event.entry));
@@ -94,6 +97,7 @@ export async function bootstrap(): Promise<void> {
   );
   createWindow();
   createTray();
+  setTimeout(() => void updater?.check(), 4_000);
   applyGlobalShortcut(config);
   transport = makeTransport(config);
   transport.onState((snapshot) =>
@@ -192,6 +196,14 @@ function createTray(): void {
       { label: "Disconnect", click: () => void disconnectBridge() },
       { label: "Copy MCP URL", click: () => void copyUrl() },
       {
+        label: "Check for Updates",
+        click: () => {
+          mainWindow?.show();
+          mainWindow?.focus();
+          void updater?.check();
+        },
+      },
+      {
         label: "Create ChatGPT Plugin",
         click: () => void shell.openExternal("https://chatgpt.com/plugins"),
       },
@@ -225,6 +237,18 @@ function registerIpc(): void {
   );
   ipcMain.handle("config:get", () => runtime?.getConfig());
   ipcMain.handle("setup:inspect", () => inspectConnectionSetup());
+  ipcMain.handle("updater:get-state", () => updater?.getState());
+  ipcMain.handle("updater:check", () => updater?.check());
+  ipcMain.handle("updater:download", () => updater?.download());
+  ipcMain.handle("updater:install", () => updater?.install());
+  ipcMain.handle("updater:open-release", () =>
+    shell
+      .openExternal(
+        updater?.getReleaseUrl() ??
+          "https://github.com/queenleonidasth/Qnector/releases",
+      )
+      .then(() => undefined),
+  );
   ipcMain.handle("config:update", (_event, patch: ConfigPatch) =>
     updateConfig(patch),
   );

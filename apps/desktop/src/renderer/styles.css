@@ -174,6 +174,48 @@ body {
   opacity: 0.85;
 }
 
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.update-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid rgba(230, 186, 80, 0.34);
+  border-radius: 999px;
+  background: rgba(230, 186, 80, 0.09);
+  color: var(--gold-light);
+  font: 700 9px var(--font-sans);
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(230, 186, 80, 0.08);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.update-header-pill:hover {
+  transform: translateY(-1px);
+  border-color: rgba(230, 186, 80, 0.58);
+  background: rgba(230, 186, 80, 0.15);
+}
+
+.update-header-pill.downloaded {
+  border-color: rgba(84, 211, 156, 0.42);
+  color: #86efac;
+  background: rgba(84, 211, 156, 0.09);
+}
+
+.update-header-pill.downloading,
+.update-header-pill.installing {
+  cursor: progress;
+}
+
 /* Status Pill */
 .status-pill {
   display: inline-flex;
@@ -1516,6 +1558,157 @@ body {
   cursor: pointer;
 }
 
+.update-settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid rgba(230, 186, 80, 0.16);
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(230, 186, 80, 0.065),
+    rgba(9, 11, 15, 0.52)
+  );
+  overflow: hidden;
+}
+
+.update-settings-card.available,
+.update-settings-card.downloading {
+  border-color: rgba(230, 186, 80, 0.34);
+  box-shadow: inset 0 0 22px rgba(230, 186, 80, 0.035);
+}
+
+.update-settings-card.downloaded {
+  border-color: rgba(84, 211, 156, 0.3);
+  background: linear-gradient(
+    135deg,
+    rgba(84, 211, 156, 0.065),
+    rgba(9, 11, 15, 0.52)
+  );
+}
+
+.update-settings-card.error {
+  border-color: rgba(248, 113, 113, 0.23);
+}
+
+.update-card-header {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.update-card-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(230, 186, 80, 0.12);
+  color: var(--gold-light);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.update-card-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.update-card-copy strong {
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-mode-badge {
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-subtle);
+  font: 650 7.5px var(--font-mono);
+  text-transform: uppercase;
+}
+
+.update-card-message {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.update-progress-wrap {
+  display: grid;
+  gap: 4px;
+}
+
+.update-progress-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.update-progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gold-gradient);
+  box-shadow: 0 0 10px rgba(230, 186, 80, 0.28);
+  transition: width 140ms linear;
+}
+
+.update-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-subtle);
+  font: 7.5px var(--font-mono);
+}
+
+.update-card-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.btn-update-primary,
+.btn-update-secondary {
+  min-width: 0;
+  min-height: 31px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font: 650 9px var(--font-sans);
+  cursor: pointer;
+}
+
+.btn-update-primary {
+  flex: 1;
+  border: 1px solid rgba(230, 186, 80, 0.34);
+  background: rgba(230, 186, 80, 0.12);
+  color: var(--gold-light);
+}
+
+.btn-update-secondary {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-muted);
+}
+
+.btn-update-primary:disabled,
+.btn-update-secondary:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
 .setting-toggle-card {
   display: flex;
   align-items: center;
@@ -2686,5 +2879,371 @@ body {
     min-height: 112px;
     padding-top: 9px;
     padding-bottom: 9px;
+  }
+}
+
+/* v0.3.0 setup wizard readability and usability pass */
+.setup-backdrop {
+  padding: 8px;
+}
+
+.setup-card {
+  width: min(100%, 404px);
+  max-height: calc(100vh - 16px);
+  border-radius: 20px;
+}
+
+.setup-header {
+  align-items: center;
+  padding: 18px 18px 13px;
+}
+
+.setup-header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.setup-header-copy p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.setup-kicker {
+  margin-bottom: 4px;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+}
+
+.setup-header h2 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.setup-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.setup-step-badge {
+  padding: 5px 8px;
+  font: 650 9.5px var(--font-mono);
+}
+
+.setup-close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-muted);
+  font: 600 11px var(--font-sans);
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.setup-close:hover:not(:disabled) {
+  border-color: rgba(230, 186, 80, 0.28);
+  background: rgba(230, 186, 80, 0.08);
+  color: var(--gold-light);
+}
+
+.setup-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.setup-progress {
+  gap: 8px;
+  padding: 0 18px 8px;
+}
+
+.setup-progress-step {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.setup-progress .setup-progress-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.setup-progress-step.active .setup-progress-bar {
+  background: var(--gold-primary);
+  box-shadow: 0 0 10px rgba(230, 186, 80, 0.3);
+}
+
+.setup-progress-step small {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-progress-step.current small {
+  color: var(--gold-light);
+}
+
+.setup-body {
+  padding: 15px 18px 10px;
+  gap: 14px;
+  scrollbar-gutter: stable;
+}
+
+.setup-hero-mark,
+.setup-success-ring {
+  width: 54px;
+  height: 54px;
+  font-size: 23px;
+}
+
+.setup-copy-block {
+  gap: 7px;
+}
+
+.setup-copy-block h3 {
+  font-size: 15px;
+  line-height: 1.28;
+}
+
+.setup-copy-block p,
+.setup-note {
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.setup-note {
+  padding: 10px 11px;
+  border-left-width: 3px;
+}
+
+.setup-checklist {
+  gap: 9px;
+}
+
+.setup-checklist > div,
+.setup-connected-card {
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 12px;
+}
+
+.setup-checklist > div > span {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.setup-checklist strong,
+.setup-connected-card strong {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+.setup-checklist small,
+.setup-connected-card small {
+  font: 9.5px/1.4 var(--font-mono);
+}
+
+.setup-instruction-list {
+  gap: 9px;
+}
+
+.setup-instruction-list li {
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 11px;
+  border-radius: 12px;
+}
+
+.setup-instruction-list li > span {
+  width: 28px;
+  height: 28px;
+  font: 700 10.5px var(--font-mono);
+}
+
+.setup-instruction-list li > div {
+  gap: 4px;
+}
+
+.setup-instruction-list strong {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+.setup-instruction-list small {
+  font-size: 10.25px;
+  line-height: 1.5;
+}
+
+.setup-link-grid {
+  gap: 9px;
+}
+
+.setup-link-grid button {
+  min-height: 54px;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 11px;
+}
+
+.setup-link-grid button > span {
+  font-size: 13px;
+}
+
+.setup-link-grid button > b {
+  font-size: 11px;
+}
+
+.setup-link-grid strong {
+  font-size: 10.75px;
+  line-height: 1.3;
+}
+
+.setup-link-grid small {
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.setup-field {
+  gap: 7px;
+}
+
+.setup-field > span {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.setup-field input {
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font: 12px var(--font-mono);
+}
+
+.setup-field input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.setup-field input:focus {
+  border-color: rgba(230, 186, 80, 0.52);
+  box-shadow: 0 0 0 3px rgba(230, 186, 80, 0.08);
+}
+
+.setup-error {
+  margin: 8px 18px 0;
+  padding: 10px 11px;
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.setup-footer {
+  gap: 10px;
+  padding: 13px 18px 17px;
+  border-top: 1px solid rgba(255, 255, 255, 0.045);
+  background: rgba(12, 14, 18, 0.72);
+}
+
+.setup-primary,
+.setup-secondary {
+  min-height: 42px;
+  padding: 9px 15px;
+  border-radius: 10px;
+  font: 650 11.5px var(--font-sans);
+}
+
+.setup-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.setup-secondary:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-main);
+}
+
+@media (max-width: 395px) {
+  .setup-backdrop {
+    padding: 6px;
+  }
+
+  .setup-card {
+    max-height: calc(100vh - 12px);
+  }
+
+  .setup-header,
+  .setup-body,
+  .setup-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .setup-progress {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .setup-header h2 {
+    font-size: 17px;
+  }
+
+  .setup-step-badge {
+    display: none;
+  }
+
+  .setup-link-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 620px) {
+  .setup-header {
+    padding-top: 12px;
+    padding-bottom: 9px;
+  }
+
+  .setup-header-copy p {
+    margin-top: 3px;
+  }
+
+  .setup-progress {
+    padding-bottom: 5px;
+  }
+
+  .setup-body {
+    padding-top: 10px;
+    gap: 10px;
+  }
+
+  .setup-hero-mark,
+  .setup-success-ring {
+    width: 44px;
+    height: 44px;
+    font-size: 19px;
+  }
+
+  .setup-footer {
+    padding-top: 9px;
+    padding-bottom: 11px;
   }
 }

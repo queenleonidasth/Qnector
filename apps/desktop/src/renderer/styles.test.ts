@@ -65,4 +65,20 @@ describe("desktop UI overflow guards", () => {
     );
     expect(css).toMatch(/\.runtime-footer \{[\s\S]*?flex:\s*0 0 auto;/);
   });
+
+  it("keeps the setup wizard readable and touch-friendly", async () => {
+    const css = await styles();
+    expect(css).toContain(
+      "/* v0.3.0 setup wizard readability and usability pass */",
+    );
+    expect(css).toMatch(/\.setup-header h2 \{[\s\S]*?font-size:\s*18px;/);
+    expect(css).toMatch(/\.setup-copy-block h3 \{[\s\S]*?font-size:\s*15px;/);
+    expect(css).toMatch(
+      /\.setup-copy-block p,[\s\S]*?\.setup-note \{[\s\S]*?font-size:\s*11\.5px;/,
+    );
+    expect(css).toMatch(/\.setup-field input \{[\s\S]*?min-height:\s*42px;/);
+    expect(css).toMatch(
+      /\.setup-primary,[\s\S]*?\.setup-secondary \{[\s\S]*?min-height:\s*42px;/,
+    );
+  });
 });

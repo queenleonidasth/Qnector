@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
+import type { DesktopUpdateState } from "../updater-types.js";
 import type {
   ActivityEntry,
   ConnectionSetupStatus,
@@ -26,6 +27,13 @@ const OPENAI_TUNNELS_URL =
 const OPENAI_RUNTIME_KEYS_URL =
   "https://platform.openai.com/settings/organization/api-keys";
 const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
+
+const setupSteps = [
+  { label: "Check", title: "Check this PC" },
+  { label: "Tunnel", title: "Create tunnel credentials" },
+  { label: "ChatGPT", title: "Add Qnector to ChatGPT" },
+  { label: "Done", title: "Finish and test" },
+] as const;
 
 const transportOptions: Array<{ value: TransportMode; label: string }> = [
   { value: "cloudflare-quick", label: "Cloudflare Quick (Auto)" },
@@ -149,6 +157,7 @@ function App(): React.ReactElement {
   const [setupRuntimeApiKey, setSetupRuntimeApiKey] = useState("");
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupError, setSetupError] = useState<string>();
+  const [updateState, setUpdateState] = useState<DesktopUpdateState>();
 
   useEffect(() => {
     const stream = activityStreamRef.current;
@@ -173,6 +182,15 @@ function App(): React.ReactElement {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [selectedActivity]);
+
+  useEffect(() => {
+    if (!setupOpen || setupBusy) return;
+    const closeSetupOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSetupOpen(false);
+    };
+    window.addEventListener("keydown", closeSetupOnEscape);
+    return () => window.removeEventListener("keydown", closeSetupOnEscape);
+  }, [setupOpen, setupBusy]);
 
   const closeDrawer = () => {
     if (!activeDrawer || isClosingDrawer) return;
@@ -329,6 +347,10 @@ function App(): React.ReactElement {
           .catch(() => undefined);
       })
       .catch((reason: unknown) => setError(String(reason)));
+    void window.qnector
+      .getUpdateState()
+      .then((next) => mounted && setUpdateState(next))
+      .catch(() => undefined);
 
     const offStatus = window.qnector.onStatus((next) => {
       setStatus(next);
@@ -342,12 +364,14 @@ function App(): React.ReactElement {
         ...items.filter((item) => item.id !== entry.id),
       ]),
     );
+    const offUpdate = window.qnector.onUpdate((next) => setUpdateState(next));
 
     return () => {
       mounted = false;
       offStatus();
       offActivity();
       offProcess();
+      offUpdate();
       if (activityDrainTimer !== undefined) clearTimeout(activityDrainTimer);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
@@ -479,6 +503,42 @@ function App(): React.ReactElement {
 
   const openChatGPT = async (): Promise<void> => {
     await window.qnector.openChatGpt();
+  };
+
+  const checkForUpdates = async (): Promise<void> => {
+    try {
+      setUpdateState(await window.qnector.checkForUpdates());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const downloadUpdate = async (): Promise<void> => {
+    try {
+      setUpdateState(await window.qnector.downloadUpdate());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const installUpdate = async (): Promise<void> => {
+    try {
+      setUpdateState(await window.qnector.installUpdate());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const runPrimaryUpdateAction = (): void => {
+    if (updateState?.canInstall) {
+      void installUpdate();
+      return;
+    }
+    if (updateState?.canDownload) {
+      void downloadUpdate();
+      return;
+    }
+    void checkForUpdates();
   };
 
   const openSetupWizard = async (): Promise<void> => {
@@ -638,6 +698,16 @@ function App(): React.ReactElement {
     runtimeDashboard.snapshot?.nativeQnectorProcesses ?? [];
   const runtimeProcessCount =
     runtimeManagedProcesses.length + runtimeNativeProcesses.length;
+  const updateAttention =
+    updateState?.phase === "available" ||
+    updateState?.phase === "downloading" ||
+    updateState?.phase === "downloaded" ||
+    updateState?.phase === "installing";
+  const updateBusy =
+    updateState?.phase === "checking" ||
+    updateState?.phase === "downloading" ||
+    updateState?.phase === "installing";
+  const updateProgressPercent = Math.round((updateState?.progress ?? 0) * 100);
 
   return (
     <div className="app-container">
@@ -668,11 +738,35 @@ function App(): React.ReactElement {
             <div className="brand-tag">Qnector Desktop</div>
           </div>
         </div>
-        <div className={`status-pill ${bridge.state}`}>
-          <span className="status-dot" />
-          <span>
-            {isConnected ? "Active" : isConnecting ? "Connecting" : "Idle"}
-          </span>
+        <div className="header-actions">
+          {updateAttention && (
+            <button
+              type="button"
+              className={`update-header-pill ${updateState?.phase ?? "available"}`}
+              onClick={() => {
+                if (isClosingDrawer) return;
+                setActiveDrawer("settings");
+              }}
+              title={updateState?.message}
+            >
+              <span>↑</span>
+              <span>
+                {updateState?.phase === "downloading"
+                  ? `${updateProgressPercent}%`
+                  : updateState?.phase === "downloaded"
+                    ? "Restart"
+                    : updateState?.latestVersion
+                      ? `v${updateState.latestVersion}`
+                      : "Update"}
+              </span>
+            </button>
+          )}
+          <div className={`status-pill ${bridge.state}`}>
+            <span className="status-dot" />
+            <span>
+              {isConnected ? "Active" : isConnecting ? "Connecting" : "Idle"}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -925,19 +1019,36 @@ function App(): React.ReactElement {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="setup-header">
-              <div>
-                <span className="setup-kicker">FIRST-RUN CONNECTION</span>
-                <h2>OpenAI Tunnel Setup</h2>
+              <div className="setup-header-copy">
+                <span className="setup-kicker">QNECTOR SETUP ASSISTANT</span>
+                <h2>Connect Qnector to ChatGPT</h2>
+                <p>{setupSteps[setupStep]?.title}</p>
               </div>
-              <div className="setup-step-badge">{setupStep + 1} / 4</div>
+              <div className="setup-header-actions">
+                <div className="setup-step-badge">
+                  Step {setupStep + 1} of 4
+                </div>
+                <button
+                  className="setup-close"
+                  type="button"
+                  aria-label="Close setup"
+                  disabled={setupBusy}
+                  onClick={() => setSetupOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
-            <div className="setup-progress" aria-hidden="true">
+            <div className="setup-progress" aria-label="Setup progress">
               {[0, 1, 2, 3].map((step) => (
-                <span
+                <div
                   key={step}
-                  className={step <= setupStep ? "active" : ""}
-                />
+                  className={`setup-progress-step ${step <= setupStep ? "active" : ""} ${step === setupStep ? "current" : ""}`}
+                >
+                  <span className="setup-progress-bar" />
+                  <small>{setupSteps[step]?.label}</small>
+                </div>
               ))}
             </div>
 
@@ -945,10 +1056,11 @@ function App(): React.ReactElement {
               <div className="setup-body">
                 <div className="setup-hero-mark">Q</div>
                 <div className="setup-copy-block">
-                  <h3>Connect this PC to ChatGPT</h3>
+                  <h3>First, check this PC</h3>
                   <p>
-                    Qnector now includes the official OpenAI tunnel-client. You
-                    no longer need to browse for an executable path on a new PC.
+                    Qnector already includes the OpenAI tunnel client and runs
+                    the local MCP server for you. Both items below should show
+                    as ready before you continue.
                   </p>
                 </div>
                 <div className="setup-checklist">
@@ -976,9 +1088,8 @@ function App(): React.ReactElement {
                   </div>
                 </div>
                 <div className="setup-note">
-                  Next you will create or copy a Tunnel ID and a Runtime API
-                  key. The long-lived tunnel uses the runtime key, not an Admin
-                  API key.
+                  <b>Next:</b> create a Tunnel ID and a Runtime API key. Qnector
+                  will save them and start the tunnel automatically.
                 </div>
               </div>
             )}
@@ -986,10 +1097,11 @@ function App(): React.ReactElement {
             {setupStep === 1 && (
               <div className="setup-body">
                 <div className="setup-copy-block">
-                  <h3>OpenAI tunnel credentials</h3>
+                  <h3>Create your OpenAI tunnel credentials</h3>
                   <p>
-                    Create a tunnel, then create a separate Runtime API key
-                    whose principal has Tunnels Read + Use permission.
+                    Open the two pages below in order. Create or copy a Tunnel
+                    ID, then create a Runtime API key with Tunnels Read + Use
+                    permission and paste both values here.
                   </p>
                 </div>
                 <div className="setup-link-grid">
@@ -1021,7 +1133,7 @@ function App(): React.ReactElement {
                   </button>
                 </div>
                 <label className="setup-field">
-                  <span>Tunnel ID</span>
+                  <span>Tunnel ID · starts with tunnel_</span>
                   <input
                     value={setupTunnelId}
                     onChange={(event) => setSetupTunnelId(event.target.value)}
@@ -1030,7 +1142,7 @@ function App(): React.ReactElement {
                   />
                 </label>
                 <label className="setup-field">
-                  <span>Runtime API Key</span>
+                  <span>Runtime API Key · Tunnels Read + Use</span>
                   <input
                     type="password"
                     value={setupRuntimeApiKey}
@@ -1042,7 +1154,7 @@ function App(): React.ReactElement {
                   />
                 </label>
                 <label className="setup-field compact">
-                  <span>Profile name</span>
+                  <span>Profile name · optional</span>
                   <input
                     value={setupProfile}
                     onChange={(event) => setSetupProfile(event.target.value)}
@@ -1061,10 +1173,10 @@ function App(): React.ReactElement {
             {setupStep === 2 && (
               <div className="setup-body">
                 <div className="setup-copy-block">
-                  <h3>Add Qnector to ChatGPT Web</h3>
+                  <h3>Finish setup in ChatGPT Web</h3>
                   <p>
-                    The tunnel is healthy. Now finish the ChatGPT-side connector
-                    so GPT can discover and call Qnector tools.
+                    The tunnel is connected. Complete these four steps in
+                    ChatGPT so it can discover and use Qnector tools on this PC.
                   </p>
                 </div>
                 <div className="setup-connected-card">
@@ -1792,6 +1904,81 @@ function App(): React.ReactElement {
                 </span>
                 <span className="activity-open-glyph">›</span>
               </button>
+
+              <div
+                className={`update-settings-card ${updateState?.phase ?? "idle"}`}
+              >
+                <div className="update-card-header">
+                  <span className="update-card-icon">↑</span>
+                  <div className="update-card-copy">
+                    <span className="drawer-label">App Updates</span>
+                    <strong>
+                      Qnector {updateState?.currentVersion ?? "…"}
+                      {updateState?.latestVersion &&
+                      updateState.latestVersion !== updateState.currentVersion
+                        ? ` → ${updateState.latestVersion}`
+                        : ""}
+                    </strong>
+                  </div>
+                  <span className="update-mode-badge">
+                    {updateState?.mode ?? "…"}
+                  </span>
+                </div>
+
+                <p className="update-card-message">
+                  {updateState?.message ??
+                    "Qnector checks GitHub Releases for new versions."}
+                </p>
+
+                {updateState?.phase === "downloading" && (
+                  <div className="update-progress-wrap">
+                    <div className="update-progress-track">
+                      <span style={{ width: `${updateProgressPercent}%` }} />
+                    </div>
+                    <div className="update-progress-meta">
+                      <span>{updateProgressPercent}%</span>
+                      <span>
+                        {formatBytes(updateState.bytesDownloaded)} /{" "}
+                        {formatBytes(updateState.totalBytes)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="update-card-actions">
+                  <button
+                    type="button"
+                    className="btn-update-primary"
+                    disabled={updateBusy}
+                    onClick={runPrimaryUpdateAction}
+                  >
+                    {updateState?.phase === "checking"
+                      ? "Checking…"
+                      : updateState?.phase === "downloading"
+                        ? `Downloading ${updateProgressPercent}%`
+                        : updateState?.phase === "installing"
+                          ? "Updating…"
+                          : updateState?.canInstall
+                            ? "Restart & Update"
+                            : updateState?.canDownload
+                              ? `Download v${updateState.latestVersion ?? "new"}`
+                              : updateState?.phase === "up-to-date"
+                                ? "Check Again"
+                                : updateState?.phase === "error"
+                                  ? "Retry"
+                                  : "Check for Updates"}
+                  </button>
+                  {updateState?.releaseUrl && (
+                    <button
+                      type="button"
+                      className="btn-update-secondary"
+                      onClick={() => void window.qnector.openUpdateRelease()}
+                    >
+                      Release Notes ↗
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Tunnel Mode Card */}
               <div className="setting-toggle-card">

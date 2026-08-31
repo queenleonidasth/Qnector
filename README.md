@@ -149,6 +149,10 @@ and show the Git diff.
 - **Change projects:** open **Workspace → Choose Folder**.
 - **Review health:** open the **Runtime** drawer for build, capability, process,
   and workflow status.
+- **Update Qnector:** open **Settings → App Updates**. Qnector also checks GitHub
+  Releases shortly after startup and shows an update badge when a newer version
+  is available. Installed builds download the Setup package; Portable builds
+  download and replace the Portable executable in place after restart.
 - **Disconnect:** hold the orb for three seconds.
 
 Qnector listens locally at `http://127.0.0.1:8787/mcp`. Health and readiness are
@@ -179,6 +183,16 @@ Build the Setup and Portable Windows packages:
 npx pnpm@10.15.0 package:windows
 ```
 
+After committing, creating the matching `v<version>` tag, and pushing it, publish
+or refresh the GitHub Release assets with:
+
+```powershell
+npx pnpm@10.15.0 release:github
+```
+
+The publisher uses the existing Git credential manager, streams the newest Setup
+and Portable artifacts to GitHub, and verifies that both assets are present.
+
 Native release executables are intentionally not stored in Git. Before
 packaging, provision the verified Windows binaries at
 `tools/everything-cli/es.exe`, `tools/ripgrep/rg.exe`,
@@ -189,6 +203,10 @@ recorded in [`tools/ripgrep/README.md`](tools/ripgrep/README.md).
 
 Artifacts are written to `apps/desktop/release`. If a running portable build
 locks that directory, the packaging script uses a timestamped `retry-*` folder.
+For in-app updates to work, every GitHub Release must attach both
+`Qnector-<version>-win-x64-setup.exe` and
+`Qnector-<version>-win-x64-portable.exe`; the updater selects the matching asset
+for the distribution currently running.
 
 ## Validate a source checkout
 

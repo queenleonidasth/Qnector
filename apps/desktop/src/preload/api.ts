@@ -1,3 +1,4 @@
+import type { DesktopUpdateState } from "../updater-types.js";
 import type {
   ActivityEntry,
   ProcessSnapshot,
@@ -55,6 +56,11 @@ export interface QnectorApi {
   openUrl(url: string): Promise<void>;
   getConfig(): Promise<QnectorConfig>;
   getConnectionSetup(): Promise<ConnectionSetupStatus>;
+  getUpdateState(): Promise<DesktopUpdateState>;
+  checkForUpdates(): Promise<DesktopUpdateState>;
+  downloadUpdate(): Promise<DesktopUpdateState>;
+  installUpdate(): Promise<DesktopUpdateState>;
+  openUpdateRelease(): Promise<void>;
   updateConfig(patch: {
     host?: string;
     localPort?: number;
@@ -87,6 +93,7 @@ export interface QnectorApi {
   ): () => void;
   onActivity(listener: (entry: ActivityEntry) => void): () => void;
   onProcess(listener: (process: ProcessSnapshot) => void): () => void;
+  onUpdate(listener: (state: DesktopUpdateState) => void): () => void;
 }
 
 declare global {

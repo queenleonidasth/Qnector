@@ -30,10 +30,16 @@ const api: QnectorApi = {
   openUrl: (url) => ipcRenderer.invoke("system:open-url", url),
   getConfig: () => ipcRenderer.invoke("config:get"),
   getConnectionSetup: () => ipcRenderer.invoke("setup:inspect"),
+  getUpdateState: () => ipcRenderer.invoke("updater:get-state"),
+  checkForUpdates: () => ipcRenderer.invoke("updater:check"),
+  downloadUpdate: () => ipcRenderer.invoke("updater:download"),
+  installUpdate: () => ipcRenderer.invoke("updater:install"),
+  openUpdateRelease: () => ipcRenderer.invoke("updater:open-release"),
   updateConfig: (patch) => ipcRenderer.invoke("config:update", patch),
   onStatus: (listener) => subscribe("bridge:state", listener),
   onActivity: (listener) => subscribe("activity:new", listener),
   onProcess: (listener) => subscribe("process:update", listener),
+  onUpdate: (listener) => subscribe("updater:state", listener),
 };
 
 function subscribe<T>(
