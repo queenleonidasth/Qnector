@@ -76,8 +76,9 @@ try {
     body = $notes
     draft = $false
     prerelease = $false
-  } | ConvertTo-Json
-  $release = Invoke-RestMethod -Method Post -Uri "$repositoryApi/releases" -Headers $headers -ContentType "application/json" -Body $payload
+  } | ConvertTo-Json -Compress
+  $payloadBytes = [Text.Encoding]::UTF8.GetBytes($payload)
+  $release = Invoke-RestMethod -Method Post -Uri "$repositoryApi/releases" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $payloadBytes
 }
 
 $uploadBase = [string]$release.upload_url -replace '\{\?name,label\}$', ''
