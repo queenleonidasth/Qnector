@@ -44,6 +44,19 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
   { value: "local-only", label: "Local Only" },
 ];
 
+type DrawerName = "workspace" | "memory" | "runtime" | "settings";
+
+const drawerMenuItems: Array<{
+  key: DrawerName;
+  icon: string;
+  label: string;
+}> = [
+  { key: "workspace", icon: "📁", label: "Workspace" },
+  { key: "memory", icon: "🧠", label: "Memory" },
+  { key: "runtime", icon: "◈", label: "Runtime" },
+  { key: "settings", icon: "⚙", label: "Settings" },
+];
+
 interface MemoryActiveView {
   currentTask: string;
   completedSteps: string[];
@@ -129,9 +142,7 @@ function App(): React.ReactElement {
   const [runtimeDashboard, setRuntimeDashboard] =
     useState<RuntimeDashboardView>({ workflowRuns: [] });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
-  const [activeDrawer, setActiveDrawer] = useState<
-    "workspace" | "memory" | "runtime" | "settings" | null
-  >(null);
+  const [activeDrawer, setActiveDrawer] = useState<DrawerName | null>(null);
   const [isClosingDrawer, setIsClosingDrawer] = useState(false);
   const drawerCloseFallbackRef = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -193,6 +204,15 @@ function App(): React.ReactElement {
     return () => window.removeEventListener("keydown", closeSetupOnEscape);
   }, [setupOpen, setupBusy]);
 
+  useEffect(() => {
+    if (!activeDrawer || isClosingDrawer) return;
+    const closeDrawerOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") closeDrawer();
+    };
+    window.addEventListener("keydown", closeDrawerOnEscape);
+    return () => window.removeEventListener("keydown", closeDrawerOnEscape);
+  }, [activeDrawer, isClosingDrawer]);
+
   const finishDrawerClose = (): void => {
     if (drawerCloseFallbackRef.current !== null) {
       window.clearTimeout(drawerCloseFallbackRef.current);
@@ -225,18 +245,45 @@ function App(): React.ReactElement {
     }
   };
 
-  const toggleDrawer = (
-    drawer: "workspace" | "memory" | "runtime" | "settings",
-  ) => {
+  const switchDrawer = (drawer: DrawerName): void => {
+    if (isClosingDrawer || activeDrawer === drawer) return;
+    if (drawer === "memory") void refreshMemory();
+    if (drawer === "runtime") void refreshRuntime();
+    setActiveDrawer(drawer);
+  };
+
+  const toggleDrawer = (drawer: DrawerName): void => {
     if (isClosingDrawer) return;
     if (activeDrawer === drawer) {
       closeDrawer();
     } else {
-      if (drawer === "memory") void refreshMemory();
-      if (drawer === "runtime") void refreshRuntime();
-      setActiveDrawer(drawer);
+      switchDrawer(drawer);
     }
   };
+
+  const jumpToSettingsSection = (sectionId: string): void => {
+    document.getElementById(sectionId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const renderDrawerMenuTabs = (current: DrawerName): React.ReactElement => (
+    <nav className="drawer-menu-tabs" aria-label="Qnector menu sections">
+      {drawerMenuItems.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          className={item.key === current ? "active" : ""}
+          aria-current={item.key === current ? "page" : undefined}
+          onClick={() => switchDrawer(item.key)}
+        >
+          <span aria-hidden="true">{item.icon}</span>
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
 
   const refreshRuntime = async (): Promise<void> => {
     setRuntimeBusy(true);
@@ -1508,29 +1555,52 @@ function App(): React.ReactElement {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">📁 ACTIVE WORKSPACE</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
+              <div className="drawer-heading-copy">
+                <span className="drawer-title">📁 ACTIVE WORKSPACE</span>
+                <small>
+                  Choose which project Qnector and ChatGPT should work with.
+                </small>
+              </div>
+              <button
+                className="btn-drawer-close"
+                onClick={closeDrawer}
+                aria-label="Close workspace menu"
+              >
                 ✕
               </button>
             </div>
+            {renderDrawerMenuTabs("workspace")}
             <div className="drawer-content">
-              <div className="drawer-row">
-                <span className="drawer-label">Current Folder</span>
-                <span style={{ fontSize: "10px", color: "var(--text-gold)" }}>
-                  {status?.machineName}
-                </span>
-              </div>
-              <div className="workspace-path-box">
-                {status?.activeWorkspace ?? "—"}
-              </div>
-              <div className="drawer-actions">
-                <button
-                  className="btn-drawer-action"
-                  onClick={() => void chooseWorkspace()}
+              <div className="workspace-overview-card">
+                <div className="drawer-row">
+                  <span className="drawer-label">Current workspace</span>
+                  <span className="drawer-meta-chip">
+                    {status?.machineName ?? "This PC"}
+                  </span>
+                </div>
+                <div
+                  className={`workspace-path-box ${status?.activeWorkspace ? "" : "empty"}`}
                 >
-                  📁 Choose Folder
-                </button>
+                  {status?.activeWorkspace ?? "No folder selected"}
+                </div>
+                <p className="drawer-help-text">
+                  {status?.activeWorkspace
+                    ? "Files, terminal commands, project memory and workspace tools use this folder."
+                    : "Select a project folder before using workspace-aware tools or project memory."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="btn-drawer-action primary"
+                onClick={() => void chooseWorkspace()}
+              >
+                📁 {status?.activeWorkspace ? "Change Folder" : "Choose Folder"}
+              </button>
+
+              <div className="drawer-actions secondary-actions">
                 <button
+                  type="button"
                   className="btn-drawer-action"
                   disabled={!status?.activeWorkspace}
                   onClick={() =>
@@ -1538,9 +1608,10 @@ function App(): React.ReactElement {
                     void window.qnector.openPath(status.activeWorkspace)
                   }
                 >
-                  ↗ Explorer
+                  ↗ Open Explorer
                 </button>
                 <button
+                  type="button"
                   className="btn-drawer-action"
                   disabled={!status?.activeWorkspace}
                   onClick={() =>
@@ -1548,7 +1619,7 @@ function App(): React.ReactElement {
                     void window.qnector.openTerminal(status.activeWorkspace)
                   }
                 >
-                  💻 Terminal
+                  💻 Open Terminal
                 </button>
               </div>
             </div>
@@ -1562,17 +1633,54 @@ function App(): React.ReactElement {
           onClick={closeDrawer}
         >
           <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            className={`drawer-card memory-drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI project memory"
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">🧠 AI PROJECT MEMORY</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
+              <div className="drawer-heading-copy">
+                <span className="drawer-title">🧠 AI PROJECT MEMORY</span>
+                <small>
+                  See the current goal first, then open only the context you
+                  need.
+                </small>
+              </div>
+              <button
+                className="btn-drawer-close"
+                onClick={closeDrawer}
+                aria-label="Close memory menu"
+              >
                 ✕
               </button>
             </div>
+            {renderDrawerMenuTabs("memory")}
             <div className="drawer-content">
+              <div className="memory-quick-stats" aria-label="Memory summary">
+                <div>
+                  <strong>
+                    {memory?.state.active?.pendingSteps?.length ?? 0}
+                  </strong>
+                  <span>Pending</span>
+                </div>
+                <div>
+                  <strong>
+                    {memory?.state.active?.completedSteps?.length ?? 0}
+                  </strong>
+                  <span>Done</span>
+                </div>
+                <div>
+                  <strong>{memory?.state.facts?.length ?? 0}</strong>
+                  <span>Facts</span>
+                </div>
+                <div>
+                  <strong>{memory?.counts.checkpoints ?? 0}</strong>
+                  <span>Checkpoints</span>
+                </div>
+              </div>
+
               {memory?.warning && (
                 <div
                   className="error-toast"
@@ -1586,31 +1694,42 @@ function App(): React.ReactElement {
                 <div className="memory-summary-box highlight">
                   <div className="memory-box-header">
                     <span>🎯 CURRENT ACTIVE GOAL</span>
-                    <span
-                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
-                    >
-                      {memory?.counts.checkpoints ?? 0} Checkpoints
-                    </span>
                   </div>
                   <div className="memory-box-text">
                     {memory?.state.active?.currentTask ||
                       "No active task goal saved. ChatGPT will automatically record ongoing goals here."}
                   </div>
                   {memory?.state.active?.criticalContext && (
-                    <div className="memory-box-subtext">
-                      <strong>Context:</strong>{" "}
-                      {memory.state.active.criticalContext}
-                    </div>
+                    <details className="memory-context-details">
+                      <summary>Critical context</summary>
+                      <div className="memory-box-subtext">
+                        {memory.state.active.criticalContext}
+                      </div>
+                    </details>
                   )}
                 </div>
 
                 {((memory?.state.active?.pendingSteps?.length ?? 0) > 0 ||
                   (memory?.state.active?.completedSteps?.length ?? 0) > 0) && (
-                  <div className="memory-summary-box">
-                    <div className="memory-box-header">
-                      <span>📋 TASK PROGRESS & STEPS</span>
-                    </div>
+                  <details className="memory-summary-box memory-collapsible">
+                    <summary>
+                      <span>📋 Task progress</span>
+                      <span className="memory-summary-count">
+                        {memory?.state.active?.pendingSteps?.length ?? 0}{" "}
+                        pending ·{" "}
+                        {memory?.state.active?.completedSteps?.length ?? 0} done
+                      </span>
+                    </summary>
                     <div className="memory-checklist">
+                      {memory?.state.active?.pendingSteps?.map((step, idx) => (
+                        <div
+                          className="memory-checklist-item pending"
+                          key={`pend-${idx}`}
+                        >
+                          <span className="check-icon">⏳</span>
+                          <span>{step}</span>
+                        </div>
+                      ))}
                       {memory?.state.active?.completedSteps?.map(
                         (step, idx) => (
                           <div
@@ -1622,29 +1741,18 @@ function App(): React.ReactElement {
                           </div>
                         ),
                       )}
-                      {memory?.state.active?.pendingSteps?.map((step, idx) => (
-                        <div
-                          className="memory-checklist-item pending"
-                          key={`pend-${idx}`}
-                        >
-                          <span className="check-icon">⏳</span>
-                          <span>{step}</span>
-                        </div>
-                      ))}
                     </div>
-                  </div>
+                  </details>
                 )}
 
                 {(memory?.state.facts?.length ?? 0) > 0 && (
-                  <div className="memory-summary-box">
-                    <div className="memory-box-header">
-                      <span>💡 PROJECT RULES & KNOWLEDGE</span>
-                      <span
-                        style={{ fontSize: "9px", color: "var(--text-muted)" }}
-                      >
+                  <details className="memory-summary-box memory-collapsible">
+                    <summary>
+                      <span>💡 Project rules & knowledge</span>
+                      <span className="memory-summary-count">
                         {memory?.state.facts.length} facts
                       </span>
-                    </div>
+                    </summary>
                     <div className="memory-facts-tags">
                       {memory?.state.facts.map((fact) => (
                         <div className="memory-fact-chip" key={fact.id}>
@@ -1653,7 +1761,7 @@ function App(): React.ReactElement {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </details>
                 )}
 
                 {!memory?.state.active?.currentTask &&
@@ -1674,7 +1782,7 @@ function App(): React.ReactElement {
                   )}
               </div>
 
-              <div className="drawer-actions" style={{ marginTop: "6px" }}>
+              <div className="drawer-actions memory-primary-actions">
                 <button
                   className="btn-drawer-action"
                   disabled={memoryBusy}
@@ -1683,6 +1791,9 @@ function App(): React.ReactElement {
                 >
                   📄 View MEMORY.md
                 </button>
+              </div>
+              <details className="memory-danger-zone">
+                <summary>Advanced memory actions</summary>
                 <button
                   className="btn-drawer-action danger"
                   disabled={memoryBusy}
@@ -1691,7 +1802,7 @@ function App(): React.ReactElement {
                 >
                   🧹 Wipe Memory
                 </button>
-              </div>
+              </details>
             </div>
           </div>
         </div>
@@ -1708,17 +1819,37 @@ function App(): React.ReactElement {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">◈ RUNTIME & DIAGNOSTICS</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
+              <div className="drawer-heading-copy">
+                <span className="drawer-title">◈ RUNTIME & DIAGNOSTICS</span>
+                <small>
+                  Start with health and release status; expand details only when
+                  needed.
+                </small>
+              </div>
+              <button
+                className="btn-drawer-close"
+                onClick={closeDrawer}
+                aria-label="Close runtime menu"
+              >
                 ✕
               </button>
             </div>
+            {renderDrawerMenuTabs("runtime")}
 
             <div className="runtime-scroll" data-testid="runtime-scroll">
-              <p className="runtime-intro">
-                Health, release state, active processes and workflow history.
-                Start with the summary, then expand only the section you need.
-              </p>
+              <div className="runtime-toolbar">
+                <p className="runtime-intro">
+                  Health, release state, active processes and workflow history.
+                </p>
+                <button
+                  type="button"
+                  className="btn-drawer-action runtime-refresh-btn"
+                  disabled={runtimeBusy}
+                  onClick={() => void refreshRuntime()}
+                >
+                  {runtimeBusy ? "↻ Refreshing…" : "↻ Refresh"}
+                </button>
+              </div>
 
               <div className="runtime-summary-grid">
                 <div className="runtime-summary-card">
@@ -1919,13 +2050,9 @@ function App(): React.ReactElement {
                   ? `Updated ${formatTime(runtimeDashboard.snapshot.capturedAt)}`
                   : "Open Runtime to load diagnostics"}
               </span>
-              <button
-                className="btn-drawer-action"
-                disabled={runtimeBusy}
-                onClick={() => void refreshRuntime()}
-              >
-                {runtimeBusy ? "↻ Refreshing…" : "↻ Refresh"}
-              </button>
+              <span className="runtime-footer-hint">
+                Use Refresh above to update all diagnostics.
+              </span>
             </div>
           </div>
         </div>
@@ -1942,14 +2069,75 @@ function App(): React.ReactElement {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">⚙ BRIDGE SETTINGS</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
+              <div className="drawer-heading-copy">
+                <span className="drawer-title">⚙ BRIDGE SETTINGS</span>
+                <small>
+                  Common actions first, advanced settings grouped below.
+                </small>
+              </div>
+              <button
+                className="btn-drawer-close"
+                onClick={closeDrawer}
+                aria-label="Close settings menu"
+              >
                 ✕
               </button>
             </div>
-            <div className="drawer-content">
+            {renderDrawerMenuTabs("settings")}
+            <div className="drawer-content settings-drawer-content">
+              <div
+                className="settings-quick-actions"
+                aria-label="Settings quick actions"
+              >
+                <button type="button" onClick={() => void openSetupWizard()}>
+                  <strong>✦ Connection Setup</strong>
+                  <span>Guided tunnel configuration</span>
+                </button>
+                <button
+                  type="button"
+                  className="update-check-quick-action"
+                  disabled={updateBusy}
+                  onClick={() => void checkForUpdates()}
+                >
+                  <strong>
+                    {updateState?.phase === "checking"
+                      ? "↻ Checking…"
+                      : "↻ Check for Updates"}
+                  </strong>
+                  <span>Current v{updateState?.currentVersion ?? "…"}</span>
+                </button>
+              </div>
+
+              <nav className="settings-jump-nav" aria-label="Settings sections">
+                <button
+                  type="button"
+                  onClick={() => jumpToSettingsSection("settings-updates")}
+                >
+                  Updates
+                </button>
+                <button
+                  type="button"
+                  onClick={() => jumpToSettingsSection("settings-connection")}
+                >
+                  Connection
+                </button>
+                <button
+                  type="button"
+                  onClick={() => jumpToSettingsSection("settings-app")}
+                >
+                  App
+                </button>
+                <button
+                  type="button"
+                  onClick={() => jumpToSettingsSection("settings-memory")}
+                >
+                  Memory
+                </button>
+              </nav>
+
               <button
-                className="setup-launch-card"
+                id="settings-connection"
+                className="setup-launch-card settings-section-anchor"
                 type="button"
                 onClick={() => void openSetupWizard()}
               >
@@ -1964,7 +2152,8 @@ function App(): React.ReactElement {
               </button>
 
               <div
-                className={`update-settings-card ${updateState?.phase ?? "idle"}`}
+                id="settings-updates"
+                className={`update-settings-card settings-section-anchor ${updateState?.phase ?? "idle"}`}
               >
                 <div className="update-card-header">
                   <span className="update-card-icon">{updatePhaseIcon}</span>
@@ -2076,6 +2265,16 @@ function App(): React.ReactElement {
                     </button>
                   )}
                 </div>
+              </div>
+
+              <div
+                id="settings-app"
+                className="settings-section-heading settings-section-anchor"
+              >
+                <span>App & connection behavior</span>
+                <small>
+                  Transport, hotkey, tray behavior and Windows startup.
+                </small>
               </div>
 
               {/* Tunnel Mode Card */}
@@ -2197,6 +2396,17 @@ function App(): React.ReactElement {
                     </span>
                   </div>
                 </label>
+              </div>
+
+              <div
+                id="settings-memory"
+                className="settings-section-heading settings-section-anchor"
+              >
+                <span>Project memory</span>
+                <small>
+                  Control whether Qnector mirrors living memory into the active
+                  workspace.
+                </small>
               </div>
 
               {/* Mirror MEMORY.md */}
