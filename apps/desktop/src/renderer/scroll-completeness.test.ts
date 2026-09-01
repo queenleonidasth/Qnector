@@ -51,6 +51,18 @@ describe("drawer navigation and content completeness UX", () => {
     expect(styles).not.toContain("drawerContentFromLeft");
   });
 
+  it("keeps drawer typography readable without inflating the shell layout", () => {
+    expect(styles).toContain(".unified-drawer-card .drawer-title");
+    expect(styles).toContain("font-size: 14.5px;");
+    expect(styles).toContain("font: 650 11px/1.15 var(--font-sans);");
+    expect(styles).toContain(".unified-drawer-card .memory-box-text");
+    expect(styles).toContain("font-size: 13px;");
+    expect(styles).toContain(".unified-drawer-card .runtime-section > summary");
+    expect(styles).toContain("font-size: 11.5px;");
+    expect(styles).toContain(".unified-drawer-card .update-status-panel p");
+    expect(styles).toContain(".unified-drawer-card .btn-update-primary");
+  });
+
   it("prevents the desktop window from shrinking below a usable menu height", () => {
     expect(mainSource).toContain("width: 440,");
     expect(mainSource).toContain("height: 820,");

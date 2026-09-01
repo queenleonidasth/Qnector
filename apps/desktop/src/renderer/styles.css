@@ -3745,3 +3745,172 @@ body {
   flex: 1 1 auto;
   min-height: 0;
 }
+
+/* Drawer readability pass: increase menu typography without changing the shell geometry. */
+.unified-drawer-card .drawer-title {
+  font-size: 14.5px;
+  line-height: 1.2;
+}
+
+.unified-drawer-card .drawer-menu-tabs button {
+  min-height: 36px;
+  font: 650 11px/1.15 var(--font-sans);
+}
+
+.unified-drawer-card .drawer-label,
+.unified-drawer-card .drawer-select,
+.unified-drawer-card .drawer-toggle,
+.unified-drawer-card .btn-drawer-action {
+  font-size: 12px;
+}
+
+.unified-drawer-card .workspace-path-box {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.unified-drawer-card .memory-box-header {
+  font-size: 12px;
+}
+
+.unified-drawer-card .memory-box-header > span:last-child:not(:first-child) {
+  font-size: 10.5px !important;
+}
+
+.unified-drawer-card .memory-box-text {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.unified-drawer-card .memory-box-subtext {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.unified-drawer-card .memory-checklist-item {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.unified-drawer-card .memory-fact-chip {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.unified-drawer-card .memory-empty-state {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.unified-drawer-card .runtime-intro {
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.unified-drawer-card .runtime-summary-label {
+  font-size: 9.5px;
+}
+
+.unified-drawer-card .runtime-summary-card strong {
+  font-size: 13px;
+}
+
+.unified-drawer-card .runtime-summary-card small {
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.unified-drawer-card .runtime-section > summary {
+  font-size: 11.5px;
+}
+
+.unified-drawer-card .runtime-section-count {
+  font-size: 9.5px;
+}
+
+.unified-drawer-card .runtime-section-body {
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.unified-drawer-card .runtime-release-status {
+  font-size: 11px;
+}
+
+.unified-drawer-card .runtime-list-row strong {
+  font-size: 10.5px;
+}
+
+.unified-drawer-card .runtime-list-row > div > span {
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.unified-drawer-card .runtime-footer > span {
+  font-size: 9.5px;
+}
+
+.unified-drawer-card .setup-launch-copy strong {
+  font-size: 12.5px;
+}
+
+.unified-drawer-card .setup-launch-copy small {
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.unified-drawer-card .update-card-eyebrow {
+  font-size: 9.5px;
+}
+
+.unified-drawer-card .update-card-copy strong {
+  font-size: 14px;
+}
+
+.unified-drawer-card .update-card-copy small {
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.unified-drawer-card .update-status-badge {
+  font-size: 8.5px;
+}
+
+.unified-drawer-card .update-version-panel > span {
+  font-size: 8.5px;
+}
+
+.unified-drawer-card .update-version-panel small {
+  font-size: 9.5px;
+}
+
+.unified-drawer-card .update-status-panel strong {
+  font-size: 11.5px;
+}
+
+.unified-drawer-card .update-status-panel p {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.unified-drawer-card .update-progress-heading strong,
+.unified-drawer-card .update-progress-heading span {
+  font-size: 11px;
+}
+
+.unified-drawer-card .update-progress-meta {
+  font-size: 9.5px;
+}
+
+.unified-drawer-card .btn-update-primary {
+  font-size: 12px;
+}
+
+.unified-drawer-card .btn-update-secondary {
+  font-size: 10.5px;
+}
+
+.unified-drawer-card .hotkey-badge,
+.unified-drawer-card .hotkey-badge kbd {
+  font-size: 11px;
+}
