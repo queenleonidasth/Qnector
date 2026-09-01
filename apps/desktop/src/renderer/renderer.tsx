@@ -44,6 +44,24 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
   { value: "local-only", label: "Local Only" },
 ];
 
+type DrawerName = "workspace" | "memory" | "runtime" | "settings";
+type DrawerTransition =
+  "out-left" | "out-right" | "in-left" | "in-right" | null;
+
+const drawerMenuItems: Array<{ key: DrawerName; label: string }> = [
+  { key: "workspace", label: "Workspace" },
+  { key: "memory", label: "Memory" },
+  { key: "runtime", label: "Runtime" },
+  { key: "settings", label: "Settings" },
+];
+
+const drawerOrder: DrawerName[] = [
+  "workspace",
+  "memory",
+  "runtime",
+  "settings",
+];
+
 interface MemoryActiveView {
   currentTask: string;
   completedSteps: string[];
@@ -129,11 +147,12 @@ function App(): React.ReactElement {
   const [runtimeDashboard, setRuntimeDashboard] =
     useState<RuntimeDashboardView>({ workflowRuns: [] });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
-  const [activeDrawer, setActiveDrawer] = useState<
-    "workspace" | "memory" | "runtime" | "settings" | null
-  >(null);
+  const [activeDrawer, setActiveDrawer] = useState<DrawerName | null>(null);
+  const [drawerTransition, setDrawerTransition] =
+    useState<DrawerTransition>(null);
   const [isClosingDrawer, setIsClosingDrawer] = useState(false);
   const drawerCloseFallbackRef = useRef<number | null>(null);
+  const drawerSwitchTimeoutRef = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -193,17 +212,28 @@ function App(): React.ReactElement {
     return () => window.removeEventListener("keydown", closeSetupOnEscape);
   }, [setupOpen, setupBusy]);
 
+  const clearDrawerSwitchTimer = (): void => {
+    if (drawerSwitchTimeoutRef.current !== null) {
+      window.clearTimeout(drawerSwitchTimeoutRef.current);
+      drawerSwitchTimeoutRef.current = null;
+    }
+  };
+
   const finishDrawerClose = (): void => {
     if (drawerCloseFallbackRef.current !== null) {
       window.clearTimeout(drawerCloseFallbackRef.current);
       drawerCloseFallbackRef.current = null;
     }
+    clearDrawerSwitchTimer();
+    setDrawerTransition(null);
     setActiveDrawer(null);
     setIsClosingDrawer(false);
   };
 
   const closeDrawer = (): void => {
     if (!activeDrawer || isClosingDrawer) return;
+    clearDrawerSwitchTimer();
+    setDrawerTransition(null);
     setIsClosingDrawer(true);
     if (drawerCloseFallbackRef.current !== null) {
       window.clearTimeout(drawerCloseFallbackRef.current);
@@ -225,18 +255,65 @@ function App(): React.ReactElement {
     }
   };
 
-  const toggleDrawer = (
-    drawer: "workspace" | "memory" | "runtime" | "settings",
-  ) => {
-    if (isClosingDrawer) return;
+  const refreshDrawerData = (drawer: DrawerName): void => {
+    if (drawer === "memory") void refreshMemory();
+    if (drawer === "runtime") void refreshRuntime();
+  };
+
+  const switchDrawer = (drawer: DrawerName): void => {
+    if (isClosingDrawer || drawerTransition || activeDrawer === drawer) return;
+    if (!activeDrawer) {
+      refreshDrawerData(drawer);
+      setActiveDrawer(drawer);
+      return;
+    }
+
+    const currentIndex = drawerOrder.indexOf(activeDrawer);
+    const nextIndex = drawerOrder.indexOf(drawer);
+    const direction = nextIndex > currentIndex ? "left" : "right";
+
+    setDrawerTransition(direction === "left" ? "out-left" : "out-right");
+    clearDrawerSwitchTimer();
+    drawerSwitchTimeoutRef.current = window.setTimeout(() => {
+      refreshDrawerData(drawer);
+      setActiveDrawer(drawer);
+      setDrawerTransition(direction === "left" ? "in-left" : "in-right");
+      drawerSwitchTimeoutRef.current = window.setTimeout(() => {
+        setDrawerTransition(null);
+        drawerSwitchTimeoutRef.current = null;
+      }, 220);
+    }, 145);
+  };
+
+  const toggleDrawer = (drawer: DrawerName): void => {
+    if (isClosingDrawer || drawerTransition) return;
     if (activeDrawer === drawer) {
       closeDrawer();
-    } else {
-      if (drawer === "memory") void refreshMemory();
-      if (drawer === "runtime") void refreshRuntime();
-      setActiveDrawer(drawer);
+      return;
     }
+    switchDrawer(drawer);
   };
+
+  const renderDrawerMenuTabs = (current: DrawerName): React.ReactElement => (
+    <nav className="drawer-menu-tabs" aria-label="Qnector menu sections">
+      {drawerMenuItems.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          className={item.key === current ? "active" : ""}
+          aria-current={item.key === current ? "page" : undefined}
+          disabled={drawerTransition !== null}
+          onClick={() => switchDrawer(item.key)}
+        >
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+
+  const drawerTransitionClass = drawerTransition
+    ? `drawer-switching drawer-${drawerTransition}`
+    : "";
 
   const refreshRuntime = async (): Promise<void> => {
     setRuntimeBusy(true);
@@ -1499,11 +1576,11 @@ function App(): React.ReactElement {
 
       {activeDrawer === "workspace" && (
         <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""}`}
+          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
           onClick={closeDrawer}
         >
           <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            className={`drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1513,6 +1590,7 @@ function App(): React.ReactElement {
                 ✕
               </button>
             </div>
+            {renderDrawerMenuTabs("workspace")}
             <div className="drawer-content">
               <div className="drawer-row">
                 <span className="drawer-label">Current Folder</span>
@@ -1558,11 +1636,11 @@ function App(): React.ReactElement {
 
       {activeDrawer === "memory" && (
         <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""}`}
+          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
           onClick={closeDrawer}
         >
           <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            className={`drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1572,6 +1650,7 @@ function App(): React.ReactElement {
                 ✕
               </button>
             </div>
+            {renderDrawerMenuTabs("memory")}
             <div className="drawer-content">
               {memory?.warning && (
                 <div
@@ -1699,11 +1778,11 @@ function App(): React.ReactElement {
 
       {activeDrawer === "runtime" && (
         <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""}`}
+          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
           onClick={closeDrawer}
         >
           <div
-            className={`drawer-card runtime-drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            className={`drawer-card runtime-drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1713,6 +1792,7 @@ function App(): React.ReactElement {
                 ✕
               </button>
             </div>
+            {renderDrawerMenuTabs("runtime")}
 
             <div className="runtime-scroll" data-testid="runtime-scroll">
               <p className="runtime-intro">
@@ -1933,11 +2013,11 @@ function App(): React.ReactElement {
       {/* Slide-Up Settings Drawer */}
       {activeDrawer === "settings" && (
         <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""}`}
+          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
           onClick={closeDrawer}
         >
           <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            className={`drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1947,6 +2027,7 @@ function App(): React.ReactElement {
                 ✕
               </button>
             </div>
+            {renderDrawerMenuTabs("settings")}
             <div className="drawer-content">
               <button
                 className="setup-launch-card"
