@@ -10,7 +10,6 @@ import {
   shell,
   Tray,
 } from "electron";
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -40,6 +39,7 @@ import {
   WINDOWS_LOGIN_ITEM_NAME,
 } from "./login-item.js";
 import { DesktopUpdater } from "./updater.js";
+import { openTerminalWindow } from "./terminal-launcher.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
@@ -311,7 +311,10 @@ function registerIpc(): void {
     shell.openPath(path.resolve(target)),
   );
   ipcMain.handle("system:open-terminal", (_event, target: string) =>
-    openTerminal(path.resolve(target)),
+    openTerminalWindow(
+      path.resolve(target),
+      runtime?.getConfig().shell.powershellPath ?? "powershell.exe",
+    ),
   );
   ipcMain.handle("system:open-url", (_event, url: string) =>
     shell.openExternal(url).then(() => undefined),
@@ -603,97 +606,6 @@ function statusWithBridge(snapshot: TransportSnapshot | undefined): ReturnType<
 function broadcast(channel: string, payload: unknown): void {
   if (mainWindow && !mainWindow.isDestroyed())
     mainWindow.webContents.send(channel, payload);
-}
-
-async function openTerminal(target: string): Promise<void> {
-  if (process.platform === "win32") {
-    const executable =
-      runtime?.getConfig().shell.powershellPath ?? "powershell.exe";
-    const windowsTerminal = resolveWindowsTerminalExecutable();
-    if (windowsTerminal) {
-      try {
-        await spawnDetached(windowsTerminal, [
-          "-d",
-          target,
-          executable,
-          "-NoLogo",
-          "-NoExit",
-        ]);
-        return;
-      } catch {
-        // Fall through to the classic console launcher.
-      }
-    }
-
-    try {
-      await spawnDetached("cmd.exe", [
-        "/d",
-        "/s",
-        "/c",
-        buildStartTerminalCommand(target, executable),
-      ]);
-    } catch (primaryError) {
-      try {
-        await spawnDetached("cmd.exe", [
-          "/d",
-          "/s",
-          "/c",
-          buildStartTerminalCommand(target, "powershell.exe"),
-        ]);
-      } catch (fallbackError) {
-        const reason =
-          fallbackError instanceof Error
-            ? fallbackError.message
-            : primaryError instanceof Error
-              ? primaryError.message
-              : String(fallbackError);
-        throw new Error(`TERMINAL_LAUNCH_FAILED: ${reason}`);
-      }
-    }
-    return;
-  }
-  const executable = process.platform === "darwin" ? "open" : "xdg-open";
-  await spawnDetached(executable, [target]);
-}
-
-function resolveWindowsTerminalExecutable(): string | undefined {
-  const candidates = [
-    process.env.LOCALAPPDATA
-      ? path.join(
-          process.env.LOCALAPPDATA,
-          "Microsoft",
-          "WindowsApps",
-          "wt.exe",
-        )
-      : undefined,
-    process.env.WINDIR
-      ? path.join(process.env.WINDIR, "System32", "wt.exe")
-      : undefined,
-  ].filter((value): value is string => Boolean(value));
-  return candidates.find((candidate) => existsSync(candidate));
-}
-
-function buildStartTerminalCommand(target: string, executable: string): string {
-  return `start "" /D "${escapeCmdQuoted(target)}" "${escapeCmdQuoted(executable)}" -NoLogo -NoExit`;
-}
-
-function escapeCmdQuoted(value: string): string {
-  return value.replace(/"/g, '""');
-}
-
-function spawnDetached(executable: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: false,
-    });
-    child.once("error", reject);
-    child.once("spawn", () => {
-      child.unref();
-      resolve();
-    });
-  });
 }
 
 function applyLoginItemSetting(config: QnectorConfig): void {

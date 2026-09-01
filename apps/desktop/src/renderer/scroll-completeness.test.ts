@@ -10,6 +10,10 @@ const mainSource = readFileSync(
   new URL("../main/main.ts", import.meta.url),
   "utf8",
 );
+const terminalSource = readFileSync(
+  new URL("../main/terminal-launcher.ts", import.meta.url),
+  "utf8",
+);
 
 describe("drawer navigation and content completeness UX", () => {
   it("uses one simple top navigation without the extra settings jump menu", () => {
@@ -72,14 +76,15 @@ describe("drawer navigation and content completeness UX", () => {
 
   it("launches the Workspace terminal through a real Windows terminal window and surfaces failures", () => {
     expect(mainSource).toContain('ipcMain.handle("system:open-terminal"');
-    expect(mainSource).toMatch(
-      /process\.env\.LOCALAPPDATA[\s\S]*?"Microsoft"[\s\S]*?"WindowsApps"[\s\S]*?"wt\.exe"/,
+    expect(mainSource).toContain("openTerminalWindow(");
+    expect(terminalSource).toContain(
+      'path.join(env.ProgramFiles, "WindowsApps")',
     );
-    expect(mainSource).toContain(
-      "buildStartTerminalCommand(target, executable)",
-    );
-    expect(mainSource).toContain('child.once("spawn"');
-    expect(mainSource).toContain("TERMINAL_LAUNCH_FAILED");
+    expect(terminalSource).toContain('"WindowsTerminal.exe"');
+    expect(terminalSource).toContain("statSync(executable).size > 0");
+    expect(terminalSource).toContain("buildWindowsTerminalAliasCommand");
+    expect(terminalSource).toContain('child.once("spawn"');
+    expect(terminalSource).toContain("TERMINAL_LAUNCH_FAILED");
     expect(renderer).toContain(".openTerminal(status.activeWorkspace)");
     expect(renderer).toContain(".catch((reason: unknown) =>");
   });
