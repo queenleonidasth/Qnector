@@ -3714,8 +3714,34 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawer-page-left,
-  .drawer-page-right {
-    animation: none !important;
+  /* Menu navigation is an intentional spatial cue requested by the user.
+     Keep it short and subtle instead of removing it entirely. */
+  .drawer-page-left {
+    animation: drawerPageFromRight 130ms ease-out both !important;
   }
+
+  .drawer-page-right {
+    animation: drawerPageFromLeft 130ms ease-out both !important;
+  }
+}
+
+/* Keep the unified drawer shell physically fixed while switching pages. */
+.unified-drawer-card {
+  height: min(90vh, calc(100vh - 12px));
+  max-height: min(90vh, calc(100vh - 12px));
+}
+
+.drawer-page {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.drawer-page > .drawer-content,
+.drawer-page > .runtime-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
 }

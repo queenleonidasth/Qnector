@@ -40,6 +40,12 @@ describe("drawer navigation and content completeness UX", () => {
     expect(styles).toContain(".drawer-page-right");
     expect(styles).toContain("@keyframes drawerPageFromRight");
     expect(styles).toContain("@keyframes drawerPageFromLeft");
+    expect(styles).toContain(
+      "animation: drawerPageFromRight 130ms ease-out both !important;",
+    );
+    expect(styles).toContain(
+      "animation: drawerPageFromLeft 130ms ease-out both !important;",
+    );
     expect(styles).not.toContain(".drawer-card.drawer-switching");
     expect(styles).not.toContain("drawerContentFromRight");
     expect(styles).not.toContain("drawerContentFromLeft");
@@ -68,12 +74,15 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).not.toMatch(/memory\?\.state\.facts[^\n]*\.slice\(/);
   });
 
-  it("uses one reachable scroll surface for long memory content", () => {
+  it("keeps the unified shell at one fixed height while page content scrolls inside", () => {
     expect(styles).toMatch(
-      /\.memory-summary-container\s*\{[\s\S]*?max-height:\s*none !important;[\s\S]*?overflow:\s*visible !important;/,
+      /\.unified-drawer-card\s*\{[\s\S]*?height:\s*min\(90vh, calc\(100vh - 12px\)\);[\s\S]*?max-height:\s*min\(90vh, calc\(100vh - 12px\)\);/,
     );
     expect(styles).toMatch(
-      /\.drawer-card\s*\{[\s\S]*?max-height:\s*min\(90vh, calc\(100vh - 12px\)\);/,
+      /\.drawer-page\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;[\s\S]*?overflow:\s*hidden;/,
+    );
+    expect(styles).toMatch(
+      /\.memory-summary-container\s*\{[\s\S]*?max-height:\s*none !important;[\s\S]*?overflow:\s*visible !important;/,
     );
     expect(styles).toContain(".drawer-content::-webkit-scrollbar");
     expect(styles).toContain(".runtime-scroll::-webkit-scrollbar");
