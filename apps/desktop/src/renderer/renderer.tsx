@@ -1629,12 +1629,19 @@ function App(): React.ReactElement {
                       <button
                         className="btn-drawer-action"
                         disabled={!status?.activeWorkspace}
-                        onClick={() =>
-                          status?.activeWorkspace &&
-                          void window.qnector.openTerminal(
-                            status.activeWorkspace,
-                          )
-                        }
+                        onClick={() => {
+                          if (!status?.activeWorkspace) return;
+                          setError(undefined);
+                          void window.qnector
+                            .openTerminal(status.activeWorkspace)
+                            .catch((reason: unknown) =>
+                              setError(
+                                reason instanceof Error
+                                  ? reason.message
+                                  : String(reason),
+                              ),
+                            );
+                        }}
                       >
                         💻 Terminal
                       </button>

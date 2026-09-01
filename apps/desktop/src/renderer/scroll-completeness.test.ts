@@ -70,6 +70,20 @@ describe("drawer navigation and content completeness UX", () => {
     expect(mainSource).toContain("minHeight: 978,");
   });
 
+  it("launches the Workspace terminal through a real Windows terminal window and surfaces failures", () => {
+    expect(mainSource).toContain('ipcMain.handle("system:open-terminal"');
+    expect(mainSource).toMatch(
+      /process\.env\.LOCALAPPDATA[\s\S]*?"Microsoft"[\s\S]*?"WindowsApps"[\s\S]*?"wt\.exe"/,
+    );
+    expect(mainSource).toContain(
+      "buildStartTerminalCommand(target, executable)",
+    );
+    expect(mainSource).toContain('child.once("spawn"');
+    expect(mainSource).toContain("TERMINAL_LAUNCH_FAILED");
+    expect(renderer).toContain(".openTerminal(status.activeWorkspace)");
+    expect(renderer).toContain(".catch((reason: unknown) =>");
+  });
+
   it("places the update action before long status and progress content", () => {
     const actionIndex = renderer.indexOf("update-card-actions-prominent");
     const statusIndex = renderer.indexOf('className="update-status-panel"');

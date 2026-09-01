@@ -310,9 +310,9 @@ function registerIpc(): void {
   ipcMain.handle("system:open-path", (_event, target: string) =>
     shell.openPath(path.resolve(target)),
   );
-  ipcMain.handle("system:open-terminal", (_event, target: string) => {
-    openTerminal(path.resolve(target));
-  });
+  ipcMain.handle("system:open-terminal", (_event, target: string) =>
+    openTerminal(path.resolve(target)),
+  );
   ipcMain.handle("system:open-url", (_event, url: string) =>
     shell.openExternal(url).then(() => undefined),
   );
@@ -605,34 +605,95 @@ function broadcast(channel: string, payload: unknown): void {
     mainWindow.webContents.send(channel, payload);
 }
 
-function openTerminal(target: string): void {
+async function openTerminal(target: string): Promise<void> {
   if (process.platform === "win32") {
     const executable =
       runtime?.getConfig().shell.powershellPath ?? "powershell.exe";
-    const child = spawn(executable, ["-NoLogo", "-NoExit"], {
-      cwd: target,
+    const windowsTerminal = resolveWindowsTerminalExecutable();
+    if (windowsTerminal) {
+      try {
+        await spawnDetached(windowsTerminal, [
+          "-d",
+          target,
+          executable,
+          "-NoLogo",
+          "-NoExit",
+        ]);
+        return;
+      } catch {
+        // Fall through to the classic console launcher.
+      }
+    }
+
+    try {
+      await spawnDetached("cmd.exe", [
+        "/d",
+        "/s",
+        "/c",
+        buildStartTerminalCommand(target, executable),
+      ]);
+    } catch (primaryError) {
+      try {
+        await spawnDetached("cmd.exe", [
+          "/d",
+          "/s",
+          "/c",
+          buildStartTerminalCommand(target, "powershell.exe"),
+        ]);
+      } catch (fallbackError) {
+        const reason =
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : primaryError instanceof Error
+              ? primaryError.message
+              : String(fallbackError);
+        throw new Error(`TERMINAL_LAUNCH_FAILED: ${reason}`);
+      }
+    }
+    return;
+  }
+  const executable = process.platform === "darwin" ? "open" : "xdg-open";
+  await spawnDetached(executable, [target]);
+}
+
+function resolveWindowsTerminalExecutable(): string | undefined {
+  const candidates = [
+    process.env.LOCALAPPDATA
+      ? path.join(
+          process.env.LOCALAPPDATA,
+          "Microsoft",
+          "WindowsApps",
+          "wt.exe",
+        )
+      : undefined,
+    process.env.WINDIR
+      ? path.join(process.env.WINDIR, "System32", "wt.exe")
+      : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+function buildStartTerminalCommand(target: string, executable: string): string {
+  return `start "" /D "${escapeCmdQuoted(target)}" "${escapeCmdQuoted(executable)}" -NoLogo -NoExit`;
+}
+
+function escapeCmdQuoted(value: string): string {
+  return value.replace(/"/g, '""');
+}
+
+function spawnDetached(executable: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
       detached: true,
       stdio: "ignore",
       windowsHide: false,
     });
-    child.once("error", () => {
-      const fallback = spawn("powershell.exe", ["-NoLogo", "-NoExit"], {
-        cwd: target,
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false,
-      });
-      fallback.unref();
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
     });
-    child.unref();
-    return;
-  }
-  const executable = process.platform === "darwin" ? "open" : "xdg-open";
-  const child = spawn(executable, [target], {
-    detached: true,
-    stdio: "ignore",
   });
-  child.unref();
 }
 
 function applyLoginItemSetting(config: QnectorConfig): void {
