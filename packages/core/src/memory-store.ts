@@ -26,6 +26,33 @@ import {
 
 const DEFAULT_MAX_CHECKPOINTS = 10;
 const DEFAULT_MAX_PAYLOAD_BYTES = 256_000;
+const MEMORY_QUERY_STOP_WORDS = new Set([
+  "and",
+  "are",
+  "but",
+  "can",
+  "for",
+  "from",
+  "has",
+  "have",
+  "into",
+  "not",
+  "that",
+  "the",
+  "then",
+  "this",
+  "use",
+  "used",
+  "using",
+  "was",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "will",
+  "with",
+]);
 const mutationQueues = new Map<string, Promise<void>>();
 const indexQueues = new Map<string, Promise<void>>();
 
@@ -40,6 +67,7 @@ export interface MemoryRecallOptions {
   checkpointLimit?: number;
   factLimit?: number;
   changeLimit?: number;
+  query?: string;
 }
 
 export interface MemoryRecall {
@@ -173,7 +201,7 @@ export class MemoryStore {
       );
       const factLimit = clampLimit(options.factLimit, 100);
       const changeLimit = clampLimit(options.changeLimit, 100);
-      const facts = loaded.state.facts.slice(0, factLimit);
+      const facts = selectFacts(loaded.state.facts, factLimit, options.query);
       const changes = loaded.state.recentChanges.slice(0, changeLimit);
       const selectedCheckpoints = checkpoints.slice(-checkpointLimit).reverse();
       const truncated =
@@ -211,6 +239,7 @@ export class MemoryStore {
       const state = (await this.loadState(true)).state;
       const active = sanitizeActive(input);
       const now = new Date().toISOString();
+      const existingCheckpoints = await this.loadCheckpoints(true);
       const checkpoint: MemoryCheckpoint = {
         id: `checkpoint_${randomUUID()}`,
         createdAt: now,
@@ -224,10 +253,14 @@ export class MemoryStore {
       };
       this.assertPayload(next);
       await this.writeState(next);
-      const checkpoints = [
-        ...(await this.loadCheckpoints(true)),
-        checkpoint,
-      ].slice(-this.maxCheckpoints);
+      const previous = existingCheckpoints.at(-1);
+      const duplicateCheckpoint =
+        !input.label && previous?.active && sameActive(previous.active, active);
+      const checkpoints = (
+        duplicateCheckpoint
+          ? existingCheckpoints
+          : [...existingCheckpoints, checkpoint]
+      ).slice(-this.maxCheckpoints);
       await this.writeCheckpoints(checkpoints);
       await this.writeMirror(next, checkpoints);
       this.state = next;
@@ -242,16 +275,20 @@ export class MemoryStore {
       const key = sanitizeText(input.key).value.trim();
       if (!key) throw new Error("INVALID_INPUT: memory note key is required");
       const now = new Date().toISOString();
-      const existing = state.facts.find((entry) => entry.key === key);
+      const normalizedKey = normalizeMemoryKey(key);
+      const existing = state.facts.find(
+        (entry) => normalizeMemoryKey(entry.key) === normalizedKey,
+      );
       const fact: MemoryFact = {
         id: existing?.id ?? `fact_${randomUUID()}`,
         key,
         category: input.category ?? existing?.category ?? "note",
         value: sanitizeText(input.value).value,
-        tags: (input.tags ?? existing?.tags ?? [])
-          .map((tag) => sanitizeText(tag).value.trim())
-          .filter(Boolean)
-          .slice(0, 32),
+        tags: dedupeTextValues(
+          (input.tags ?? existing?.tags ?? []).map(
+            (tag) => sanitizeText(tag).value,
+          ),
+        ).slice(0, 32),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
@@ -274,15 +311,20 @@ export class MemoryStore {
   ): Promise<MemoryListResult> {
     return this.serial(async () => {
       const state = (await this.loadState(true)).state;
-      const query = options.query?.trim().toLowerCase();
+      const query = options.query?.trim();
       const filtered = state.facts.filter((fact) => {
         if (options.category && fact.category !== options.category)
           return false;
         if (!query) return true;
-        return `${fact.key} ${fact.value} ${fact.tags.join(" ")}`
-          .toLowerCase()
-          .includes(query);
+        return memorySearchScore(fact, query) > 0;
       });
+      if (query) {
+        filtered.sort(
+          (a, b) =>
+            memorySearchScore(b, query) - memorySearchScore(a, query) ||
+            Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+        );
+      }
       const limit = clampLimit(options.limit, 100);
       const cursor = Math.max(0, Math.floor(options.cursor ?? 0));
       const facts = filtered.slice(cursor, cursor + limit);
@@ -304,12 +346,15 @@ export class MemoryStore {
   }): Promise<MemoryFact | null> {
     return this.serial(async () => {
       const state = (await this.loadState(true)).state;
+      const normalizedKey = input.key
+        ? normalizeMemoryKey(input.key)
+        : undefined;
       return (
         state.facts.find((fact) =>
           input.id
             ? fact.id === input.id
-            : input.key
-              ? fact.key === input.key
+            : normalizedKey
+              ? normalizeMemoryKey(fact.key) === normalizedKey
               : false,
         ) ?? null
       );
@@ -323,11 +368,14 @@ export class MemoryStore {
     return this.serial(async () => {
       if (!input.id && !input.key) return false;
       const state = (await this.loadState(true)).state;
+      const normalizedKey = input.key
+        ? normalizeMemoryKey(input.key)
+        : undefined;
       const facts = state.facts.filter((fact) =>
         input.id
           ? fact.id !== input.id
-          : input.key
-            ? fact.key !== input.key
+          : normalizedKey
+            ? normalizeMemoryKey(fact.key) !== normalizedKey
             : true,
       );
       const deleted = facts.length !== state.facts.length;
@@ -350,7 +398,7 @@ export class MemoryStore {
       const state = (await this.loadState(true)).state;
       const factsByKey = new Map<string, MemoryFact>();
       for (const fact of [...state.facts].reverse())
-        factsByKey.set(fact.key, fact);
+        factsByKey.set(normalizeMemoryKey(fact.key), fact);
       const facts = [...factsByKey.values()].reverse();
       const now = new Date().toISOString();
       const active = input.replacementSummary
@@ -737,12 +785,121 @@ function sanitizeActive(input: SaveCheckpointInput): MemoryActiveState {
     pendingSteps: input.pendingSteps,
     criticalContext: input.criticalContext,
   }).value as MemoryActiveState;
+  const completedSteps = dedupeTextValues(safe.completedSteps).slice(0, 100);
+  const completed = new Set(completedSteps.map(normalizeMemoryKey));
+  const pendingSteps = dedupeTextValues(safe.pendingSteps)
+    .filter((entry) => !completed.has(normalizeMemoryKey(entry)))
+    .slice(0, 100);
   return {
-    currentTask: safe.currentTask,
-    completedSteps: safe.completedSteps.slice(0, 100),
-    pendingSteps: safe.pendingSteps.slice(0, 100),
-    criticalContext: safe.criticalContext,
+    currentTask: safe.currentTask.trim(),
+    completedSteps,
+    pendingSteps,
+    criticalContext: safe.criticalContext.trim(),
   };
+}
+
+function selectFacts(
+  facts: MemoryFact[],
+  limit: number,
+  query?: string,
+): MemoryFact[] {
+  const trimmedQuery = query?.trim();
+  if (!trimmedQuery) return facts.slice(0, limit);
+  const ranked = facts
+    .map((fact, index) => ({
+      fact,
+      index,
+      score: memorySearchScore(fact, trimmedQuery),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        Date.parse(b.fact.updatedAt) - Date.parse(a.fact.updatedAt) ||
+        a.index - b.index,
+    )
+    .slice(0, limit)
+    .map((entry) => entry.fact);
+  return ranked.length > 0 ? ranked : facts.slice(0, limit);
+}
+
+function memorySearchScore(fact: MemoryFact, query: string): number {
+  const normalizedQuery = normalizeMemoryKey(query);
+  if (!normalizedQuery) return 0;
+  const key = normalizeMemoryKey(fact.key);
+  const value = normalizeMemoryKey(fact.value);
+  const tags = fact.tags.map(normalizeMemoryKey);
+  const tokens = tokenizeMemoryQuery(normalizedQuery);
+  let score = 0;
+  if (key === normalizedQuery) score += 40;
+  else if (key.includes(normalizedQuery)) score += 24;
+  if (value.includes(normalizedQuery)) score += 12;
+  if (tags.some((tag) => tag === normalizedQuery)) score += 18;
+  else if (tags.some((tag) => tag.includes(normalizedQuery))) score += 10;
+  for (const token of tokens) {
+    if (key.includes(token)) score += 7;
+    if (tags.some((tag) => tag.includes(token))) score += 5;
+    if (value.includes(token)) score += 2;
+  }
+  if (score > 0) {
+    if (fact.category === "rule") score += 4;
+    else if (fact.category === "decision") score += 3;
+    else if (fact.category === "fact") score += 1;
+  }
+  return score;
+}
+
+function tokenizeMemoryQuery(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(/[^\p{L}\p{N}_-]+/u)
+        .map((entry) => entry.trim())
+        .filter(
+          (entry) => entry.length >= 2 && !MEMORY_QUERY_STOP_WORDS.has(entry),
+        ),
+    ),
+  ].slice(0, 48);
+}
+
+function normalizeMemoryKey(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function dedupeTextValues(values: string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const normalized = normalizeMemoryKey(trimmed);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function sameActive(
+  left: MemoryActiveState,
+  right: MemoryActiveState,
+): boolean {
+  return (
+    normalizeMemoryKey(left.currentTask) ===
+      normalizeMemoryKey(right.currentTask) &&
+    arraysEqual(left.completedSteps, right.completedSteps) &&
+    arraysEqual(left.pendingSteps, right.pendingSteps) &&
+    normalizeMemoryKey(left.criticalContext) ===
+      normalizeMemoryKey(right.criticalContext)
+  );
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every(
+    (value, index) =>
+      normalizeMemoryKey(value) === normalizeMemoryKey(right[index] ?? ""),
+  );
 }
 
 function clampLimit(input: number | undefined, fallback: number): number {

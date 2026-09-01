@@ -1,4 +1,5 @@
 import type {
+  MemoryActiveState,
   MemoryCategory,
   ToolDefinition,
   ToolResult,
@@ -18,7 +19,7 @@ const categories: MemoryCategory[] = ["fact", "decision", "rule", "note"];
 export const memoryDefinition: ToolDefinition = {
   name: "memory",
   description:
-    "Persist and recall local Qnector workspace context across chat sessions. Save checkpoints, project facts, decisions and rules; compact or clear only the active workspace memory. Memory is local-only and secrets are best-effort redacted before persistence.",
+    "Persist and recall local Qnector workspace context across chat sessions. recall can rank facts by an optional query; working_set combines the active task, relevant facts, latest checkpoint, recent files/commands/errors and a resume hint. Save checkpoints, project facts, decisions and rules; compact or clear only the active workspace memory. Memory is local-only and secrets are best-effort redacted before persistence.",
   inputSchema: {
     type: "object",
     properties: {
@@ -91,6 +92,9 @@ export async function executeMemory(
         checkpointLimit: numberInput(object, "checkpointLimit", 10),
         factLimit: numberInput(object, "factLimit", 100),
         changeLimit: numberInput(object, "changeLimit", 100),
+        ...(stringInput(object, "query")
+          ? { query: stringInput(object, "query") }
+          : {}),
       });
       return {
         summary: result.available
@@ -101,7 +105,8 @@ export async function executeMemory(
       };
     }
 
-    if (action === "working_set") return workingSetAction(context, memory);
+    if (action === "working_set")
+      return workingSetAction(context, memory, stringInput(object, "query"));
 
     if (action === "save_checkpoint") {
       const result = await memory.saveCheckpoint({
@@ -245,8 +250,12 @@ export async function executeMemory(
   });
 }
 
-async function workingSetAction(context: ToolContext, memory: MemoryStore) {
-  const recall = await memory.recall({
+async function workingSetAction(
+  context: ToolContext,
+  memory: MemoryStore,
+  explicitQuery?: string,
+) {
+  const baseRecall = await memory.recall({
     checkpointLimit: 1,
     factLimit: 12,
     changeLimit: 20,
@@ -318,30 +327,84 @@ async function workingSetAction(context: ToolContext, memory: MemoryStore) {
     status: entry.status,
     summary: entry.summary ?? entry.error?.message ?? "",
   }));
+  const contextQuery = buildWorkingSetQuery(
+    baseRecall.state.active,
+    recentActions,
+    explicitQuery,
+  );
+  const recall = contextQuery
+    ? await memory.recall({
+        checkpointLimit: 1,
+        factLimit: 12,
+        changeLimit: 20,
+        query: contextQuery,
+      })
+    : baseRecall;
+  const recentErrors = activity
+    .filter((entry) => entry.status === "error")
+    .slice(0, 10)
+    .map((entry) => ({
+      timestamp: entry.timestamp,
+      tool: entry.tool,
+      action: entry.action,
+      error: entry.error?.message ?? entry.summary ?? "",
+    }));
   return {
     summary: `Prepared automatic working set from ${recentActions.length} recent action(s)`,
     data: {
       workspace: context.getConfig().activeWorkspace,
       generatedAt: new Date().toISOString(),
       active: recall.state.active,
+      latestCheckpoint: recall.checkpoints[0] ?? null,
+      relevantFacts: recall.state.facts,
       recentChanges: recall.state.recentChanges,
       recentActions,
+      resumeHint: buildResumeHint(recall.state.active, recentErrors),
       lastFilesRead: fileReads.slice(0, 20),
       lastFilesModified: fileWrites.slice(0, 20),
       lastCommands: commands.slice(0, 20),
-      recentErrors: activity
-        .filter((entry) => entry.status === "error")
-        .slice(0, 10)
-        .map((entry) => ({
-          timestamp: entry.timestamp,
-          tool: entry.tool,
-          action: entry.action,
-          error: entry.error?.message ?? entry.summary ?? "",
-        })),
+      recentErrors,
       managedProcesses: context.processManager.list().slice(-30),
       workflowRuns,
     },
   };
+}
+
+function buildWorkingSetQuery(
+  active: MemoryActiveState | null,
+  recentActions: Array<{
+    timestamp: string;
+    tool: string;
+    action: string;
+    status: string;
+    summary: string;
+  }>,
+  explicitQuery?: string,
+): string {
+  return [
+    explicitQuery,
+    active?.currentTask,
+    ...(active?.pendingSteps.slice(0, 6) ?? []),
+    active?.criticalContext.slice(0, 1_200),
+    ...recentActions.slice(0, 10).map((entry) => entry.summary),
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(" ")
+    .slice(0, 6_000);
+}
+
+function buildResumeHint(
+  active: MemoryActiveState | null,
+  recentErrors: Array<{ error: string }>,
+): string {
+  const pending = active?.pendingSteps.find((entry) => entry.trim());
+  if (pending) return `Resume next pending step: ${pending}`;
+  const error = recentErrors.find((entry) => entry.error.trim())?.error;
+  if (error)
+    return `No pending step is saved; review the latest error: ${error}`;
+  if (active?.currentTask.trim())
+    return `Current task has no pending steps; verify its latest state before starting new work: ${active.currentTask}`;
+  return "No active task is saved; inspect the workspace and recent activity before starting new work.";
 }
 
 function parseActivityArgs(value: string): Record<string, unknown> {

@@ -341,6 +341,47 @@ describe("Qnector grouped tools", () => {
     expect(JSON.stringify(recalled)).toContain("[REDACTED_SECRET]");
   });
 
+  it("builds a relevance-aware working set with a deterministic resume hint", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-memory-working-set-"));
+    const config = defaultConfig(root);
+    const context = makeContext(config);
+    const registry = new ToolRegistry();
+    await registry.call("memory", context, {
+      action: "save_checkpoint",
+      currentTask: "Improve updater UX",
+      completedSteps: ["Inspect update UI"],
+      pendingSteps: ["Verify download progress"],
+      criticalContext: "The update action must remain visible.",
+    });
+    await registry.call("memory", context, {
+      action: "note",
+      key: "Theme preference",
+      value: "Keep the classic dark gold design.",
+      category: "decision",
+    });
+    await registry.call("memory", context, {
+      action: "note",
+      key: "Updater behavior",
+      value: "Download progress must never hide the update action.",
+      category: "rule",
+      tags: ["update", "download"],
+    });
+
+    const result = await registry.call("memory", context, {
+      action: "working_set",
+      query: "update download progress",
+    });
+    expect(result.ok).toBe(true);
+    const data = (result.data as { data: Record<string, unknown> }).data as {
+      relevantFacts: Array<{ key: string }>;
+      latestCheckpoint: { id: string } | null;
+      resumeHint: string;
+    };
+    expect(data.relevantFacts[0]?.key).toBe("Updater behavior");
+    expect(data.latestCheckpoint?.id).toMatch(/^checkpoint_/);
+    expect(data.resumeHint).toContain("Verify download progress");
+  });
+
   it("resolves relative paths and runs a direct command", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-process-"));
     const config = defaultConfig(root);

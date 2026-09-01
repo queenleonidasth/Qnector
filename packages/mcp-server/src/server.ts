@@ -433,7 +433,7 @@ export class QnectorRuntime {
     try {
       const memory = await this.memory.recall({
         checkpointLimit: 1,
-        factLimit: 8,
+        factLimit: 100,
         changeLimit: 6,
       });
       return buildSessionBootstrapInstructions(memory, this.activity.list());

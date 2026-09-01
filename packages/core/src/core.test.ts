@@ -109,6 +109,83 @@ describe("MemoryStore", () => {
     ).toContain("workspaces");
   });
 
+  it("normalizes active steps and avoids duplicate checkpoints or fact keys", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-normalize-"));
+    const store = new MemoryStore(root, {
+      rootDirectory: path.join(root, "memory"),
+    });
+
+    await store.saveCheckpoint({
+      currentTask: "  Improve memory continuity  ",
+      completedSteps: ["Read source", " read source ", ""],
+      pendingSteps: ["READ SOURCE", "Run tests", " run tests "],
+      criticalContext: "  Keep the drawer stable.  ",
+    });
+    await store.saveCheckpoint({
+      currentTask: "Improve memory continuity",
+      completedSteps: ["Read source"],
+      pendingSteps: ["Run tests"],
+      criticalContext: "Keep the drawer stable.",
+    });
+
+    await store.upsertNote({
+      key: " Release Rule ",
+      value: "first",
+      category: "rule",
+      tags: ["Updater", " updater ", "release"],
+    });
+    await store.upsertNote({
+      key: "release   rule",
+      value: "second",
+      category: "rule",
+    });
+
+    const recalled = await store.recall();
+    expect(recalled.counts.checkpoints).toBe(1);
+    expect(recalled.state.active).toMatchObject({
+      currentTask: "Improve memory continuity",
+      completedSteps: ["Read source"],
+      pendingSteps: ["Run tests"],
+      criticalContext: "Keep the drawer stable.",
+    });
+    expect(recalled.counts.facts).toBe(1);
+    expect((await store.getFact({ key: "RELEASE RULE" }))?.value).toBe(
+      "second",
+    );
+  });
+
+  it("recalls facts by deterministic relevance when a query is supplied", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-search-"));
+    const store = new MemoryStore(root, {
+      rootDirectory: path.join(root, "memory"),
+    });
+    await store.upsertNote({
+      key: "Theme preference",
+      value: "Keep the classic dark gold visual design.",
+      category: "decision",
+    });
+    await store.upsertNote({
+      key: "Updater behavior",
+      value:
+        "Keep download progress readable and never hide the update action.",
+      category: "rule",
+      tags: ["update", "download"],
+    });
+    await store.upsertNote({
+      key: "Database",
+      value: "SQLite is used by document fixtures.",
+      category: "fact",
+    });
+
+    const recalled = await store.recall({
+      query: "update download progress",
+      factLimit: 2,
+    });
+    expect(recalled.state.facts[0]?.key).toBe("Updater behavior");
+    expect(recalled.state.facts).toHaveLength(1);
+    expect(recalled.truncated).toBe(true);
+  });
+
   it("recovers from an unreadable state and replaces it on the next write", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-core-corrupt-"));
     const storage = path.join(root, "memory");

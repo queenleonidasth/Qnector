@@ -64,10 +64,10 @@ describe("drawer navigation and content completeness UX", () => {
   });
 
   it("prevents the desktop window from shrinking below a usable menu height", () => {
-    expect(mainSource).toContain("width: 440,");
-    expect(mainSource).toContain("height: 820,");
-    expect(mainSource).toContain("minWidth: 400,");
-    expect(mainSource).toContain("minHeight: 720,");
+    expect(mainSource).toContain("width: 451,");
+    expect(mainSource).toContain("height: 978,");
+    expect(mainSource).toContain("minWidth: 451,");
+    expect(mainSource).toContain("minHeight: 978,");
   });
 
   it("places the update action before long status and progress content", () => {

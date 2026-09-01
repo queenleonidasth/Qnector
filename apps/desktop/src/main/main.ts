@@ -144,10 +144,10 @@ function createWindow(): void {
     : undefined;
 
   mainWindow = new BrowserWindow({
-    width: 440,
-    height: 820,
-    minWidth: 400,
-    minHeight: 720,
+    width: 451,
+    height: 978,
+    minWidth: 451,
+    minHeight: 978,
     backgroundColor: "#121316",
     title: "Qnector",
     icon: windowIcon,

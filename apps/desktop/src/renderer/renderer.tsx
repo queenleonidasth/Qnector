@@ -1664,7 +1664,11 @@ function App(): React.ReactElement {
                               color: "var(--text-muted)",
                             }}
                           >
-                            {memory?.counts.checkpoints ?? 0} Checkpoints
+                            {memory?.counts.checkpoints ?? 0} Checkpoints ·
+                            Updated{" "}
+                            {memory?.updatedAt
+                              ? formatTime(memory.updatedAt)
+                              : "—"}
                           </span>
                         </div>
                         <div className="memory-box-text">
@@ -1687,17 +1691,6 @@ function App(): React.ReactElement {
                             <span>📋 TASK PROGRESS & STEPS</span>
                           </div>
                           <div className="memory-checklist">
-                            {memory?.state.active?.completedSteps?.map(
-                              (step, idx) => (
-                                <div
-                                  className="memory-checklist-item done"
-                                  key={`done-${idx}`}
-                                >
-                                  <span className="check-icon">✓</span>
-                                  <span>{step}</span>
-                                </div>
-                              ),
-                            )}
                             {memory?.state.active?.pendingSteps?.map(
                               (step, idx) => (
                                 <div
@@ -1705,6 +1698,17 @@ function App(): React.ReactElement {
                                   key={`pend-${idx}`}
                                 >
                                   <span className="check-icon">⏳</span>
+                                  <span>{step}</span>
+                                </div>
+                              ),
+                            )}
+                            {memory?.state.active?.completedSteps?.map(
+                              (step, idx) => (
+                                <div
+                                  className="memory-checklist-item done"
+                                  key={`done-${idx}`}
+                                >
+                                  <span className="check-icon">✓</span>
                                   <span>{step}</span>
                                 </div>
                               ),
@@ -1723,7 +1727,9 @@ function App(): React.ReactElement {
                                 color: "var(--text-muted)",
                               }}
                             >
-                              {memory?.state.facts.length} facts
+                              {memory?.counts.facts ??
+                                memory?.state.facts.length}{" "}
+                              facts
                             </span>
                           </div>
                           <div className="memory-facts-tags">

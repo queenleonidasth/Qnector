@@ -1,7 +1,7 @@
 import type { MemoryRecall } from "@qnector/core";
-import type { ActivityEntry } from "@qnector/shared";
+import type { ActivityEntry, MemoryFact } from "@qnector/shared";
 
-const MAX_BOOTSTRAP_BYTES = 4_000;
+const MAX_BOOTSTRAP_BYTES = 6_000;
 
 export function buildSessionBootstrapInstructions(
   memory: MemoryRecall,
@@ -35,10 +35,12 @@ export function buildSessionBootstrapInstructions(
   const active = memory.state.active;
   if (active) {
     lines.push("", `Current task: ${clip(active.currentTask, 1_000)}`);
-    pushList(lines, "Completed steps", active.completedSteps, 5, 260);
-    pushList(lines, "Pending steps", active.pendingSteps, 8, 260);
+    const resumeNext = active.pendingSteps.find((entry) => entry.trim());
+    if (resumeNext) lines.push(`Resume next: ${clip(resumeNext, 420)}`);
+    pushList(lines, "Pending steps", active.pendingSteps, 8, 320);
+    pushList(lines, "Completed steps", active.completedSteps, 4, 240);
     if (active.criticalContext) {
-      lines.push("", "Critical context:", clip(active.criticalContext, 320));
+      lines.push("", "Critical context:", clip(active.criticalContext, 700));
     }
   }
 
@@ -66,7 +68,7 @@ export function buildSessionBootstrapInstructions(
     }
   }
 
-  const facts = memory.state.facts.slice(0, 6);
+  const facts = selectBootstrapFacts(memory.state.facts, 8);
   if (facts.length > 0) {
     lines.push("", "Core facts / decisions / rules:");
     for (const fact of facts) {
@@ -85,6 +87,20 @@ export function buildSessionBootstrapInstructions(
   }
 
   return capUtf8(lines.join("\n"), MAX_BOOTSTRAP_BYTES);
+}
+
+function selectBootstrapFacts(
+  facts: MemoryFact[],
+  limit: number,
+): MemoryFact[] {
+  const core = facts
+    .filter((fact) => fact.category === "rule" || fact.category === "decision")
+    .slice(0, Math.ceil(limit / 2));
+  const selected = new Set(core.map((fact) => fact.id));
+  const recent = facts
+    .filter((fact) => !selected.has(fact.id))
+    .slice(0, Math.max(0, limit - core.length));
+  return [...core, ...recent];
 }
 
 export function buildSessionBootstrapError(

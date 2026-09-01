@@ -1644,3 +1644,19 @@ Edit/run Understand      Everything      UIA      Browser DOM
 ```
 
 Qnector should become the execution + perception + interaction layer for ChatGPT on Windows, while ChatGPT remains the reasoning layer.
+
+---
+
+# 16. MEMORY CONTINUITY QUALITY UPGRADE — IMPLEMENTED 1 SEPTEMBER 2026
+
+The active Qnector source now includes a deterministic Memory quality upgrade without changing the 8 grouped MCP tools or the persisted MemoryState v1 schema:
+
+1. `memory.recall` accepts optional `query` and ranks matching facts by key/tag/value relevance with rule/decision priority.
+2. Fact identity is normalized case-insensitively with collapsed whitespace; repeated keys update the existing fact instead of creating near-duplicates, and tags are deduplicated.
+3. Active checkpoint steps are trimmed/deduplicated; a step already completed is removed from pending, and an unlabeled checkpoint identical to the latest checkpoint is not stored again.
+4. `memory.working_set` accepts optional `query` and now returns `relevantFacts`, `latestCheckpoint`, and a deterministic `resumeHint` in addition to recent files/commands/errors/process/workflow context.
+5. Automatic MCP session bootstrap budget is 6 KB, emits `Resume next`, gives Critical Context more room, and preserves a balanced set of rule/decision facts plus recent facts.
+6. Memory desktop UI shows total fact count, latest update time, and pending steps before completed history.
+7. Desktop default/minimum window size is locked to `451×978`, measured from the owner's known-good current window at 96 DPI, to prevent drawer/menu layout from entering the previously problematic compressed state.
+
+Validation after this upgrade: full TypeScript/lint/Prettier/build QC passes, all automated tests pass, P11–P18 real acceptance passes, and an Electron Windows sizing harness confirms a requested `300×500` resize is clamped to `451×978`.
