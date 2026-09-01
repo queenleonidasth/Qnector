@@ -1,6 +1,6 @@
 {
   "name": "@qnector/desktop",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "private": true,
   "type": "module",
   "description": "Qnector local ChatGPT MCP bridge",
