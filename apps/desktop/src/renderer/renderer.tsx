@@ -54,6 +54,13 @@ const drawerMenuItems: Array<{ key: DrawerName; label: string }> = [
   { key: "settings", label: "Settings" },
 ];
 
+const drawerTitles: Record<DrawerName, string> = {
+  workspace: "📁 ACTIVE WORKSPACE",
+  memory: "🧠 AI PROJECT MEMORY",
+  runtime: "◈ RUNTIME & DIAGNOSTICS",
+  settings: "⚙ BRIDGE SETTINGS",
+};
+
 const drawerOrder: DrawerName[] = [
   "workspace",
   "memory",
@@ -279,7 +286,7 @@ function App(): React.ReactElement {
     drawerSwitchTimeoutRef.current = window.setTimeout(() => {
       setDrawerTransition(null);
       drawerSwitchTimeoutRef.current = null;
-    }, 240);
+    }, 200);
   };
 
   const toggleDrawer = (drawer: DrawerName): void => {
@@ -307,10 +314,6 @@ function App(): React.ReactElement {
       ))}
     </nav>
   );
-
-  const drawerTransitionClass = drawerTransition
-    ? `drawer-switching drawer-switch-${drawerTransition}`
-    : "";
 
   const refreshRuntime = async (): Promise<void> => {
     setRuntimeBusy(true);
@@ -1571,754 +1574,767 @@ function App(): React.ReactElement {
         </div>
       )}
 
-      {activeDrawer === "workspace" && (
+      {activeDrawer && (
         <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
+          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""}`}
           onClick={closeDrawer}
         >
           <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
+            className={`drawer-card unified-drawer-card ${isClosingDrawer ? "closing" : ""}`}
             onAnimationEnd={onDrawerAnimationEnd}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">📁 ACTIVE WORKSPACE</span>
+              <span className="drawer-title">{drawerTitles[activeDrawer]}</span>
               <button className="btn-drawer-close" onClick={closeDrawer}>
                 ✕
               </button>
             </div>
-            {renderDrawerMenuTabs("workspace")}
-            <div className="drawer-content">
-              <div className="drawer-row">
-                <span className="drawer-label">Current Folder</span>
-                <span style={{ fontSize: "10px", color: "var(--text-gold)" }}>
-                  {status?.machineName}
-                </span>
-              </div>
-              <div className="workspace-path-box">
-                {status?.activeWorkspace ?? "—"}
-              </div>
-              <div className="drawer-actions">
-                <button
-                  className="btn-drawer-action"
-                  onClick={() => void chooseWorkspace()}
-                >
-                  📁 Choose Folder
-                </button>
-                <button
-                  className="btn-drawer-action"
-                  disabled={!status?.activeWorkspace}
-                  onClick={() =>
-                    status?.activeWorkspace &&
-                    void window.qnector.openPath(status.activeWorkspace)
-                  }
-                >
-                  ↗ Explorer
-                </button>
-                <button
-                  className="btn-drawer-action"
-                  disabled={!status?.activeWorkspace}
-                  onClick={() =>
-                    status?.activeWorkspace &&
-                    void window.qnector.openTerminal(status.activeWorkspace)
-                  }
-                >
-                  💻 Terminal
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeDrawer === "memory" && (
-        <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
-          onClick={closeDrawer}
-        >
-          <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
-            onAnimationEnd={onDrawerAnimationEnd}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="drawer-header">
-              <span className="drawer-title">🧠 AI PROJECT MEMORY</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
-                ✕
-              </button>
-            </div>
-            {renderDrawerMenuTabs("memory")}
-            <div className="drawer-content">
-              {memory?.warning && (
-                <div
-                  className="error-toast"
-                  style={{ position: "static", marginBottom: "6px" }}
-                >
-                  {memory.warning}
-                </div>
+            {renderDrawerMenuTabs(activeDrawer)}
+            <div
+              className={`drawer-page ${drawerTransition ? `drawer-page-${drawerTransition}` : ""}`}
+              key={activeDrawer}
+            >
+              {activeDrawer === "workspace" && (
+                <>
+                  <div className="drawer-content">
+                    <div className="drawer-row">
+                      <span className="drawer-label">Current Folder</span>
+                      <span
+                        style={{ fontSize: "10px", color: "var(--text-gold)" }}
+                      >
+                        {status?.machineName}
+                      </span>
+                    </div>
+                    <div className="workspace-path-box">
+                      {status?.activeWorkspace ?? "—"}
+                    </div>
+                    <div className="drawer-actions">
+                      <button
+                        className="btn-drawer-action"
+                        onClick={() => void chooseWorkspace()}
+                      >
+                        📁 Choose Folder
+                      </button>
+                      <button
+                        className="btn-drawer-action"
+                        disabled={!status?.activeWorkspace}
+                        onClick={() =>
+                          status?.activeWorkspace &&
+                          void window.qnector.openPath(status.activeWorkspace)
+                        }
+                      >
+                        ↗ Explorer
+                      </button>
+                      <button
+                        className="btn-drawer-action"
+                        disabled={!status?.activeWorkspace}
+                        onClick={() =>
+                          status?.activeWorkspace &&
+                          void window.qnector.openTerminal(
+                            status.activeWorkspace,
+                          )
+                        }
+                      >
+                        💻 Terminal
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
-
-              <div className="memory-summary-container">
-                <div className="memory-summary-box highlight">
-                  <div className="memory-box-header">
-                    <span>🎯 CURRENT ACTIVE GOAL</span>
-                    <span
-                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
-                    >
-                      {memory?.counts.checkpoints ?? 0} Checkpoints
-                    </span>
-                  </div>
-                  <div className="memory-box-text">
-                    {memory?.state.active?.currentTask ||
-                      "No active task goal saved. ChatGPT will automatically record ongoing goals here."}
-                  </div>
-                  {memory?.state.active?.criticalContext && (
-                    <div className="memory-box-subtext">
-                      <strong>Context:</strong>{" "}
-                      {memory.state.active.criticalContext}
-                    </div>
-                  )}
-                </div>
-
-                {((memory?.state.active?.pendingSteps?.length ?? 0) > 0 ||
-                  (memory?.state.active?.completedSteps?.length ?? 0) > 0) && (
-                  <div className="memory-summary-box">
-                    <div className="memory-box-header">
-                      <span>📋 TASK PROGRESS & STEPS</span>
-                    </div>
-                    <div className="memory-checklist">
-                      {memory?.state.active?.completedSteps?.map(
-                        (step, idx) => (
-                          <div
-                            className="memory-checklist-item done"
-                            key={`done-${idx}`}
-                          >
-                            <span className="check-icon">✓</span>
-                            <span>{step}</span>
-                          </div>
-                        ),
-                      )}
-                      {memory?.state.active?.pendingSteps?.map((step, idx) => (
-                        <div
-                          className="memory-checklist-item pending"
-                          key={`pend-${idx}`}
-                        >
-                          <span className="check-icon">⏳</span>
-                          <span>{step}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(memory?.state.facts?.length ?? 0) > 0 && (
-                  <div className="memory-summary-box">
-                    <div className="memory-box-header">
-                      <span>💡 PROJECT RULES & KNOWLEDGE</span>
-                      <span
-                        style={{ fontSize: "9px", color: "var(--text-muted)" }}
+              {activeDrawer === "memory" && (
+                <>
+                  <div className="drawer-content">
+                    {memory?.warning && (
+                      <div
+                        className="error-toast"
+                        style={{ position: "static", marginBottom: "6px" }}
                       >
-                        {memory?.state.facts.length} facts
-                      </span>
-                    </div>
-                    <div className="memory-facts-tags">
-                      {memory?.state.facts.map((fact) => (
-                        <div className="memory-fact-chip" key={fact.id}>
-                          <strong>{fact.key}:</strong>
-                          <span>{fact.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {!memory?.state.active?.currentTask &&
-                  (!memory?.state.facts || memory.state.facts.length === 0) && (
-                    <div className="memory-empty-state">
-                      <span className="memory-empty-icon">⟡</span>
-                      <span>No persistent memory recorded yet</span>
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          color: "var(--text-subtle)",
-                        }}
-                      >
-                        As you chat with ChatGPT, project decisions and goals
-                        will appear here automatically.
-                      </span>
-                    </div>
-                  )}
-              </div>
-
-              <div className="drawer-actions" style={{ marginTop: "6px" }}>
-                <button
-                  className="btn-drawer-action"
-                  disabled={memoryBusy}
-                  onClick={() => void openMemoryFile()}
-                  title="Open or export MEMORY.md file"
-                >
-                  📄 View MEMORY.md
-                </button>
-                <button
-                  className="btn-drawer-action danger"
-                  disabled={memoryBusy}
-                  onClick={() => void clearMemory()}
-                  title="Wipe memory for this workspace"
-                >
-                  🧹 Wipe Memory
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeDrawer === "runtime" && (
-        <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
-          onClick={closeDrawer}
-        >
-          <div
-            className={`drawer-card runtime-drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
-            onAnimationEnd={onDrawerAnimationEnd}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="drawer-header">
-              <span className="drawer-title">◈ RUNTIME & DIAGNOSTICS</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
-                ✕
-              </button>
-            </div>
-            {renderDrawerMenuTabs("runtime")}
-
-            <div className="runtime-scroll" data-testid="runtime-scroll">
-              <p className="runtime-intro">
-                Health, release state, active processes and workflow history.
-                Start with the summary, then expand only the section you need.
-              </p>
-
-              <div className="runtime-summary-grid">
-                <div className="runtime-summary-card">
-                  <span className="runtime-summary-label">Health</span>
-                  <strong>
-                    {runtimeBusy && runtimeChecks.length === 0
-                      ? "Checking…"
-                      : runtimeFailCount > 0
-                        ? "Needs attention"
-                        : runtimeWarnCount > 0
-                          ? "Healthy · warnings"
-                          : runtimeChecks.length > 0
-                            ? "Healthy"
-                            : "Not checked"}
-                  </strong>
-                  <small>
-                    {runtimePassCount} pass · {runtimeWarnCount} warn ·{" "}
-                    {runtimeFailCount} fail
-                  </small>
-                </div>
-                <div className="runtime-summary-card">
-                  <span className="runtime-summary-label">Release</span>
-                  <strong className="runtime-summary-value">
-                    {runtimeDashboard.release?.status ??
-                      (runtimeBusy ? "Checking…" : "Unknown")}
-                  </strong>
-                  <small>running vs newest local build</small>
-                </div>
-                <div className="runtime-summary-card">
-                  <span className="runtime-summary-label">Processes</span>
-                  <strong>{runtimeProcessCount}</strong>
-                  <small>currently running</small>
-                </div>
-                <div className="runtime-summary-card">
-                  <span className="runtime-summary-label">Workflows</span>
-                  <strong>{runtimeDashboard.workflowRuns.length}</strong>
-                  <small>recent runs</small>
-                </div>
-              </div>
-
-              <details className="runtime-section" open>
-                <summary>
-                  <span>Release & build</span>
-                  <span
-                    className={`item-bead ${runtimeDashboard.release?.status === "latest" ? "success" : runtimeDashboard.release?.status === "outdated" || runtimeDashboard.release?.status === "source-newer" ? "error" : "running"}`}
-                  />
-                </summary>
-                <div className="runtime-section-body">
-                  <strong className="runtime-release-status">
-                    {runtimeDashboard.release?.status ??
-                      (runtimeBusy ? "checking…" : "unknown")}
-                  </strong>
-                  <p>
-                    {runtimeDashboard.release?.recommendation ??
-                      "Refresh to compare the running executable, newest package, and source state."}
-                  </p>
-                </div>
-              </details>
-
-              <details className="runtime-section">
-                <summary>
-                  <span>Health checks</span>
-                  <span className="runtime-section-count">
-                    {runtimeChecks.length} checks
-                  </span>
-                </summary>
-                <div className="runtime-section-body runtime-list">
-                  {runtimeChecks.map((check) => (
-                    <div className="runtime-list-row" key={check.name}>
-                      <span
-                        className={`item-bead ${check.status === "pass" ? "success" : check.status === "warn" ? "running" : "error"}`}
-                      />
-                      <div>
-                        <strong>{check.name}</strong>
-                        <span>{check.detail}</span>
+                        {memory.warning}
                       </div>
-                    </div>
-                  ))}
-                  {!runtimeDashboard.doctor && (
-                    <div className="runtime-empty">
-                      Diagnostics have not been loaded yet.
-                    </div>
-                  )}
-                </div>
-              </details>
+                    )}
 
-              <details className="runtime-section">
-                <summary>
-                  <span>Active processes</span>
-                  <span className="runtime-section-count">
-                    {runtimeProcessCount} running
-                  </span>
-                </summary>
-                <div className="runtime-section-body runtime-list">
-                  {runtimeNativeProcesses.slice(0, 8).map((process) => (
-                    <div
-                      className="runtime-list-row"
-                      key={`native-${process.pid}`}
-                    >
-                      <span className="check-icon">●</span>
-                      <div>
-                        <strong>
-                          {process.name} · PID {process.pid}
-                        </strong>
-                        {process.executablePath && (
-                          <span>{process.executablePath}</span>
+                    <div className="memory-summary-container">
+                      <div className="memory-summary-box highlight">
+                        <div className="memory-box-header">
+                          <span>🎯 CURRENT ACTIVE GOAL</span>
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {memory?.counts.checkpoints ?? 0} Checkpoints
+                          </span>
+                        </div>
+                        <div className="memory-box-text">
+                          {memory?.state.active?.currentTask ||
+                            "No active task goal saved. ChatGPT will automatically record ongoing goals here."}
+                        </div>
+                        {memory?.state.active?.criticalContext && (
+                          <div className="memory-box-subtext">
+                            <strong>Context:</strong>{" "}
+                            {memory.state.active.criticalContext}
+                          </div>
                         )}
                       </div>
+
+                      {((memory?.state.active?.pendingSteps?.length ?? 0) > 0 ||
+                        (memory?.state.active?.completedSteps?.length ?? 0) >
+                          0) && (
+                        <div className="memory-summary-box">
+                          <div className="memory-box-header">
+                            <span>📋 TASK PROGRESS & STEPS</span>
+                          </div>
+                          <div className="memory-checklist">
+                            {memory?.state.active?.completedSteps?.map(
+                              (step, idx) => (
+                                <div
+                                  className="memory-checklist-item done"
+                                  key={`done-${idx}`}
+                                >
+                                  <span className="check-icon">✓</span>
+                                  <span>{step}</span>
+                                </div>
+                              ),
+                            )}
+                            {memory?.state.active?.pendingSteps?.map(
+                              (step, idx) => (
+                                <div
+                                  className="memory-checklist-item pending"
+                                  key={`pend-${idx}`}
+                                >
+                                  <span className="check-icon">⏳</span>
+                                  <span>{step}</span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {(memory?.state.facts?.length ?? 0) > 0 && (
+                        <div className="memory-summary-box">
+                          <div className="memory-box-header">
+                            <span>💡 PROJECT RULES & KNOWLEDGE</span>
+                            <span
+                              style={{
+                                fontSize: "9px",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              {memory?.state.facts.length} facts
+                            </span>
+                          </div>
+                          <div className="memory-facts-tags">
+                            {memory?.state.facts.map((fact) => (
+                              <div className="memory-fact-chip" key={fact.id}>
+                                <strong>{fact.key}:</strong>
+                                <span>{fact.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!memory?.state.active?.currentTask &&
+                        (!memory?.state.facts ||
+                          memory.state.facts.length === 0) && (
+                          <div className="memory-empty-state">
+                            <span className="memory-empty-icon">⟡</span>
+                            <span>No persistent memory recorded yet</span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--text-subtle)",
+                              }}
+                            >
+                              As you chat with ChatGPT, project decisions and
+                              goals will appear here automatically.
+                            </span>
+                          </div>
+                        )}
                     </div>
-                  ))}
-                  {runtimeManagedProcesses.slice(0, 8).map((process) => (
+
                     <div
-                      className="runtime-list-row"
-                      key={`managed-${process.id}`}
+                      className="drawer-actions"
+                      style={{ marginTop: "6px" }}
                     >
-                      <span className="check-icon">▶</span>
-                      <div>
-                        <strong>Managed process</strong>
-                        <span>{process.command}</span>
+                      <button
+                        className="btn-drawer-action"
+                        disabled={memoryBusy}
+                        onClick={() => void openMemoryFile()}
+                        title="Open or export MEMORY.md file"
+                      >
+                        📄 View MEMORY.md
+                      </button>
+                      <button
+                        className="btn-drawer-action danger"
+                        disabled={memoryBusy}
+                        onClick={() => void clearMemory()}
+                        title="Wipe memory for this workspace"
+                      >
+                        🧹 Wipe Memory
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+              {activeDrawer === "runtime" && (
+                <>
+                  <div className="runtime-scroll" data-testid="runtime-scroll">
+                    <p className="runtime-intro">
+                      Health, release state, active processes and workflow
+                      history. Start with the summary, then expand only the
+                      section you need.
+                    </p>
+
+                    <div className="runtime-summary-grid">
+                      <div className="runtime-summary-card">
+                        <span className="runtime-summary-label">Health</span>
+                        <strong>
+                          {runtimeBusy && runtimeChecks.length === 0
+                            ? "Checking…"
+                            : runtimeFailCount > 0
+                              ? "Needs attention"
+                              : runtimeWarnCount > 0
+                                ? "Healthy · warnings"
+                                : runtimeChecks.length > 0
+                                  ? "Healthy"
+                                  : "Not checked"}
+                        </strong>
+                        <small>
+                          {runtimePassCount} pass · {runtimeWarnCount} warn ·{" "}
+                          {runtimeFailCount} fail
+                        </small>
+                      </div>
+                      <div className="runtime-summary-card">
+                        <span className="runtime-summary-label">Release</span>
+                        <strong className="runtime-summary-value">
+                          {runtimeDashboard.release?.status ??
+                            (runtimeBusy ? "Checking…" : "Unknown")}
+                        </strong>
+                        <small>running vs newest local build</small>
+                      </div>
+                      <div className="runtime-summary-card">
+                        <span className="runtime-summary-label">Processes</span>
+                        <strong>{runtimeProcessCount}</strong>
+                        <small>currently running</small>
+                      </div>
+                      <div className="runtime-summary-card">
+                        <span className="runtime-summary-label">Workflows</span>
+                        <strong>{runtimeDashboard.workflowRuns.length}</strong>
+                        <small>recent runs</small>
                       </div>
                     </div>
-                  ))}
-                  {runtimeProcessCount === 0 && (
-                    <div className="runtime-empty">
-                      No active processes loaded.
-                    </div>
-                  )}
-                </div>
-              </details>
 
-              <details className="runtime-section">
-                <summary>
-                  <span>Recent workflows</span>
-                  <span className="runtime-section-count">
-                    {runtimeDashboard.workflowRuns.length} recent
-                  </span>
-                </summary>
-                <div className="runtime-section-body runtime-list">
-                  {runtimeDashboard.workflowRuns.slice(0, 10).map((run) => (
-                    <div className="runtime-list-row" key={run.runId}>
-                      <span
-                        className={`item-bead ${run.state === "succeeded" ? "success" : run.state === "failed" ? "error" : "running"}`}
-                      />
-                      <div>
-                        <strong>{run.workflow}</strong>
-                        <span>
-                          {run.state} · {formatTime(run.updatedAt)}
+                    <details className="runtime-section" open>
+                      <summary>
+                        <span>Release & build</span>
+                        <span
+                          className={`item-bead ${runtimeDashboard.release?.status === "latest" ? "success" : runtimeDashboard.release?.status === "outdated" || runtimeDashboard.release?.status === "source-newer" ? "error" : "running"}`}
+                        />
+                      </summary>
+                      <div className="runtime-section-body">
+                        <strong className="runtime-release-status">
+                          {runtimeDashboard.release?.status ??
+                            (runtimeBusy ? "checking…" : "unknown")}
+                        </strong>
+                        <p>
+                          {runtimeDashboard.release?.recommendation ??
+                            "Refresh to compare the running executable, newest package, and source state."}
+                        </p>
+                      </div>
+                    </details>
+
+                    <details className="runtime-section">
+                      <summary>
+                        <span>Health checks</span>
+                        <span className="runtime-section-count">
+                          {runtimeChecks.length} checks
+                        </span>
+                      </summary>
+                      <div className="runtime-section-body runtime-list">
+                        {runtimeChecks.map((check) => (
+                          <div className="runtime-list-row" key={check.name}>
+                            <span
+                              className={`item-bead ${check.status === "pass" ? "success" : check.status === "warn" ? "running" : "error"}`}
+                            />
+                            <div>
+                              <strong>{check.name}</strong>
+                              <span>{check.detail}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {!runtimeDashboard.doctor && (
+                          <div className="runtime-empty">
+                            Diagnostics have not been loaded yet.
+                          </div>
+                        )}
+                      </div>
+                    </details>
+
+                    <details className="runtime-section">
+                      <summary>
+                        <span>Active processes</span>
+                        <span className="runtime-section-count">
+                          {runtimeProcessCount} running
+                        </span>
+                      </summary>
+                      <div className="runtime-section-body runtime-list">
+                        {runtimeNativeProcesses.slice(0, 8).map((process) => (
+                          <div
+                            className="runtime-list-row"
+                            key={`native-${process.pid}`}
+                          >
+                            <span className="check-icon">●</span>
+                            <div>
+                              <strong>
+                                {process.name} · PID {process.pid}
+                              </strong>
+                              {process.executablePath && (
+                                <span>{process.executablePath}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {runtimeManagedProcesses.slice(0, 8).map((process) => (
+                          <div
+                            className="runtime-list-row"
+                            key={`managed-${process.id}`}
+                          >
+                            <span className="check-icon">▶</span>
+                            <div>
+                              <strong>Managed process</strong>
+                              <span>{process.command}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {runtimeProcessCount === 0 && (
+                          <div className="runtime-empty">
+                            No active processes loaded.
+                          </div>
+                        )}
+                      </div>
+                    </details>
+
+                    <details className="runtime-section">
+                      <summary>
+                        <span>Recent workflows</span>
+                        <span className="runtime-section-count">
+                          {runtimeDashboard.workflowRuns.length} recent
+                        </span>
+                      </summary>
+                      <div className="runtime-section-body runtime-list">
+                        {runtimeDashboard.workflowRuns
+                          .slice(0, 10)
+                          .map((run) => (
+                            <div className="runtime-list-row" key={run.runId}>
+                              <span
+                                className={`item-bead ${run.state === "succeeded" ? "success" : run.state === "failed" ? "error" : "running"}`}
+                              />
+                              <div>
+                                <strong>{run.workflow}</strong>
+                                <span>
+                                  {run.state} · {formatTime(run.updatedAt)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        {runtimeDashboard.workflowRuns.length === 0 && (
+                          <div className="runtime-empty">
+                            No workflow runs recorded.
+                          </div>
+                        )}
+                      </div>
+                    </details>
+
+                    <details className="runtime-section">
+                      <summary>
+                        <span>Recent runtime activity</span>
+                        <span className="runtime-section-count">
+                          {runtimeDashboard.snapshot?.recentActivity.length ??
+                            0}{" "}
+                          entries
+                        </span>
+                      </summary>
+                      <div className="runtime-section-body runtime-list">
+                        {(runtimeDashboard.snapshot?.recentActivity ?? [])
+                          .slice(0, 10)
+                          .map((entry, index) => (
+                            <div
+                              className="runtime-list-row"
+                              key={`${entry.timestamp}-${entry.tool}-${entry.action}-${index}`}
+                            >
+                              <span className={`item-bead ${entry.status}`} />
+                              <div>
+                                <strong>
+                                  {entry.tool}.{entry.action}
+                                </strong>
+                                <span>{entry.summary || entry.status}</span>
+                              </div>
+                            </div>
+                          ))}
+                        {(runtimeDashboard.snapshot?.recentActivity.length ??
+                          0) === 0 && (
+                          <div className="runtime-empty">
+                            No recent runtime activity.
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  </div>
+
+                  <div className="runtime-footer">
+                    <span>
+                      {runtimeDashboard.snapshot?.capturedAt
+                        ? `Updated ${formatTime(runtimeDashboard.snapshot.capturedAt)}`
+                        : "Open Runtime to load diagnostics"}
+                    </span>
+                    <button
+                      className="btn-drawer-action"
+                      disabled={runtimeBusy}
+                      onClick={() => void refreshRuntime()}
+                    >
+                      {runtimeBusy ? "↻ Refreshing…" : "↻ Refresh"}
+                    </button>
+                  </div>
+                </>
+              )}
+              {activeDrawer === "settings" && (
+                <>
+                  <div className="drawer-content">
+                    <button
+                      className="setup-launch-card"
+                      type="button"
+                      onClick={() => void openSetupWizard()}
+                    >
+                      <span className="setup-launch-icon">✦</span>
+                      <span className="setup-launch-copy">
+                        <strong>Connection Setup</strong>
+                        <small>
+                          Guided OpenAI Tunnel setup from first run to connected
+                        </small>
+                      </span>
+                      <span className="activity-open-glyph">›</span>
+                    </button>
+
+                    <div
+                      className={`update-settings-card ${updateState?.phase ?? "idle"}`}
+                    >
+                      <div className="update-card-header">
+                        <span className="update-card-icon">
+                          {updatePhaseIcon}
+                        </span>
+                        <div className="update-card-copy">
+                          <span className="update-card-eyebrow">
+                            App Updates
+                          </span>
+                          <strong>Keep Qnector up to date</strong>
+                          <small>
+                            Download verified releases and restart safely.
+                          </small>
+                        </div>
+                        <span
+                          className={`update-status-badge ${updateState?.phase ?? "idle"}`}
+                        >
+                          {updatePhaseLabel}
                         </span>
                       </div>
-                    </div>
-                  ))}
-                  {runtimeDashboard.workflowRuns.length === 0 && (
-                    <div className="runtime-empty">
-                      No workflow runs recorded.
-                    </div>
-                  )}
-                </div>
-              </details>
 
-              <details className="runtime-section">
-                <summary>
-                  <span>Recent runtime activity</span>
-                  <span className="runtime-section-count">
-                    {runtimeDashboard.snapshot?.recentActivity.length ?? 0}{" "}
-                    entries
-                  </span>
-                </summary>
-                <div className="runtime-section-body runtime-list">
-                  {(runtimeDashboard.snapshot?.recentActivity ?? [])
-                    .slice(0, 10)
-                    .map((entry, index) => (
-                      <div
-                        className="runtime-list-row"
-                        key={`${entry.timestamp}-${entry.tool}-${entry.action}-${index}`}
-                      >
-                        <span className={`item-bead ${entry.status}`} />
-                        <div>
+                      <div className="update-version-grid">
+                        <div className="update-version-panel current">
+                          <span>Current version</span>
+                          <strong>v{updateState?.currentVersion ?? "…"}</strong>
+                          <small>{updateState?.mode ?? "…"} build</small>
+                        </div>
+                        <span
+                          className="update-version-arrow"
+                          aria-hidden="true"
+                        >
+                          →
+                        </span>
+                        <div
+                          className={`update-version-panel latest ${
+                            updateHasNewVersion ? "has-update" : ""
+                          }`}
+                        >
+                          <span>Latest release</span>
                           <strong>
-                            {entry.tool}.{entry.action}
+                            v
+                            {updateState?.latestVersion ??
+                              updateState?.currentVersion ??
+                              "…"}
                           </strong>
-                          <span>{entry.summary || entry.status}</span>
+                          <small>
+                            {updateHasNewVersion
+                              ? "Available now"
+                              : "GitHub Releases"}
+                          </small>
                         </div>
                       </div>
-                    ))}
-                  {(runtimeDashboard.snapshot?.recentActivity.length ?? 0) ===
-                    0 && (
-                    <div className="runtime-empty">
-                      No recent runtime activity.
+
+                      <div className="update-card-actions update-card-actions-prominent">
+                        <button
+                          type="button"
+                          className="btn-update-primary"
+                          disabled={updateBusy}
+                          onClick={runPrimaryUpdateAction}
+                        >
+                          {updateState?.phase === "checking"
+                            ? "Checking…"
+                            : updateState?.phase === "downloading"
+                              ? `Downloading ${updateProgressPercent}%`
+                              : updateState?.phase === "installing"
+                                ? "Updating…"
+                                : updateState?.canInstall
+                                  ? "Restart & Update"
+                                  : updateState?.canDownload
+                                    ? `Download v${updateState.latestVersion ?? "new"}`
+                                    : updateState?.phase === "up-to-date"
+                                      ? "Check Again"
+                                      : updateState?.phase === "error"
+                                        ? "Retry"
+                                        : "Check for Updates"}
+                        </button>
+                        {updateState?.releaseUrl && (
+                          <button
+                            type="button"
+                            className="btn-update-secondary"
+                            onClick={() =>
+                              void window.qnector.openUpdateRelease()
+                            }
+                          >
+                            View Release Notes ↗
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="update-status-panel">
+                        <span className="update-status-panel-icon">
+                          {updatePhaseIcon}
+                        </span>
+                        <div>
+                          <strong>{updatePhaseLabel}</strong>
+                          <p>
+                            {updateState?.message ??
+                              "Qnector checks GitHub Releases for new versions."}
+                          </p>
+                        </div>
+                      </div>
+
+                      {updateState?.phase === "downloading" && (
+                        <div className="update-progress-wrap">
+                          <div className="update-progress-heading">
+                            <strong>Downloading update</strong>
+                            <span>{updateProgressPercent}%</span>
+                          </div>
+                          <div className="update-progress-track">
+                            <span
+                              style={{ width: `${updateProgressPercent}%` }}
+                            />
+                          </div>
+                          <div className="update-progress-meta">
+                            <span>
+                              {formatBytes(updateState.bytesDownloaded)} /{" "}
+                              {formatBytes(updateState.totalBytes)}
+                            </span>
+                            <span>Verified after download</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </details>
-            </div>
 
-            <div className="runtime-footer">
-              <span>
-                {runtimeDashboard.snapshot?.capturedAt
-                  ? `Updated ${formatTime(runtimeDashboard.snapshot.capturedAt)}`
-                  : "Open Runtime to load diagnostics"}
-              </span>
-              <button
-                className="btn-drawer-action"
-                disabled={runtimeBusy}
-                onClick={() => void refreshRuntime()}
-              >
-                {runtimeBusy ? "↻ Refreshing…" : "↻ Refresh"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Slide-Up Settings Drawer */}
-      {activeDrawer === "settings" && (
-        <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""} ${drawerTransition ? "drawer-switching" : ""}`}
-          onClick={closeDrawer}
-        >
-          <div
-            className={`drawer-card ${isClosingDrawer ? "closing" : ""} ${drawerTransitionClass}`}
-            onAnimationEnd={onDrawerAnimationEnd}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="drawer-header">
-              <span className="drawer-title">⚙ BRIDGE SETTINGS</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
-                ✕
-              </button>
-            </div>
-            {renderDrawerMenuTabs("settings")}
-            <div className="drawer-content">
-              <button
-                className="setup-launch-card"
-                type="button"
-                onClick={() => void openSetupWizard()}
-              >
-                <span className="setup-launch-icon">✦</span>
-                <span className="setup-launch-copy">
-                  <strong>Connection Setup</strong>
-                  <small>
-                    Guided OpenAI Tunnel setup from first run to connected
-                  </small>
-                </span>
-                <span className="activity-open-glyph">›</span>
-              </button>
-
-              <div
-                className={`update-settings-card ${updateState?.phase ?? "idle"}`}
-              >
-                <div className="update-card-header">
-                  <span className="update-card-icon">{updatePhaseIcon}</span>
-                  <div className="update-card-copy">
-                    <span className="update-card-eyebrow">App Updates</span>
-                    <strong>Keep Qnector up to date</strong>
-                    <small>
-                      Download verified releases and restart safely.
-                    </small>
-                  </div>
-                  <span
-                    className={`update-status-badge ${updateState?.phase ?? "idle"}`}
-                  >
-                    {updatePhaseLabel}
-                  </span>
-                </div>
-
-                <div className="update-version-grid">
-                  <div className="update-version-panel current">
-                    <span>Current version</span>
-                    <strong>v{updateState?.currentVersion ?? "…"}</strong>
-                    <small>{updateState?.mode ?? "…"} build</small>
-                  </div>
-                  <span className="update-version-arrow" aria-hidden="true">
-                    →
-                  </span>
-                  <div
-                    className={`update-version-panel latest ${
-                      updateHasNewVersion ? "has-update" : ""
-                    }`}
-                  >
-                    <span>Latest release</span>
-                    <strong>
-                      v
-                      {updateState?.latestVersion ??
-                        updateState?.currentVersion ??
-                        "…"}
-                    </strong>
-                    <small>
-                      {updateHasNewVersion
-                        ? "Available now"
-                        : "GitHub Releases"}
-                    </small>
-                  </div>
-                </div>
-
-                <div className="update-card-actions update-card-actions-prominent">
-                  <button
-                    type="button"
-                    className="btn-update-primary"
-                    disabled={updateBusy}
-                    onClick={runPrimaryUpdateAction}
-                  >
-                    {updateState?.phase === "checking"
-                      ? "Checking…"
-                      : updateState?.phase === "downloading"
-                        ? `Downloading ${updateProgressPercent}%`
-                        : updateState?.phase === "installing"
-                          ? "Updating…"
-                          : updateState?.canInstall
-                            ? "Restart & Update"
-                            : updateState?.canDownload
-                              ? `Download v${updateState.latestVersion ?? "new"}`
-                              : updateState?.phase === "up-to-date"
-                                ? "Check Again"
-                                : updateState?.phase === "error"
-                                  ? "Retry"
-                                  : "Check for Updates"}
-                  </button>
-                  {updateState?.releaseUrl && (
-                    <button
-                      type="button"
-                      className="btn-update-secondary"
-                      onClick={() => void window.qnector.openUpdateRelease()}
-                    >
-                      View Release Notes ↗
-                    </button>
-                  )}
-                </div>
-
-                <div className="update-status-panel">
-                  <span className="update-status-panel-icon">
-                    {updatePhaseIcon}
-                  </span>
-                  <div>
-                    <strong>{updatePhaseLabel}</strong>
-                    <p>
-                      {updateState?.message ??
-                        "Qnector checks GitHub Releases for new versions."}
-                    </p>
-                  </div>
-                </div>
-
-                {updateState?.phase === "downloading" && (
-                  <div className="update-progress-wrap">
-                    <div className="update-progress-heading">
-                      <strong>Downloading update</strong>
-                      <span>{updateProgressPercent}%</span>
+                    {/* Tunnel Mode Card */}
+                    <div className="setting-toggle-card">
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "2px",
+                        }}
+                      >
+                        <span className="drawer-label">Tunnel Mode</span>
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          Internet transport for ChatGPT
+                        </span>
+                      </div>
+                      <select
+                        className="drawer-select"
+                        value={config?.transport.mode ?? "openai-tunnel"}
+                        disabled={busy}
+                        onChange={(e) =>
+                          void updateTransportMode(
+                            e.target.value as TransportMode,
+                          )
+                        }
+                      >
+                        {transportOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <div className="update-progress-track">
-                      <span style={{ width: `${updateProgressPercent}%` }} />
+
+                    {/* Global Hotkey Card */}
+                    <div className="setting-toggle-card">
+                      <label className="drawer-toggle">
+                        <input
+                          type="checkbox"
+                          checked={config?.ui.globalShortcutEnabled ?? true}
+                          onChange={(e) =>
+                            void toggleSetting(
+                              "globalShortcutEnabled",
+                              e.target.checked,
+                            )
+                          }
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
+                          }}
+                        >
+                          <span>Global Hotkey</span>
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Show / hide window from anywhere
+                          </span>
+                        </div>
+                      </label>
+                      <div className="hotkey-badge">
+                        <kbd>Ctrl</kbd>
+                        <span>+</span>
+                        <kbd>Shift</kbd>
+                        <span>+</span>
+                        <kbd>Q</kbd>
+                      </div>
                     </div>
-                    <div className="update-progress-meta">
-                      <span>
-                        {formatBytes(updateState.bytesDownloaded)} /{" "}
-                        {formatBytes(updateState.totalBytes)}
-                      </span>
-                      <span>Verified after download</span>
+
+                    {/* Minimize to Tray */}
+                    <div className="setting-toggle-card">
+                      <label className="drawer-toggle">
+                        <input
+                          type="checkbox"
+                          checked={config?.ui.minimizeToTray ?? true}
+                          onChange={(e) =>
+                            void toggleSetting(
+                              "minimizeToTray",
+                              e.target.checked,
+                            )
+                          }
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
+                          }}
+                        >
+                          <span>Minimize to Tray</span>
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Keep bridge running in background on close
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Launch on Startup */}
+                    <div className="setting-toggle-card">
+                      <label className="drawer-toggle">
+                        <input
+                          type="checkbox"
+                          checked={config?.ui.startAtLogin ?? false}
+                          onChange={(e) =>
+                            void toggleSetting("startAtLogin", e.target.checked)
+                          }
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
+                          }}
+                        >
+                          <span>Auto Start</span>
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Launch Qnector on Windows startup
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Mirror MEMORY.md */}
+                    <div className="setting-toggle-card">
+                      <label className="drawer-toggle">
+                        <input
+                          type="checkbox"
+                          checked={
+                            config?.memory?.workspaceMirror === "memory-md"
+                          }
+                          onChange={(e) =>
+                            void window.qnector
+                              .updateConfig({
+                                memory: {
+                                  ...(config?.memory ?? {}),
+                                  workspaceMirror: e.target.checked
+                                    ? "memory-md"
+                                    : "off",
+                                },
+                              })
+                              .then((saved) => setConfig(saved))
+                              .catch((reason: unknown) =>
+                                setError(
+                                  reason instanceof Error
+                                    ? reason.message
+                                    : String(reason),
+                                ),
+                              )
+                          }
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
+                          }}
+                        >
+                          <span>Save .qnector/MEMORY.md</span>
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Write living markdown docs in workspace
+                          </span>
+                        </div>
+                      </label>
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Tunnel Mode Card */}
-              <div className="setting-toggle-card">
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "2px",
-                  }}
-                >
-                  <span className="drawer-label">Tunnel Mode</span>
-                  <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>
-                    Internet transport for ChatGPT
-                  </span>
-                </div>
-                <select
-                  className="drawer-select"
-                  value={config?.transport.mode ?? "openai-tunnel"}
-                  disabled={busy}
-                  onChange={(e) =>
-                    void updateTransportMode(e.target.value as TransportMode)
-                  }
-                >
-                  {transportOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Global Hotkey Card */}
-              <div className="setting-toggle-card">
-                <label className="drawer-toggle">
-                  <input
-                    type="checkbox"
-                    checked={config?.ui.globalShortcutEnabled ?? true}
-                    onChange={(e) =>
-                      void toggleSetting(
-                        "globalShortcutEnabled",
-                        e.target.checked,
-                      )
-                    }
-                  />
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "2px",
-                    }}
-                  >
-                    <span>Global Hotkey</span>
-                    <span
-                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
-                    >
-                      Show / hide window from anywhere
-                    </span>
-                  </div>
-                </label>
-                <div className="hotkey-badge">
-                  <kbd>Ctrl</kbd>
-                  <span>+</span>
-                  <kbd>Shift</kbd>
-                  <span>+</span>
-                  <kbd>Q</kbd>
-                </div>
-              </div>
-
-              {/* Minimize to Tray */}
-              <div className="setting-toggle-card">
-                <label className="drawer-toggle">
-                  <input
-                    type="checkbox"
-                    checked={config?.ui.minimizeToTray ?? true}
-                    onChange={(e) =>
-                      void toggleSetting("minimizeToTray", e.target.checked)
-                    }
-                  />
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "2px",
-                    }}
-                  >
-                    <span>Minimize to Tray</span>
-                    <span
-                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
-                    >
-                      Keep bridge running in background on close
-                    </span>
-                  </div>
-                </label>
-              </div>
-
-              {/* Launch on Startup */}
-              <div className="setting-toggle-card">
-                <label className="drawer-toggle">
-                  <input
-                    type="checkbox"
-                    checked={config?.ui.startAtLogin ?? false}
-                    onChange={(e) =>
-                      void toggleSetting("startAtLogin", e.target.checked)
-                    }
-                  />
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "2px",
-                    }}
-                  >
-                    <span>Auto Start</span>
-                    <span
-                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
-                    >
-                      Launch Qnector on Windows startup
-                    </span>
-                  </div>
-                </label>
-              </div>
-
-              {/* Mirror MEMORY.md */}
-              <div className="setting-toggle-card">
-                <label className="drawer-toggle">
-                  <input
-                    type="checkbox"
-                    checked={config?.memory?.workspaceMirror === "memory-md"}
-                    onChange={(e) =>
-                      void window.qnector
-                        .updateConfig({
-                          memory: {
-                            ...(config?.memory ?? {}),
-                            workspaceMirror: e.target.checked
-                              ? "memory-md"
-                              : "off",
-                          },
-                        })
-                        .then((saved) => setConfig(saved))
-                        .catch((reason: unknown) =>
-                          setError(
-                            reason instanceof Error
-                              ? reason.message
-                              : String(reason),
-                          ),
-                        )
-                    }
-                  />
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "2px",
-                    }}
-                  >
-                    <span>Save .qnector/MEMORY.md</span>
-                    <span
-                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
-                    >
-                      Write living markdown docs in workspace
-                    </span>
-                  </div>
-                </label>
-              </div>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -23,24 +23,26 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).not.toContain("memory-quick-stats");
   });
 
-  it("switches open drawer pages with one content-only horizontal transition", () => {
+  it("keeps one persistent drawer shell and animates only the replaced page", () => {
     expect(renderer).toContain("const switchDrawer = (drawer: DrawerName)");
     expect(renderer).toContain('nextIndex > currentIndex ? "left" : "right"');
     expect(renderer).toContain("setActiveDrawer(drawer);");
     expect(renderer).toContain("setDrawerTransition(direction);");
-    expect(renderer).not.toContain("out-left");
-    expect(renderer).not.toContain("out-right");
-    expect(styles).toContain(".drawer-card.drawer-switching");
-    expect(styles).toContain("@keyframes drawerContentFromRight");
-    expect(styles).toContain("@keyframes drawerContentFromLeft");
-    expect(styles).toContain(
-      ".drawer-card.drawer-switch-left > .drawer-content",
+    expect(renderer.match(/className=\{`drawer-backdrop/g)?.length).toBe(1);
+    expect(
+      renderer.match(/className=\{`drawer-card unified-drawer-card/g)?.length,
+    ).toBe(1);
+    expect(renderer).toContain(
+      'className={`drawer-page ${drawerTransition ? `drawer-page-${drawerTransition}` : ""}`}',
     );
-    expect(styles).toContain(
-      ".drawer-card.drawer-switch-right > .drawer-content",
-    );
-    expect(styles).not.toContain("@keyframes drawerPageOutLeft");
-    expect(styles).not.toContain("@keyframes drawerPageOutRight");
+    expect(styles).toContain(".unified-drawer-card");
+    expect(styles).toContain(".drawer-page-left");
+    expect(styles).toContain(".drawer-page-right");
+    expect(styles).toContain("@keyframes drawerPageFromRight");
+    expect(styles).toContain("@keyframes drawerPageFromLeft");
+    expect(styles).not.toContain(".drawer-card.drawer-switching");
+    expect(styles).not.toContain("drawerContentFromRight");
+    expect(styles).not.toContain("drawerContentFromLeft");
   });
 
   it("prevents the desktop window from shrinking below a usable menu height", () => {

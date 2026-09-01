@@ -9,3 +9,4 @@ tools/uia-helper/publish/
 tools/tunnel-client/*.spdx.json
 
 .qnector/
+apps/desktop/local-test/
