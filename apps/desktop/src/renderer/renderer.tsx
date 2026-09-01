@@ -45,8 +45,7 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
 ];
 
 type DrawerName = "workspace" | "memory" | "runtime" | "settings";
-type DrawerTransition =
-  "out-left" | "out-right" | "in-left" | "in-right" | null;
+type DrawerTransition = "left" | "right" | null;
 
 const drawerMenuItems: Array<{ key: DrawerName; label: string }> = [
   { key: "workspace", label: "Workspace" },
@@ -270,19 +269,17 @@ function App(): React.ReactElement {
 
     const currentIndex = drawerOrder.indexOf(activeDrawer);
     const nextIndex = drawerOrder.indexOf(drawer);
-    const direction = nextIndex > currentIndex ? "left" : "right";
+    const direction: Exclude<DrawerTransition, null> =
+      nextIndex > currentIndex ? "left" : "right";
 
-    setDrawerTransition(direction === "left" ? "out-left" : "out-right");
     clearDrawerSwitchTimer();
+    refreshDrawerData(drawer);
+    setDrawerTransition(direction);
+    setActiveDrawer(drawer);
     drawerSwitchTimeoutRef.current = window.setTimeout(() => {
-      refreshDrawerData(drawer);
-      setActiveDrawer(drawer);
-      setDrawerTransition(direction === "left" ? "in-left" : "in-right");
-      drawerSwitchTimeoutRef.current = window.setTimeout(() => {
-        setDrawerTransition(null);
-        drawerSwitchTimeoutRef.current = null;
-      }, 220);
-    }, 145);
+      setDrawerTransition(null);
+      drawerSwitchTimeoutRef.current = null;
+    }, 240);
   };
 
   const toggleDrawer = (drawer: DrawerName): void => {
@@ -312,7 +309,7 @@ function App(): React.ReactElement {
   );
 
   const drawerTransitionClass = drawerTransition
-    ? `drawer-switching drawer-${drawerTransition}`
+    ? `drawer-switching drawer-switch-${drawerTransition}`
     : "";
 
   const refreshRuntime = async (): Promise<void> => {

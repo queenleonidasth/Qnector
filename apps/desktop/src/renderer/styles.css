@@ -3665,54 +3665,36 @@ body {
   cursor: default;
 }
 
-/* A tab change keeps the drawer open; only the page content moves sideways. */
+/* Switching tabs must not replay the drawer open/close animation. Keep the shell
+   visually fixed and animate only the page content horizontally. */
 .drawer-backdrop.drawer-switching::before {
   animation: none !important;
   opacity: 1;
 }
 
-.drawer-card.drawer-out-left {
-  animation: drawerPageOutLeft 145ms cubic-bezier(0.4, 0, 1, 1) both !important;
+.drawer-card.drawer-switching {
+  animation: none !important;
+  transform: translate3d(0, 0, 0) !important;
 }
 
-.drawer-card.drawer-out-right {
-  animation: drawerPageOutRight 145ms cubic-bezier(0.4, 0, 1, 1) both !important;
+.drawer-card.drawer-switch-left > .drawer-header .drawer-title,
+.drawer-card.drawer-switch-left > .drawer-content,
+.drawer-card.drawer-switch-left > .runtime-scroll,
+.drawer-card.drawer-switch-left > .runtime-footer {
+  animation: drawerContentFromRight 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.drawer-card.drawer-in-left {
-  animation: drawerPageInRight 220ms cubic-bezier(0.16, 1, 0.3, 1) both !important;
+.drawer-card.drawer-switch-right > .drawer-header .drawer-title,
+.drawer-card.drawer-switch-right > .drawer-content,
+.drawer-card.drawer-switch-right > .runtime-scroll,
+.drawer-card.drawer-switch-right > .runtime-footer {
+  animation: drawerContentFromLeft 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.drawer-card.drawer-in-right {
-  animation: drawerPageInLeft 220ms cubic-bezier(0.16, 1, 0.3, 1) both !important;
-}
-
-@keyframes drawerPageOutLeft {
+@keyframes drawerContentFromRight {
   from {
-    transform: translate3d(0, 0, 0);
-    opacity: 1;
-  }
-  to {
-    transform: translate3d(-18%, 0, 0);
-    opacity: 0;
-  }
-}
-
-@keyframes drawerPageOutRight {
-  from {
-    transform: translate3d(0, 0, 0);
-    opacity: 1;
-  }
-  to {
-    transform: translate3d(18%, 0, 0);
-    opacity: 0;
-  }
-}
-
-@keyframes drawerPageInRight {
-  from {
-    transform: translate3d(18%, 0, 0);
-    opacity: 0;
+    transform: translate3d(28px, 0, 0);
+    opacity: 0.35;
   }
   to {
     transform: translate3d(0, 0, 0);
@@ -3720,10 +3702,10 @@ body {
   }
 }
 
-@keyframes drawerPageInLeft {
+@keyframes drawerContentFromLeft {
   from {
-    transform: translate3d(-18%, 0, 0);
-    opacity: 0;
+    transform: translate3d(-28px, 0, 0);
+    opacity: 0.35;
   }
   to {
     transform: translate3d(0, 0, 0);
@@ -3732,10 +3714,14 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawer-card.drawer-out-left,
-  .drawer-card.drawer-out-right,
-  .drawer-card.drawer-in-left,
-  .drawer-card.drawer-in-right {
+  .drawer-card.drawer-switch-left > .drawer-header .drawer-title,
+  .drawer-card.drawer-switch-left > .drawer-content,
+  .drawer-card.drawer-switch-left > .runtime-scroll,
+  .drawer-card.drawer-switch-left > .runtime-footer,
+  .drawer-card.drawer-switch-right > .drawer-header .drawer-title,
+  .drawer-card.drawer-switch-right > .drawer-content,
+  .drawer-card.drawer-switch-right > .runtime-scroll,
+  .drawer-card.drawer-switch-right > .runtime-footer {
     animation-duration: 1ms !important;
   }
 }

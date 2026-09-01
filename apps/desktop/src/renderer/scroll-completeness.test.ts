@@ -6,6 +6,10 @@ const renderer = readFileSync(
   "utf8",
 );
 const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+const mainSource = readFileSync(
+  new URL("../main/main.ts", import.meta.url),
+  "utf8",
+);
 
 describe("drawer navigation and content completeness UX", () => {
   it("uses one simple top navigation without the extra settings jump menu", () => {
@@ -19,17 +23,31 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).not.toContain("memory-quick-stats");
   });
 
-  it("switches open drawer pages horizontally instead of closing and reopening", () => {
+  it("switches open drawer pages with one content-only horizontal transition", () => {
     expect(renderer).toContain("const switchDrawer = (drawer: DrawerName)");
-    expect(renderer).toContain(
-      'direction === "left" ? "out-left" : "out-right"',
+    expect(renderer).toContain('nextIndex > currentIndex ? "left" : "right"');
+    expect(renderer).toContain("setActiveDrawer(drawer);");
+    expect(renderer).toContain("setDrawerTransition(direction);");
+    expect(renderer).not.toContain("out-left");
+    expect(renderer).not.toContain("out-right");
+    expect(styles).toContain(".drawer-card.drawer-switching");
+    expect(styles).toContain("@keyframes drawerContentFromRight");
+    expect(styles).toContain("@keyframes drawerContentFromLeft");
+    expect(styles).toContain(
+      ".drawer-card.drawer-switch-left > .drawer-content",
     );
-    expect(renderer).toContain('direction === "left" ? "in-left" : "in-right"');
-    expect(styles).toContain("@keyframes drawerPageOutLeft");
-    expect(styles).toContain("@keyframes drawerPageOutRight");
-    expect(styles).toContain("@keyframes drawerPageInRight");
-    expect(styles).toContain("@keyframes drawerPageInLeft");
-    expect(styles).toContain(".drawer-backdrop.drawer-switching::before");
+    expect(styles).toContain(
+      ".drawer-card.drawer-switch-right > .drawer-content",
+    );
+    expect(styles).not.toContain("@keyframes drawerPageOutLeft");
+    expect(styles).not.toContain("@keyframes drawerPageOutRight");
+  });
+
+  it("prevents the desktop window from shrinking below a usable menu height", () => {
+    expect(mainSource).toContain("width: 440,");
+    expect(mainSource).toContain("height: 820,");
+    expect(mainSource).toContain("minWidth: 400,");
+    expect(mainSource).toContain("minHeight: 720,");
   });
 
   it("places the update action before long status and progress content", () => {
