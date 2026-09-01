@@ -7,6 +7,7 @@ export default [
       "**/dist/**",
       "**/node_modules/**",
       "**/release/**",
+      "**/local-test/**",
       "scripts/**/*.ts",
       "apps/desktop/vite.config.ts",
       "**/*.test.ts",
