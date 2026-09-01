@@ -1582,57 +1582,89 @@ body {
 }
 
 .update-settings-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  padding: 11px 12px;
-  border: 1px solid rgba(230, 186, 80, 0.16);
-  border-radius: 12px;
-  background: linear-gradient(
-    135deg,
-    rgba(230, 186, 80, 0.065),
-    rgba(9, 11, 15, 0.52)
-  );
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid rgba(230, 186, 80, 0.3);
+  border-radius: 15px;
+  background:
+    radial-gradient(
+      circle at 12% 0%,
+      rgba(230, 186, 80, 0.11),
+      transparent 40%
+    ),
+    linear-gradient(145deg, rgba(28, 28, 30, 0.98), rgba(14, 15, 18, 0.98));
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
   overflow: hidden;
 }
 
 .update-settings-card.available,
 .update-settings-card.downloading {
-  border-color: rgba(230, 186, 80, 0.34);
-  box-shadow: inset 0 0 22px rgba(230, 186, 80, 0.035);
+  border-color: rgba(230, 186, 80, 0.52);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.26),
+    0 0 0 1px rgba(230, 186, 80, 0.06),
+    inset 0 0 26px rgba(230, 186, 80, 0.035);
 }
 
 .update-settings-card.downloaded {
-  border-color: rgba(84, 211, 156, 0.3);
-  background: linear-gradient(
-    135deg,
-    rgba(84, 211, 156, 0.065),
-    rgba(9, 11, 15, 0.52)
-  );
+  border-color: rgba(84, 211, 156, 0.46);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(84, 211, 156, 0.1), transparent 42%),
+    linear-gradient(145deg, rgba(24, 29, 27, 0.98), rgba(14, 16, 17, 0.98));
 }
 
 .update-settings-card.error {
-  border-color: rgba(248, 113, 113, 0.23);
+  border-color: rgba(248, 113, 113, 0.48);
+  background:
+    radial-gradient(
+      circle at 12% 0%,
+      rgba(248, 113, 113, 0.08),
+      transparent 42%
+    ),
+    linear-gradient(145deg, rgba(29, 23, 24, 0.98), rgba(16, 14, 16, 0.98));
 }
 
 .update-card-header {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
   min-width: 0;
 }
 
 .update-card-icon {
-  width: 28px;
-  height: 28px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
-  background: rgba(230, 186, 80, 0.12);
-  color: var(--gold-light);
-  font-size: 16px;
-  font-weight: 700;
+  border: 1px solid rgba(230, 186, 80, 0.24);
+  border-radius: 11px;
+  background: linear-gradient(
+    145deg,
+    rgba(230, 186, 80, 0.2),
+    rgba(230, 186, 80, 0.075)
+  );
+  color: #f5d982;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  font-size: 19px;
+  font-weight: 750;
+}
+
+.update-settings-card.downloaded .update-card-icon {
+  border-color: rgba(84, 211, 156, 0.28);
+  background: rgba(84, 211, 156, 0.12);
+  color: #8be1b9;
+}
+
+.update-settings-card.error .update-card-icon {
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.11);
+  color: #fda4a4;
 }
 
 .update-card-copy {
@@ -1642,42 +1674,203 @@ body {
   gap: 2px;
 }
 
+.update-card-eyebrow {
+  color: var(--gold-primary);
+  font: 750 8.5px var(--font-mono);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 .update-card-copy strong {
+  color: #f7f3e9;
+  font-size: 13.5px;
+  line-height: 1.25;
+}
+
+.update-card-copy small {
+  color: rgba(232, 228, 218, 0.62);
+  font-size: 9.5px;
+  line-height: 1.35;
+}
+
+.update-status-badge {
+  align-self: start;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(245, 242, 234, 0.76);
+  font: 700 7.5px var(--font-mono);
+  letter-spacing: 0.025em;
+  white-space: nowrap;
+}
+
+.update-status-badge.available,
+.update-status-badge.downloading,
+.update-status-badge.installing {
+  border-color: rgba(230, 186, 80, 0.35);
+  background: rgba(230, 186, 80, 0.11);
+  color: #f1d174;
+}
+
+.update-status-badge.downloaded,
+.update-status-badge.up-to-date {
+  border-color: rgba(84, 211, 156, 0.32);
+  background: rgba(84, 211, 156, 0.1);
+  color: #91dfbb;
+}
+
+.update-status-badge.error {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(248, 113, 113, 0.1);
+  color: #fca5a5;
+}
+
+.update-version-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 6px;
+}
+
+.update-version-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 11px;
+  background: rgba(3, 4, 6, 0.32);
+}
+
+.update-version-panel > span {
+  color: rgba(236, 232, 222, 0.58);
+  font: 700 7.5px var(--font-mono);
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.update-version-panel strong {
+  color: #f8f5ee;
+  font: 750 16px var(--font-mono);
+  letter-spacing: -0.035em;
   overflow: hidden;
-  color: var(--text-main);
-  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.update-mode-badge {
-  padding: 3px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--text-subtle);
-  font: 650 7.5px var(--font-mono);
-  text-transform: uppercase;
+.update-version-panel small {
+  color: rgba(230, 226, 216, 0.5);
+  font-size: 8.5px;
+  text-transform: capitalize;
 }
 
-.update-card-message {
+.update-version-panel.latest.has-update {
+  border-color: rgba(230, 186, 80, 0.42);
+  background: linear-gradient(
+    145deg,
+    rgba(230, 186, 80, 0.13),
+    rgba(230, 186, 80, 0.045)
+  );
+}
+
+.update-version-panel.latest.has-update strong,
+.update-version-panel.latest.has-update small {
+  color: #f2d376;
+}
+
+.update-version-arrow {
+  display: grid;
+  place-items: center;
+  color: rgba(230, 186, 80, 0.7);
+  font-size: 16px;
+}
+
+.update-status-panel {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.032);
+}
+
+.update-status-panel-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(230, 186, 80, 0.11);
+  color: #efd171;
+  font: 750 12px var(--font-mono);
+}
+
+.update-status-panel > div {
+  min-width: 0;
+}
+
+.update-status-panel strong {
+  display: block;
+  margin-bottom: 2px;
+  color: rgba(250, 247, 239, 0.92);
+  font-size: 10.5px;
+}
+
+.update-status-panel p {
   margin: 0;
-  color: var(--text-muted);
-  font-size: 9px;
-  line-height: 1.45;
+  color: rgba(231, 227, 218, 0.66);
+  font-size: 10px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.update-settings-card.error .update-status-panel-icon {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+
+.update-settings-card.downloaded .update-status-panel-icon,
+.update-settings-card.up-to-date .update-status-panel-icon {
+  background: rgba(84, 211, 156, 0.11);
+  color: #91dfbb;
 }
 
 .update-progress-wrap {
   display: grid;
-  gap: 4px;
+  gap: 7px;
+  padding: 10px 11px;
+  border: 1px solid rgba(230, 186, 80, 0.14);
+  border-radius: 11px;
+  background: rgba(230, 186, 80, 0.035);
+}
+
+.update-progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.update-progress-heading strong {
+  color: rgba(250, 247, 239, 0.88);
+  font-size: 10px;
+}
+
+.update-progress-heading span {
+  color: #f1d174;
+  font: 750 10px var(--font-mono);
 }
 
 .update-progress-track {
-  height: 5px;
+  height: 7px;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.045);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(0, 0, 0, 0.34);
 }
 
 .update-progress-track > span {
@@ -1685,7 +1878,7 @@ body {
   height: 100%;
   border-radius: inherit;
   background: var(--gold-gradient);
-  box-shadow: 0 0 10px rgba(230, 186, 80, 0.28);
+  box-shadow: 0 0 12px rgba(230, 186, 80, 0.34);
   transition: width 140ms linear;
 }
 
@@ -1693,43 +1886,89 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  color: var(--text-subtle);
+  color: rgba(230, 226, 216, 0.54);
   font: 7.5px var(--font-mono);
 }
 
 .update-card-actions {
-  display: flex;
-  gap: 7px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .btn-update-primary,
 .btn-update-secondary {
   min-width: 0;
-  min-height: 31px;
-  padding: 6px 9px;
-  border-radius: 8px;
-  font: 650 9px var(--font-sans);
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-family: var(--font-sans);
+  font-weight: 750;
   cursor: pointer;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .btn-update-primary {
-  flex: 1;
-  border: 1px solid rgba(230, 186, 80, 0.34);
-  background: rgba(230, 186, 80, 0.12);
-  color: var(--gold-light);
+  border: 1px solid rgba(238, 198, 91, 0.62);
+  background: linear-gradient(
+    180deg,
+    rgba(238, 198, 91, 0.26),
+    rgba(196, 145, 45, 0.17)
+  );
+  color: #ffe7a0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 14px rgba(0, 0, 0, 0.16);
+  font-size: 11px;
 }
 
 .btn-update-secondary {
-  flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(245, 242, 234, 0.74);
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.btn-update-primary:hover:not(:disabled),
+.btn-update-secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-update-primary:hover:not(:disabled) {
+  border-color: rgba(248, 214, 119, 0.78);
+  background: linear-gradient(
+    180deg,
+    rgba(238, 198, 91, 0.34),
+    rgba(196, 145, 45, 0.22)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 6px 18px rgba(0, 0, 0, 0.2),
+    0 0 14px rgba(230, 186, 80, 0.08);
+}
+
+.btn-update-secondary:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(250, 247, 239, 0.9);
+}
+
+.btn-update-primary:focus-visible,
+.btn-update-secondary:focus-visible {
+  outline: 2px solid rgba(238, 198, 91, 0.72);
+  outline-offset: 2px;
 }
 
 .btn-update-primary:disabled,
 .btn-update-secondary:disabled {
-  opacity: 0.5;
+  opacity: 0.52;
   cursor: progress;
+  transform: none;
 }
 
 .setting-toggle-card {

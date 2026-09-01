@@ -81,6 +81,25 @@ describe("desktop UI overflow guards", () => {
       /\.setup-primary,[\s\S]*?\.setup-secondary \{[\s\S]*?min-height:\s*42px;/,
     );
   });
+
+  it("keeps App Updates visually prominent and easy to scan", async () => {
+    const css = await styles();
+    expect(css).toMatch(
+      /\.update-settings-card \{[\s\S]*?padding:\s*15px;[\s\S]*?border:\s*1px solid rgba\(230, 186, 80, 0\.3\);/,
+    );
+    expect(css).toMatch(
+      /\.update-card-copy strong \{[\s\S]*?font-size:\s*13\.5px;/,
+    );
+    expect(css).toMatch(
+      /\.update-version-panel strong \{[\s\S]*?font:\s*750 16px/,
+    );
+    expect(css).toMatch(
+      /\.update-status-panel p \{[\s\S]*?font-size:\s*10px;[\s\S]*?line-height:\s*1\.5;/,
+    );
+    expect(css).toMatch(
+      /\.btn-update-primary,[\s\S]*?\.btn-update-secondary \{[\s\S]*?min-height:\s*40px;/,
+    );
+  });
 });
 
 describe("drawer animation smoothness", () => {

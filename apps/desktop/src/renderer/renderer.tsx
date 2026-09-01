@@ -732,6 +732,36 @@ function App(): React.ReactElement {
     updateState?.phase === "downloading" ||
     updateState?.phase === "installing";
   const updateProgressPercent = Math.round((updateState?.progress ?? 0) * 100);
+  const updateHasNewVersion = Boolean(
+    updateState?.latestVersion &&
+    updateState.latestVersion !== updateState.currentVersion,
+  );
+  const updatePhaseLabel =
+    updateState?.phase === "checking"
+      ? "Checking"
+      : updateState?.phase === "available"
+        ? "Update available"
+        : updateState?.phase === "downloading"
+          ? "Downloading"
+          : updateState?.phase === "downloaded"
+            ? "Ready to install"
+            : updateState?.phase === "installing"
+              ? "Installing"
+              : updateState?.phase === "up-to-date"
+                ? "Up to date"
+                : updateState?.phase === "error"
+                  ? "Needs attention"
+                  : "Ready";
+  const updatePhaseIcon =
+    updateState?.phase === "error"
+      ? "!"
+      : updateState?.phase === "up-to-date"
+        ? "✓"
+        : updateState?.phase === "downloaded"
+          ? "↓"
+          : updateState?.phase === "installing"
+            ? "↻"
+            : "↑";
 
   return (
     <div className="app-container">
@@ -1937,38 +1967,78 @@ function App(): React.ReactElement {
                 className={`update-settings-card ${updateState?.phase ?? "idle"}`}
               >
                 <div className="update-card-header">
-                  <span className="update-card-icon">↑</span>
+                  <span className="update-card-icon">{updatePhaseIcon}</span>
                   <div className="update-card-copy">
-                    <span className="drawer-label">App Updates</span>
-                    <strong>
-                      Qnector {updateState?.currentVersion ?? "…"}
-                      {updateState?.latestVersion &&
-                      updateState.latestVersion !== updateState.currentVersion
-                        ? ` → ${updateState.latestVersion}`
-                        : ""}
-                    </strong>
+                    <span className="update-card-eyebrow">App Updates</span>
+                    <strong>Keep Qnector up to date</strong>
+                    <small>
+                      Download verified releases and restart safely.
+                    </small>
                   </div>
-                  <span className="update-mode-badge">
-                    {updateState?.mode ?? "…"}
+                  <span
+                    className={`update-status-badge ${updateState?.phase ?? "idle"}`}
+                  >
+                    {updatePhaseLabel}
                   </span>
                 </div>
 
-                <p className="update-card-message">
-                  {updateState?.message ??
-                    "Qnector checks GitHub Releases for new versions."}
-                </p>
+                <div className="update-version-grid">
+                  <div className="update-version-panel current">
+                    <span>Current version</span>
+                    <strong>v{updateState?.currentVersion ?? "…"}</strong>
+                    <small>{updateState?.mode ?? "…"} build</small>
+                  </div>
+                  <span className="update-version-arrow" aria-hidden="true">
+                    →
+                  </span>
+                  <div
+                    className={`update-version-panel latest ${
+                      updateHasNewVersion ? "has-update" : ""
+                    }`}
+                  >
+                    <span>Latest release</span>
+                    <strong>
+                      v
+                      {updateState?.latestVersion ??
+                        updateState?.currentVersion ??
+                        "…"}
+                    </strong>
+                    <small>
+                      {updateHasNewVersion
+                        ? "Available now"
+                        : "GitHub Releases"}
+                    </small>
+                  </div>
+                </div>
+
+                <div className="update-status-panel">
+                  <span className="update-status-panel-icon">
+                    {updatePhaseIcon}
+                  </span>
+                  <div>
+                    <strong>{updatePhaseLabel}</strong>
+                    <p>
+                      {updateState?.message ??
+                        "Qnector checks GitHub Releases for new versions."}
+                    </p>
+                  </div>
+                </div>
 
                 {updateState?.phase === "downloading" && (
                   <div className="update-progress-wrap">
+                    <div className="update-progress-heading">
+                      <strong>Downloading update</strong>
+                      <span>{updateProgressPercent}%</span>
+                    </div>
                     <div className="update-progress-track">
                       <span style={{ width: `${updateProgressPercent}%` }} />
                     </div>
                     <div className="update-progress-meta">
-                      <span>{updateProgressPercent}%</span>
                       <span>
                         {formatBytes(updateState.bytesDownloaded)} /{" "}
                         {formatBytes(updateState.totalBytes)}
                       </span>
+                      <span>Verified after download</span>
                     </div>
                   </div>
                 )}
@@ -2002,7 +2072,7 @@ function App(): React.ReactElement {
                       className="btn-update-secondary"
                       onClick={() => void window.qnector.openUpdateRelease()}
                     >
-                      Release Notes ↗
+                      View Release Notes ↗
                     </button>
                   )}
                 </div>
