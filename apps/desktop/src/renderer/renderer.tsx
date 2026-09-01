@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-import "./luxury-theme.css";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
 import type { DesktopUpdateState } from "../updater-types.js";
 import type {
@@ -28,8 +27,6 @@ const OPENAI_TUNNELS_URL =
 const OPENAI_RUNTIME_KEYS_URL =
   "https://platform.openai.com/settings/organization/api-keys";
 const CHATGPT_CONNECTORS_URL = "https://chatgpt.com/#settings/Connectors";
-const DISCONNECT_HOLD_MS = 2000;
-const HOLD_EXIT_GRACE_MS = 250;
 
 const setupSteps = [
   { label: "Check", title: "Check this PC" },
@@ -46,93 +43,6 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
   { value: "ngrok", label: "ngrok" },
   { value: "local-only", label: "Local Only" },
 ];
-
-type UiIconName =
-  | "activity"
-  | "bridge"
-  | "check"
-  | "close"
-  | "copy"
-  | "external"
-  | "memory"
-  | "runtime"
-  | "settings"
-  | "update"
-  | "workspace";
-
-function UiIcon({
-  name,
-  size = 18,
-}: {
-  name: UiIconName;
-  size?: number;
-}): React.ReactElement {
-  const paths: Record<UiIconName, React.ReactNode> = {
-    activity: <path d="M4 16h3l2-5 3 8 3-10 2 5h3" />,
-    bridge: (
-      <>
-        <circle cx="7" cy="12" r="2.5" />
-        <circle cx="17" cy="7" r="2.5" />
-        <circle cx="17" cy="17" r="2.5" />
-        <path d="m9.2 10.8 5.6-2.6M9.2 13.2l5.6 2.6" />
-      </>
-    ),
-    check: <path d="m5 12.5 4.2 4.2L19 7" />,
-    close: <path d="M6 6l12 12M18 6 6 18" />,
-    copy: (
-      <>
-        <rect x="8" y="8" width="11" height="11" rx="2" />
-        <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-      </>
-    ),
-    external: (
-      <path d="M14 5h5v5M19 5l-8 8M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-    ),
-    memory: (
-      <>
-        <path d="M9 4.5a3 3 0 0 0-3 3v1a3 3 0 0 0-1 5.8V16a3 3 0 0 0 4 2.83" />
-        <path d="M15 4.5a3 3 0 0 1 3 3v1a3 3 0 0 1 1 5.8V16a3 3 0 0 1-4 2.83M12 4v16" />
-      </>
-    ),
-    runtime: (
-      <>
-        <path d="M4 7h16M4 12h16M4 17h16" opacity=".35" />
-        <circle cx="8" cy="7" r="1.8" />
-        <circle cx="15" cy="12" r="1.8" />
-        <circle cx="10" cy="17" r="1.8" />
-      </>
-    ),
-    settings: (
-      <>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M18 6l-1.5 1.5M7.5 16.5 6 18M18 18l-1.5-1.5M7.5 7.5 6 6" />
-      </>
-    ),
-    update: <path d="M12 20V6m0 0L7.5 10.5M12 6l4.5 4.5M5 4h14" />,
-    workspace: (
-      <>
-        <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
-        <path d="M3.5 9h17M8 5v4" />
-      </>
-    ),
-  };
-
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.65"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {paths[name]}
-    </svg>
-  );
-}
 
 interface MemoryActiveView {
   currentTask: string;
@@ -237,9 +147,8 @@ function App(): React.ReactElement {
   const [holdProgress, setHoldProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const [burstFlash, setBurstFlash] = useState(false);
-  const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
-  const holdCancelGraceRef = useRef<number | null>(null);
   const [enteringActivityId, setEnteringActivityId] = useState<string>();
+  const [activityVisibleRows, setActivityVisibleRows] = useState(4);
   const activityStreamRef = useRef<HTMLDivElement | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupStep, setSetupStep] = useState(0);
@@ -250,6 +159,21 @@ function App(): React.ReactElement {
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupError, setSetupError] = useState<string>();
   const [updateState, setUpdateState] = useState<DesktopUpdateState>();
+
+  useEffect(() => {
+    const stream = activityStreamRef.current;
+    if (!stream) return;
+    const updateVisibleRows = (): void => {
+      const usableHeight = Math.max(44, stream.clientHeight - 8);
+      setActivityVisibleRows(
+        Math.max(1, Math.min(15, Math.ceil(usableHeight / 50))),
+      );
+    };
+    updateVisibleRows();
+    const observer = new ResizeObserver(updateVisibleRows);
+    observer.observe(stream);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!selectedActivity) return;
@@ -268,26 +192,6 @@ function App(): React.ReactElement {
     window.addEventListener("keydown", closeSetupOnEscape);
     return () => window.removeEventListener("keydown", closeSetupOnEscape);
   }, [setupOpen, setupBusy]);
-
-  useEffect(() => {
-    if (!disconnectConfirmOpen) return;
-    const frame = window.requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLButtonElement>(".btn-confirm-secondary")
-        ?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [disconnectConfirmOpen]);
-
-  useEffect(() => {
-    if (!activeDrawer || isClosingDrawer) return;
-    const frame = window.requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLElement>('.drawer-card[role="dialog"]')
-        ?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeDrawer, isClosingDrawer]);
 
   const finishDrawerClose = (): void => {
     if (drawerCloseFallbackRef.current !== null) {
@@ -308,20 +212,6 @@ function App(): React.ReactElement {
     // Keep a generous fallback for reduced-motion / renderer edge cases.
     drawerCloseFallbackRef.current = window.setTimeout(finishDrawerClose, 600);
   };
-
-  useEffect(() => {
-    if (!activeDrawer && !disconnectConfirmOpen) return;
-    const closeOverlayOnEscape = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
-      if (disconnectConfirmOpen) {
-        setDisconnectConfirmOpen(false);
-        return;
-      }
-      closeDrawer();
-    };
-    window.addEventListener("keydown", closeOverlayOnEscape);
-    return () => window.removeEventListener("keydown", closeOverlayOnEscape);
-  }, [activeDrawer, disconnectConfirmOpen, isClosingDrawer]);
 
   const onDrawerAnimationEnd = (
     event: React.AnimationEvent<HTMLDivElement>,
@@ -508,9 +398,6 @@ function App(): React.ReactElement {
       offUpdate();
       if (activityDrainTimer !== undefined) clearTimeout(activityDrainTimer);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (holdCancelGraceRef.current !== null) {
-        window.clearTimeout(holdCancelGraceRef.current);
-      }
     };
   }, []);
 
@@ -544,46 +431,37 @@ function App(): React.ReactElement {
     }
   };
 
-  const clearHoldExitGrace = (): void => {
-    if (holdCancelGraceRef.current !== null) {
-      window.clearTimeout(holdCancelGraceRef.current);
-      holdCancelGraceRef.current = null;
-    }
-  };
-
-  const startHold = (): void => {
+  const startHold = () => {
     if (bridge.state !== "connected" || busy || isDisconnecting) return;
-    clearHoldExitGrace();
     setIsHolding(true);
     holdStartRef.current = performance.now();
 
-    const tick = (now: number): void => {
+    const tick = (now: number) => {
       if (!holdStartRef.current) return;
       const elapsed = now - holdStartRef.current;
-      const progress = Math.min(elapsed / DISCONNECT_HOLD_MS, 1);
-      setHoldProgress(progress);
+      const p = Math.min(elapsed / 3000, 1);
+      setHoldProgress(p);
 
-      if (progress < 1) {
+      if (p < 1) {
         animFrameRef.current = requestAnimationFrame(tick);
-        return;
+      } else {
+        didLongPressRef.current = true;
+        setIsHolding(false);
+        // Keep the ring full while the async disconnect is in progress.
+        setHoldProgress(1);
+        holdStartRef.current = null;
+        setBurstFlash(true);
+        window.setTimeout(() => setBurstFlash(false), 700);
+        window.setTimeout(() => {
+          didLongPressRef.current = false;
+        }, 1000);
+        void disconnect();
       }
-
-      didLongPressRef.current = true;
-      setIsHolding(false);
-      setHoldProgress(1);
-      holdStartRef.current = null;
-      setBurstFlash(true);
-      window.setTimeout(() => setBurstFlash(false), 520);
-      window.setTimeout(() => {
-        didLongPressRef.current = false;
-      }, 800);
-      void disconnect();
     };
     animFrameRef.current = requestAnimationFrame(tick);
   };
 
-  const cancelHold = (): void => {
-    clearHoldExitGrace();
+  const cancelHold = () => {
     if (isDisconnecting) return;
     if (!isHolding && holdProgress === 0) return;
     setIsHolding(false);
@@ -595,25 +473,15 @@ function App(): React.ReactElement {
     }
   };
 
-  const scheduleHoldCancel = (): void => {
-    clearHoldExitGrace();
-    holdCancelGraceRef.current = window.setTimeout(
-      cancelHold,
-      HOLD_EXIT_GRACE_MS,
-    );
-  };
-
-  const handleOrbClick = (): void => {
+  const handleOrbClick = () => {
     if (didLongPressRef.current) {
       didLongPressRef.current = false;
       return;
     }
-    if (busy || isConnecting || isDisconnecting) return;
-    if (isConnected) {
-      setDisconnectConfirmOpen(true);
-      return;
+    if (busy || isConnecting) return;
+    if (!isConnected) {
+      void connect();
     }
-    void connect();
   };
 
   const chooseWorkspace = async (): Promise<void> => {
@@ -700,8 +568,6 @@ function App(): React.ReactElement {
   const openSetupWizard = async (): Promise<void> => {
     setSetupError(undefined);
     setSetupStep(0);
-    setActiveDrawer(null);
-    setIsClosingDrawer(false);
     setSetupOpen(true);
     if (config) {
       setSetupProfile(config.transport.openaiProfile?.trim() || "qnector");
@@ -900,73 +766,30 @@ function App(): React.ReactElement {
   return (
     <div className="app-container">
       {error && (
-        <div className="error-toast" role="alert">
+        <div className="error-toast">
           <span>{error}</span>
           <button
-            className="error-toast-close"
-            type="button"
-            aria-label="Dismiss error"
+            style={{
+              background: "transparent",
+              border: 0,
+              color: "#ffffff",
+              cursor: "pointer",
+            }}
             onClick={() => setError(undefined)}
           >
-            <UiIcon name="close" size={15} />
+            ✕
           </button>
-        </div>
-      )}
-
-      {disconnectConfirmOpen && (
-        <div
-          className="disconnect-confirm-backdrop"
-          onClick={() => setDisconnectConfirmOpen(false)}
-        >
-          <section
-            className="disconnect-confirm-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="disconnect-confirm-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="disconnect-confirm-icon" aria-hidden="true">
-              <UiIcon name="bridge" size={20} />
-            </div>
-            <div className="disconnect-confirm-copy">
-              <span className="section-kicker">Bridge control</span>
-              <h2 id="disconnect-confirm-title">Disconnect Qnector?</h2>
-              <p>
-                ChatGPT will lose access to this computer until you connect the
-                bridge again.
-              </p>
-            </div>
-            <div className="disconnect-confirm-actions">
-              <button
-                type="button"
-                className="btn-confirm-secondary"
-                onClick={() => setDisconnectConfirmOpen(false)}
-              >
-                Keep connected
-              </button>
-              <button
-                type="button"
-                className="btn-confirm-danger"
-                onClick={() => {
-                  setDisconnectConfirmOpen(false);
-                  void disconnect();
-                }}
-              >
-                Disconnect
-              </button>
-            </div>
-          </section>
         </div>
       )}
 
       <header className="app-header">
         <div className="brand-section">
-          <div className="brand-crest" aria-hidden="true">
-            <span className="crest-symbol">Q</span>
+          <div className="brand-crest">
+            <span className="crest-symbol">⚜</span>
           </div>
-          <div className="brand-copy">
-            <span className="brand-tag">Local AI Interface</span>
-            <h1 className="brand-title">QNECTOR</h1>
+          <div>
+            <h1 className="brand-title">MCP BRIDGE</h1>
+            <div className="brand-tag">Qnector Desktop</div>
           </div>
         </div>
         <div className="header-actions">
@@ -979,9 +802,8 @@ function App(): React.ReactElement {
                 setActiveDrawer("settings");
               }}
               title={updateState?.message}
-              aria-label={`Open updates: ${updateState?.message ?? "update status"}`}
             >
-              <UiIcon name="update" size={13} />
+              <span>↑</span>
               <span>
                 {updateState?.phase === "downloading"
                   ? `${updateProgressPercent}%`
@@ -993,238 +815,192 @@ function App(): React.ReactElement {
               </span>
             </button>
           )}
-          <button
-            type="button"
-            className={`status-pill interactive ${bridge.state}`}
-            disabled={busy || isConnecting || isDisconnecting}
-            onClick={() => {
-              if (isConnected) {
-                setDisconnectConfirmOpen(true);
-              } else {
-                void connect();
-              }
-            }}
-            aria-label={`Bridge status: ${bridge.state}. ${isConnected ? "Open disconnect confirmation" : "Connect bridge"}`}
-          >
+          <div className={`status-pill ${bridge.state}`}>
             <span className="status-dot" />
             <span>
-              {isConnected
-                ? "Connected"
-                : isConnecting
-                  ? "Connecting"
-                  : "Standby"}
+              {isConnected ? "Active" : isConnecting ? "Connecting" : "Idle"}
             </span>
-          </button>
+          </div>
         </div>
       </header>
 
       <main className="app-main">
         <section className="glass-card hero-glass-section">
-          <div className="hero-command-row">
-            <div className="hero-command-copy">
-              <span className="section-kicker hero-kicker">Bridge control</span>
-              <h2 className="hero-state-title">
-                {isHolding
-                  ? `DISCONNECTING (${(((1 - holdProgress) * DISCONNECT_HOLD_MS) / 1000).toFixed(1)}s)`
-                  : isDisconnecting
-                    ? "DISCONNECTING…"
-                    : isConnected
-                      ? "SYSTEM ONLINE"
-                      : isConnecting
-                        ? "ESTABLISHING…"
-                        : "READY ON DEMAND"}
-              </h2>
-              <p className="hero-state-sub">
-                {isHolding
-                  ? "Keep holding to confirm. You can move away briefly without losing progress."
-                  : isDisconnecting
-                    ? "Closing the tunnel and local bridge cleanly…"
-                    : isConnected
-                      ? "Connected to ChatGPT · Full system access"
-                      : "Expose this computer and workspace to ChatGPT when needed."}
-              </p>
+          <div className="orb-stage">
+            <svg
+              className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}
+              viewBox="0 0 130 130"
+            >
+              <defs>
+                <linearGradient
+                  id="goldFireGrad"
+                  x1="0%"
+                  y1="0%"
+                  x2="100%"
+                  y2="100%"
+                >
+                  <stop offset="0%" stopColor="#ffe270" />
+                  <stop offset="50%" stopColor="#f59e0b" />
+                  <stop offset="100%" stopColor="#ef4444" />
+                </linearGradient>
+              </defs>
+              <circle cx="65" cy="65" r="58" className="charge-track" />
+              <circle
+                cx="65"
+                cy="65"
+                r="58"
+                className="charge-meter"
+                style={{
+                  strokeDasharray: 364.42,
+                  strokeDashoffset: 364.42 * (1 - disconnectRingProgress),
+                }}
+              />
+            </svg>
+
+            <div className={`plasma-aura ${isConnected ? "active" : ""}`} />
+
+            {burstFlash && <div className="burst-flash-ring" />}
+
+            <div
+              className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}
+              title={
+                isDisconnecting
+                  ? "Disconnecting from ChatGPT"
+                  : isConnected
+                    ? "Hold for 3 seconds to disconnect"
+                    : "Click to connect"
+              }
+              onClick={handleOrbClick}
+              onMouseDown={startHold}
+              onMouseUp={cancelHold}
+              onMouseLeave={cancelHold}
+              onTouchStart={startHold}
+              onTouchEnd={cancelHold}
+              onTouchCancel={cancelHold}
+            >
               <div
-                className={`hold-hint-pill ${disconnectRingActive ? "active" : ""}`}
-              >
-                {isHolding ? (
-                  <span>
-                    Hold ·{" "}
-                    {(((1 - holdProgress) * DISCONNECT_HOLD_MS) / 1000).toFixed(
-                      1,
-                    )}
-                    s
-                  </span>
-                ) : isConnected ? (
-                  <span>
-                    Click for options · hold 2s for instant disconnect
-                  </span>
-                ) : (
-                  <span>
-                    {bridge.mode} · {status?.machineName ?? "this computer"}
-                  </span>
-                )}
-              </div>
-              <div className="endpoint-compact-pill">
-                <UiIcon name="bridge" size={13} />
-                <span
-                  className={`endpoint-url-text ${!effectiveUrl ? "placeholder" : ""}`}
-                  title={effectiveUrl}
-                >
-                  {displayUrl}
-                </span>
-                <button
-                  type="button"
-                  className={`btn-gold-copy ${copied ? "copied" : ""}`}
-                  disabled={!effectiveUrl}
-                  onClick={() => void copyLink()}
-                  aria-label="Copy MCP endpoint URL"
-                >
-                  <UiIcon name={copied ? "check" : "copy"} size={12} />
-                  <span>{copied ? "Copied" : "Copy"}</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="orb-stage">
-              <svg
-                className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}
-                viewBox="0 0 100 100"
-                aria-hidden="true"
-              >
-                <defs>
-                  <linearGradient
-                    id="goldFireGrad"
-                    x1="0%"
-                    y1="0%"
-                    x2="100%"
-                    y2="100%"
-                  >
-                    <stop offset="0%" stopColor="#ffffff" />
-                    <stop offset="50%" stopColor="#d6b45a" />
-                    <stop offset="100%" stopColor="#aeb5c0" />
-                  </linearGradient>
-                </defs>
-                <circle cx="50" cy="50" r="44" className="charge-track" />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="44"
-                  className="charge-meter"
-                  style={{
-                    strokeDasharray: 276.46,
-                    strokeDashoffset: 276.46 * (1 - disconnectRingProgress),
-                  }}
-                />
-              </svg>
-
-              <div className={`plasma-aura ${isConnected ? "active" : ""}`} />
-              {burstFlash && <div className="burst-flash-ring" />}
-
-              <button
-                type="button"
-                className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}
-                title={
-                  isDisconnecting
-                    ? "Disconnecting from ChatGPT"
-                    : isConnected
-                      ? "Click for disconnect options or hold for 2 seconds"
-                      : "Click to connect"
-                }
-                aria-label={
-                  isConnected
-                    ? "Bridge connected. Click for disconnect options or hold for two seconds to disconnect."
-                    : "Connect bridge"
-                }
-                onClick={handleOrbClick}
-                onPointerDown={startHold}
-                onPointerUp={cancelHold}
-                onPointerEnter={clearHoldExitGrace}
-                onPointerLeave={scheduleHoldCancel}
-                onPointerCancel={cancelHold}
-              >
-                <div
-                  className={`liquid-gold-core ${
-                    isHolding
-                      ? "charging"
-                      : isDisconnecting
-                        ? "disconnecting"
-                        : isConnecting
-                          ? "connecting"
-                          : isConnected
-                            ? "connected"
-                            : "disconnected"
-                  }`}
-                />
-                <div className="glass-glare" />
-              </button>
+                className={`liquid-gold-core ${
+                  isHolding
+                    ? "charging"
+                    : isDisconnecting
+                      ? "disconnecting"
+                      : isConnecting
+                        ? "connecting"
+                        : isConnected
+                          ? "connected"
+                          : "disconnected"
+                }`}
+              />
+              <div className="glass-glare" />
+              {isConnected && !isHolding && !isDisconnecting && (
+                <>
+                  <div className="orbit-spark spark-1" />
+                  <div className="orbit-spark spark-2" />
+                </>
+              )}
             </div>
           </div>
 
-          <div className="hero-action-row">
-            {isConnected ? (
-              <button
-                type="button"
-                className="btn-liquid-action"
-                disabled={isDisconnecting}
-                onClick={() => void openChatGPT()}
-              >
-                <UiIcon name="external" size={15} />
-                <span>Open in ChatGPT</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn-liquid-action"
-                disabled={busy || isConnecting}
-                onClick={() => void connect()}
-              >
-                <UiIcon name="bridge" size={15} />
-                <span>
-                  {busy || isConnecting ? "Connecting…" : "Connect bridge"}
-                </span>
-              </button>
-            )}
-            <button
-              type="button"
-              className="btn-hero-secondary"
-              onClick={() => toggleDrawer("workspace")}
+          <h2 className="hero-state-title">
+            {isHolding
+              ? `DISCONNECTING (${((1 - holdProgress) * 3).toFixed(1)}s)`
+              : isDisconnecting
+                ? "DISCONNECTING…"
+                : isConnected
+                  ? "BRIDGE: ACTIVE"
+                  : isConnecting
+                    ? "ESTABLISHING BRIDGE…"
+                    : "BRIDGE: DORMANT"}
+          </h2>
+          <p className="hero-state-sub">
+            {isHolding
+              ? "Keep holding the orb to confirm disconnection…"
+              : isDisconnecting
+                ? "Closing the tunnel and local bridge cleanly…"
+                : isConnected
+                  ? "Connected to ChatGPT · Full System Access"
+                  : "Expose local computer & workspace to ChatGPT"}
+          </p>
+
+          <div className="endpoint-glass-box">
+            <span className="endpoint-link-icon">🔗</span>
+            <span
+              className={`endpoint-url-text ${!effectiveUrl ? "placeholder" : ""}`}
+              title={effectiveUrl}
             >
-              <UiIcon name="workspace" size={15} />
-              <span>
-                {status?.activeWorkspace ? "Workspace" : "Choose workspace"}
-              </span>
+              {displayUrl}
+            </span>
+            <button
+              className={`btn-gold-copy ${copied ? "copied" : ""}`}
+              disabled={!effectiveUrl}
+              onClick={() => void copyLink()}
+            >
+              <span>{copied ? "COPIED ✓" : "COPY"}</span>
             </button>
+          </div>
+
+          {isConnected ? (
+            <button
+              className="btn-liquid-action"
+              disabled={isDisconnecting}
+              onClick={() => void openChatGPT()}
+            >
+              <span>↗ Open in ChatGPT</span>
+            </button>
+          ) : (
+            <button
+              className="btn-liquid-action"
+              disabled={busy || isConnecting}
+              onClick={() => void connect()}
+            >
+              {busy || isConnecting ? (
+                <span>Connecting Bridge…</span>
+              ) : (
+                <span>⚡ Connect to Bridge</span>
+              )}
+            </button>
+          )}
+
+          <div
+            className={`hold-hint-pill ${disconnectRingActive ? "active" : ""}`}
+          >
+            {isHolding ? (
+              <span>
+                ⚡ Disconnecting in {((1 - holdProgress) * 3).toFixed(1)}s
+              </span>
+            ) : isDisconnecting ? (
+              <span>⚡ Disconnecting Bridge…</span>
+            ) : isConnected ? (
+              <span>⏳ Hold orb 3s to Disconnect</span>
+            ) : (
+              <span>✨ Tap orb or button to Connect</span>
+            )}
           </div>
         </section>
 
         <section className="glass-card activity-glass-card">
           <div className="card-eyebrow-row">
-            <div className="activity-heading-copy">
-              <span className="section-kicker">Telemetry</span>
-              <div className="activity-heading-line">
-                <UiIcon name="activity" size={17} />
-                <h2>Live activity</h2>
-              </div>
-              <p>Recent tool calls from ChatGPT and local automation.</p>
-            </div>
+            <span className="card-eyebrow">Live Activity Feed</span>
             <span className="live-badge">
               <span className="live-beacon" />
               <span>LIVE</span>
             </span>
           </div>
-          <div className="activity-meta-strip">
-            <span>{activity.length} recent calls</span>
-            <span>Newest first</span>
-          </div>
 
           <div className="activity-stream" ref={activityStreamRef}>
-            <div className="activity-track flex-feed">
-              {activity.map((item) => (
+            <div
+              className="activity-track"
+              style={{
+                height: `${Math.max(activity.length, activityVisibleRows) * 50 + 8}px`,
+              }}
+            >
+              {activity.map((item, index) => (
                 <button
                   type="button"
                   className={`activity-item ${enteringActivityId === item.id ? "entering" : ""}`}
                   data-activity-id={item.id}
                   key={item.id}
+                  style={{ transform: `translate3d(0, ${index * 50}px, 0)` }}
                   onClick={() => setSelectedActivity(item)}
                   aria-label={`View details for ${item.tool}.${item.action}`}
                 >
@@ -1247,11 +1023,8 @@ function App(): React.ReactElement {
 
               {activity.length === 0 && (
                 <div className="empty-activity">
-                  <span className="empty-spark">
-                    <UiIcon name="activity" size={18} />
-                  </span>
-                  <strong>Listening for activity</strong>
-                  <span>Tool calls will appear here as they happen.</span>
+                  <span className="empty-spark">✦</span>
+                  <span>Ready for incoming tool calls</span>
                 </div>
               )}
             </div>
@@ -1259,44 +1032,36 @@ function App(): React.ReactElement {
         </section>
       </main>
 
-      <nav className="floating-glass-dock" aria-label="Qnector sections">
+      <footer className="floating-glass-dock">
         <button
-          type="button"
           className={`dock-pill-btn ${activeDrawer === "workspace" ? "active" : ""}`}
           onClick={() => toggleDrawer("workspace")}
-          aria-pressed={activeDrawer === "workspace"}
         >
-          <UiIcon name="workspace" size={17} />
+          <span>📁</span>
           <span>Workspace</span>
         </button>
         <button
-          type="button"
           className={`dock-pill-btn ${activeDrawer === "memory" ? "active" : ""}`}
           onClick={() => toggleDrawer("memory")}
-          aria-pressed={activeDrawer === "memory"}
         >
-          <UiIcon name="memory" size={17} />
+          <span>🧠</span>
           <span>Memory</span>
         </button>
         <button
-          type="button"
           className={`dock-pill-btn ${activeDrawer === "runtime" ? "active" : ""}`}
           onClick={() => toggleDrawer("runtime")}
-          aria-pressed={activeDrawer === "runtime"}
         >
-          <UiIcon name="runtime" size={17} />
+          <span>◈</span>
           <span>Runtime</span>
         </button>
         <button
-          type="button"
           className={`dock-pill-btn ${activeDrawer === "settings" ? "active" : ""}`}
           onClick={() => toggleDrawer("settings")}
-          aria-pressed={activeDrawer === "settings"}
         >
-          <UiIcon name="settings" size={17} />
+          <span>⚙</span>
           <span>Settings</span>
         </button>
-      </nav>
+      </footer>
 
       {setupOpen && (
         <div className="setup-backdrop" onClick={() => setSetupOpen(false)}>
@@ -1739,16 +1504,11 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
-            role="dialog"
-            aria-modal="true"
-            tabIndex={-1}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">
-                <UiIcon name="workspace" size={17} /> Workspace
-              </span>
+              <span className="drawer-title">📁 ACTIVE WORKSPACE</span>
               <button className="btn-drawer-close" onClick={closeDrawer}>
                 ✕
               </button>
@@ -1756,7 +1516,9 @@ function App(): React.ReactElement {
             <div className="drawer-content">
               <div className="drawer-row">
                 <span className="drawer-label">Current Folder</span>
-                <span className="meta-caption gold">{status?.machineName}</span>
+                <span style={{ fontSize: "10px", color: "var(--text-gold)" }}>
+                  {status?.machineName}
+                </span>
               </div>
               <div className="workspace-path-box">
                 {status?.activeWorkspace ?? "—"}
@@ -1766,7 +1528,7 @@ function App(): React.ReactElement {
                   className="btn-drawer-action"
                   onClick={() => void chooseWorkspace()}
                 >
-                  Choose Folder
+                  📁 Choose Folder
                 </button>
                 <button
                   className="btn-drawer-action"
@@ -1786,7 +1548,7 @@ function App(): React.ReactElement {
                     void window.qnector.openTerminal(status.activeWorkspace)
                   }
                 >
-                  Terminal
+                  💻 Terminal
                 </button>
               </div>
             </div>
@@ -1801,16 +1563,11 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
-            role="dialog"
-            aria-modal="true"
-            tabIndex={-1}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">
-                <UiIcon name="memory" size={17} /> Project Memory
-              </span>
+              <span className="drawer-title">🧠 AI PROJECT MEMORY</span>
               <button className="btn-drawer-close" onClick={closeDrawer}>
                 ✕
               </button>
@@ -1828,8 +1585,10 @@ function App(): React.ReactElement {
               <div className="memory-summary-container">
                 <div className="memory-summary-box highlight">
                   <div className="memory-box-header">
-                    <span>CURRENT ACTIVE GOAL</span>
-                    <span className="meta-caption">
+                    <span>🎯 CURRENT ACTIVE GOAL</span>
+                    <span
+                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
+                    >
                       {memory?.counts.checkpoints ?? 0} Checkpoints
                     </span>
                   </div>
@@ -1849,7 +1608,7 @@ function App(): React.ReactElement {
                   (memory?.state.active?.completedSteps?.length ?? 0) > 0) && (
                   <div className="memory-summary-box">
                     <div className="memory-box-header">
-                      <span>TASK PROGRESS & STEPS</span>
+                      <span>📋 TASK PROGRESS & STEPS</span>
                     </div>
                     <div className="memory-checklist">
                       {memory?.state.active?.completedSteps?.map(
@@ -1858,9 +1617,7 @@ function App(): React.ReactElement {
                             className="memory-checklist-item done"
                             key={`done-${idx}`}
                           >
-                            <span className="check-icon done">
-                              <UiIcon name="check" size={12} />
-                            </span>
+                            <span className="check-icon">✓</span>
                             <span>{step}</span>
                           </div>
                         ),
@@ -1870,7 +1627,7 @@ function App(): React.ReactElement {
                           className="memory-checklist-item pending"
                           key={`pend-${idx}`}
                         >
-                          <span className="check-icon pending">○</span>
+                          <span className="check-icon">⏳</span>
                           <span>{step}</span>
                         </div>
                       ))}
@@ -1881,8 +1638,10 @@ function App(): React.ReactElement {
                 {(memory?.state.facts?.length ?? 0) > 0 && (
                   <div className="memory-summary-box">
                     <div className="memory-box-header">
-                      <span>PROJECT RULES & KNOWLEDGE</span>
-                      <span className="meta-caption">
+                      <span>💡 PROJECT RULES & KNOWLEDGE</span>
+                      <span
+                        style={{ fontSize: "9px", color: "var(--text-muted)" }}
+                      >
                         {memory?.state.facts.length} facts
                       </span>
                     </div>
@@ -1902,7 +1661,12 @@ function App(): React.ReactElement {
                     <div className="memory-empty-state">
                       <span className="memory-empty-icon">⟡</span>
                       <span>No persistent memory recorded yet</span>
-                      <span className="meta-caption subtle">
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          color: "var(--text-subtle)",
+                        }}
+                      >
                         As you chat with ChatGPT, project decisions and goals
                         will appear here automatically.
                       </span>
@@ -1917,7 +1681,7 @@ function App(): React.ReactElement {
                   onClick={() => void openMemoryFile()}
                   title="Open or export MEMORY.md file"
                 >
-                  View MEMORY.md
+                  📄 View MEMORY.md
                 </button>
                 <button
                   className="btn-drawer-action danger"
@@ -1925,7 +1689,7 @@ function App(): React.ReactElement {
                   onClick={() => void clearMemory()}
                   title="Wipe memory for this workspace"
                 >
-                  Wipe Memory
+                  🧹 Wipe Memory
                 </button>
               </div>
             </div>
@@ -1940,16 +1704,11 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card runtime-drawer-card ${isClosingDrawer ? "closing" : ""}`}
-            role="dialog"
-            aria-modal="true"
-            tabIndex={-1}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">
-                <UiIcon name="runtime" size={17} /> Runtime & Diagnostics
-              </span>
+              <span className="drawer-title">◈ RUNTIME & DIAGNOSTICS</span>
               <button className="btn-drawer-close" onClick={closeDrawer}>
                 ✕
               </button>
@@ -2179,33 +1938,22 @@ function App(): React.ReactElement {
         >
           <div
             className={`drawer-card ${isClosingDrawer ? "closing" : ""}`}
-            role="dialog"
-            aria-modal="true"
-            tabIndex={-1}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">
-                <UiIcon name="settings" size={17} /> Settings & Updates
-              </span>
+              <span className="drawer-title">⚙ BRIDGE SETTINGS</span>
               <button className="btn-drawer-close" onClick={closeDrawer}>
                 ✕
               </button>
             </div>
             <div className="drawer-content">
-              <div className="settings-section-heading">
-                <span>Connection & updates</span>
-                <small>Manage how Qnector connects and stays current.</small>
-              </div>
               <button
                 className="setup-launch-card"
                 type="button"
                 onClick={() => void openSetupWizard()}
               >
-                <span className="setup-launch-icon">
-                  <UiIcon name="bridge" size={18} />
-                </span>
+                <span className="setup-launch-icon">✦</span>
                 <span className="setup-launch-copy">
                   <strong>Connection Setup</strong>
                   <small>
@@ -2340,7 +2088,7 @@ function App(): React.ReactElement {
                   }}
                 >
                   <span className="drawer-label">Tunnel Mode</span>
-                  <span className="meta-caption">
+                  <span style={{ fontSize: "9px", color: "var(--text-muted)" }}>
                     Internet transport for ChatGPT
                   </span>
                 </div>
@@ -2358,11 +2106,6 @@ function App(): React.ReactElement {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div className="settings-section-heading separated">
-                <span>Application behavior</span>
-                <small>Control shortcuts, background mode and startup.</small>
               </div>
 
               {/* Global Hotkey Card */}
@@ -2386,7 +2129,9 @@ function App(): React.ReactElement {
                     }}
                   >
                     <span>Global Hotkey</span>
-                    <span className="meta-caption">
+                    <span
+                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
+                    >
                       Show / hide window from anywhere
                     </span>
                   </div>
@@ -2418,7 +2163,9 @@ function App(): React.ReactElement {
                     }}
                   >
                     <span>Minimize to Tray</span>
-                    <span className="meta-caption">
+                    <span
+                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
+                    >
                       Keep bridge running in background on close
                     </span>
                   </div>
@@ -2443,18 +2190,13 @@ function App(): React.ReactElement {
                     }}
                   >
                     <span>Auto Start</span>
-                    <span className="meta-caption">
+                    <span
+                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
+                    >
                       Launch Qnector on Windows startup
                     </span>
                   </div>
                 </label>
-              </div>
-
-              <div className="settings-section-heading separated">
-                <span>Project memory</span>
-                <small>
-                  Choose how persistent workspace context is mirrored.
-                </small>
               </div>
 
               {/* Mirror MEMORY.md */}
@@ -2491,7 +2233,9 @@ function App(): React.ReactElement {
                     }}
                   >
                     <span>Save .qnector/MEMORY.md</span>
-                    <span className="meta-caption">
+                    <span
+                      style={{ fontSize: "9px", color: "var(--text-muted)" }}
+                    >
                       Write living markdown docs in workspace
                     </span>
                   </div>
