@@ -5,7 +5,7 @@ import path from "node:path";
 import { configSchema } from "@qnector/shared";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
 
-export const QNECTOR_VERSION = "0.3.5";
+export const QNECTOR_VERSION = "0.3.6";
 
 export function configDirectory(): string {
   if (process.platform === "win32") {
