@@ -16,6 +16,7 @@ import {
   type GitHubReleaseAsset,
   type GitHubReleaseInfo,
 } from "./updater-core.js";
+import { buildWindowsUpdateScript } from "./updater-script.js";
 
 const RELEASE_API =
   "https://api.github.com/repos/queenleonidasth/Qnector/releases/latest";
@@ -91,16 +92,12 @@ export class DesktopUpdater {
       const scriptPath = await createUpdateScript({
         mode: this.state.mode,
         processId: process.pid,
+        launcherProcessId:
+          this.state.mode === "portable" ? process.ppid : undefined,
         sourcePath: this.downloadedPath,
         targetExecutable,
       });
-      const powershell = path.join(
-        process.env.SystemRoot || "C:\\Windows",
-        "System32",
-        "WindowsPowerShell",
-        "v1.0",
-        "powershell.exe",
-      );
+      const powershell = await resolveWindowsPowerShell();
       const child = spawn(
         powershell,
         [
@@ -120,6 +117,7 @@ export class DesktopUpdater {
           windowsHide: true,
         },
       );
+      await waitForSpawn(child);
       child.unref();
       this.setState({
         ...this.state,
@@ -131,7 +129,9 @@ export class DesktopUpdater {
             ? "Restarting Qnector and replacing the portable executable…"
             : "Restarting Qnector and installing the new version…",
       });
-      setTimeout(() => app.quit(), 150);
+      // Quit only after Windows confirms the detached apply-update helper was
+      // actually created. spawn() reports ENOENT asynchronously.
+      setTimeout(() => app.quit(), 200);
       return this.getState();
     } catch (error) {
       return this.fail(`Could not start updater: ${errorMessage(error)}`);
@@ -360,6 +360,7 @@ async function assertPortableTargetWritable(target: string): Promise<void> {
 async function createUpdateScript(input: {
   mode: DesktopUpdateMode;
   processId: number;
+  launcherProcessId?: number;
   sourcePath: string;
   targetExecutable: string;
 }): Promise<string> {
@@ -367,38 +368,63 @@ async function createUpdateScript(input: {
     app.getPath("temp"),
     `qnector-apply-update-${randomUUID()}.ps1`,
   );
-  const source = psQuote(input.sourcePath);
-  const target = psQuote(input.targetExecutable);
-  const lines = [
-    "$ErrorActionPreference = 'Stop'",
-    `$processIdToWaitFor = ${input.processId}`,
-    `$source = ${source}`,
-    `$target = ${target}`,
-    "try { Wait-Process -Id $processIdToWaitFor -ErrorAction SilentlyContinue } catch {}",
-    "Start-Sleep -Milliseconds 600",
-  ];
-  if (input.mode === "portable") {
-    lines.push(
-      "Copy-Item -LiteralPath $source -Destination $target -Force",
-      "Start-Process -FilePath $target",
-    );
-  } else {
-    lines.push(
-      "Start-Process -FilePath $source -ArgumentList '/S' -Wait",
-      "Start-Sleep -Milliseconds 500",
-      "if (Test-Path -LiteralPath $target) { Start-Process -FilePath $target }",
-    );
-  }
-  lines.push(
-    "Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue",
-    "Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue",
-  );
-  await writeFile(scriptPath, `${lines.join("\r\n")}\r\n`, "utf8");
+  const logPath = path.join(path.dirname(input.sourcePath), "apply-update.log");
+  await rm(logPath, { force: true }).catch(() => undefined);
+  const script = buildWindowsUpdateScript({
+    ...input,
+    logPath,
+  });
+  // Windows PowerShell 5 treats UTF-8 without a BOM as the legacy code page.
+  // Add one so update paths containing non-ASCII names remain safe.
+  await writeFile(scriptPath, `\uFEFF${script}`, "utf8");
   return scriptPath;
 }
 
-function psQuote(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
+async function resolveWindowsPowerShell(): Promise<string> {
+  const roots = Array.from(
+    new Set(
+      [process.env.SystemRoot, process.env.WINDIR, "C:\\Windows"].filter(
+        (value): value is string => Boolean(value?.trim()),
+      ),
+    ),
+  );
+  for (const root of roots) {
+    const candidate = path.join(
+      root,
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    );
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      // Try the next canonical Windows root.
+    }
+  }
+  throw new Error(
+    "Windows PowerShell was not found under SystemRoot/WINDIR; cannot start the update helper.",
+  );
+}
+
+function waitForSpawn(child: ReturnType<typeof spawn>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onSpawn = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+    const cleanup = (): void => {
+      child.off("spawn", onSpawn);
+      child.off("error", onError);
+    };
+    child.once("spawn", onSpawn);
+    child.once("error", onError);
+  });
 }
 
 function errorMessage(error: unknown): string {
