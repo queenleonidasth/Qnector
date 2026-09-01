@@ -16,7 +16,11 @@ import {
   type GitHubReleaseAsset,
   type GitHubReleaseInfo,
 } from "./updater-core.js";
-import { buildWindowsUpdateScript } from "./updater-script.js";
+import {
+  buildWindowsUpdateScript,
+  buildWindowsUpdaterBootstrapScript,
+  WINDOWS_UPDATER_BOOTSTRAP_DETACHED,
+} from "./updater-script.js";
 
 const RELEASE_API =
   "https://api.github.com/repos/queenleonidasth/Qnector/releases/latest";
@@ -89,7 +93,13 @@ export class DesktopUpdater {
     }
 
     let updateArtifacts:
-      { scriptPath: string; readyPath: string; logPath: string } | undefined;
+      | {
+          scriptPath: string;
+          bootstrapPath?: string;
+          readyPath: string;
+          logPath: string;
+        }
+      | undefined;
     try {
       updateArtifacts = await createUpdateScript({
         mode: this.state.mode,
@@ -98,27 +108,36 @@ export class DesktopUpdater {
         targetExecutable,
       });
       const powershell = await resolveWindowsPowerShell();
+      updateArtifacts.bootstrapPath = await createUpdaterBootstrap({
+        powershellPath: powershell,
+        applyScriptPath: updateArtifacts.scriptPath,
+      });
       const child = spawn(
         powershell,
         [
           "-NoLogo",
           "-NoProfile",
           "-NonInteractive",
-          "-WindowStyle",
-          "Hidden",
           "-ExecutionPolicy",
           "Bypass",
           "-File",
-          updateArtifacts.scriptPath,
+          updateArtifacts.bootstrapPath,
         ],
         {
-          detached: true,
+          // On this Windows/Electron portable runtime, Node's detached process
+          // flag creates powershell.exe but it exits without executing -File.
+          // The bootstrap itself uses Windows Start-Process to launch the real
+          // independent apply helper instead.
+          detached: WINDOWS_UPDATER_BOOTSTRAP_DETACHED,
           stdio: "ignore",
           windowsHide: true,
         },
       );
       await waitForSpawn(child);
-      await waitForHelperReady(updateArtifacts.readyPath, child, 5_000);
+      await waitForHelperReady(updateArtifacts.readyPath, 5_000);
+      await rm(updateArtifacts.bootstrapPath, { force: true }).catch(
+        () => undefined,
+      );
       child.unref();
       this.setState({
         ...this.state,
@@ -390,6 +409,19 @@ async function createUpdateScript(input: {
   return { scriptPath, readyPath, logPath };
 }
 
+async function createUpdaterBootstrap(input: {
+  powershellPath: string;
+  applyScriptPath: string;
+}): Promise<string> {
+  const bootstrapPath = path.join(
+    app.getPath("temp"),
+    `qnector-update-bootstrap-${randomUUID()}.ps1`,
+  );
+  const script = buildWindowsUpdaterBootstrapScript(input);
+  await writeFile(bootstrapPath, `\uFEFF${script}`, "utf8");
+  return bootstrapPath;
+}
+
 async function resolveWindowsPowerShell(): Promise<string> {
   const roots = Array.from(
     new Set(
@@ -439,7 +471,6 @@ function waitForSpawn(child: ReturnType<typeof spawn>): Promise<void> {
 
 async function waitForHelperReady(
   readyPath: string,
-  child: ReturnType<typeof spawn>,
   timeoutMs: number,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -448,11 +479,8 @@ async function waitForHelperReady(
       await access(readyPath, constants.F_OK);
       return;
     } catch {
-      if (child.exitCode !== null) {
-        throw new Error(
-          `Update helper exited before handshake (code ${child.exitCode}).`,
-        );
-      }
+      // The bootstrap is expected to exit before the independent helper does,
+      // so readiness is the authoritative signal rather than bootstrap exit.
       await new Promise((resolve) => setTimeout(resolve, 75));
     }
   }

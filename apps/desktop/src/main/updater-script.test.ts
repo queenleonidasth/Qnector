@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildWindowsUpdateScript } from "./updater-script.js";
+import {
+  buildWindowsUpdateScript,
+  buildWindowsUpdaterBootstrapScript,
+  WINDOWS_UPDATER_BOOTSTRAP_DETACHED,
+} from "./updater-script.js";
 
 const common = {
   processId: 1234,
@@ -61,5 +65,25 @@ describe("Windows updater apply script", () => {
     expect(script).toContain("-ArgumentList '/S' -Wait -PassThru");
     expect(script).toContain("Installer exited with code");
     expect(script).toContain("Start-QnectorTarget");
+  });
+});
+
+describe("Windows updater bootstrap", () => {
+  it("keeps Node non-detached and launches the independent helper with encoded PowerShell", () => {
+    const applyScriptPath = "C:\\Users\\Queen's PC\\apply update.ps1";
+    const script = buildWindowsUpdaterBootstrapScript({
+      powershellPath:
+        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      applyScriptPath,
+    });
+
+    expect(WINDOWS_UPDATER_BOOTSTRAP_DETACHED).toBe(false);
+    expect(script).toContain("Start-Process -FilePath $powershell");
+    expect(script).toContain("-EncodedCommand");
+    const encoded = /\$encodedCommand = '([^']+)'/.exec(script)?.[1];
+    expect(encoded).toBeTruthy();
+    expect(Buffer.from(encoded!, "base64").toString("utf16le")).toBe(
+      "& 'C:\\Users\\Queen''s PC\\apply update.ps1'",
+    );
   });
 });

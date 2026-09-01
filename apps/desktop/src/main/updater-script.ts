@@ -9,6 +9,30 @@ export interface WindowsUpdateScriptInput {
   readyPath: string;
 }
 
+export const WINDOWS_UPDATER_BOOTSTRAP_DETACHED = false;
+
+export interface WindowsUpdaterBootstrapInput {
+  powershellPath: string;
+  applyScriptPath: string;
+}
+
+export function buildWindowsUpdaterBootstrapScript(
+  input: WindowsUpdaterBootstrapInput,
+): string {
+  const powershell = psQuote(input.powershellPath);
+  const command = `& ${psQuote(input.applyScriptPath)}`;
+  const encodedCommand = Buffer.from(command, "utf16le").toString("base64");
+  const lines = [
+    "$ErrorActionPreference = 'Stop'",
+    `$powershell = ${powershell}`,
+    `$encodedCommand = ${psQuote(encodedCommand)}`,
+    "$arguments = @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',$encodedCommand)",
+    "Start-Process -FilePath $powershell -ArgumentList $arguments -WindowStyle Hidden | Out-Null",
+    "exit 0",
+  ];
+  return `${lines.join("\r\n")}\r\n`;
+}
+
 export function buildWindowsUpdateScript(
   input: WindowsUpdateScriptInput,
 ): string {
