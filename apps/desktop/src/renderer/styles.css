@@ -3510,144 +3510,36 @@ body {
   }
 }
 
-/* v0.4.2 menu UX pass — preserve the existing visual language while improving navigation. */
-.drawer-heading-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* v0.4.3 scroll/completeness pass — keep the v0.4.1 menu structure. */
+.drawer-card {
+  max-height: min(90vh, calc(100vh - 12px));
 }
 
-.drawer-heading-copy small {
-  max-width: 300px;
-  color: var(--text-muted);
-  font-size: 9.5px;
-  line-height: 1.35;
+.drawer-content,
+.runtime-scroll {
+  scroll-padding-bottom: 18px;
+  padding-bottom: 12px;
 }
 
-.drawer-menu-tabs {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
-  padding: 1px 0 2px;
+.drawer-content::-webkit-scrollbar,
+.runtime-scroll::-webkit-scrollbar {
+  width: 7px;
 }
 
-.drawer-menu-tabs button {
-  min-width: 0;
-  min-height: 38px;
-  padding: 6px 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
-  color: var(--text-muted);
-  font: 600 9.5px var(--font-sans);
-  cursor: pointer;
-  transition: all 0.16s ease;
-}
-
-.drawer-menu-tabs button:hover {
-  border-color: var(--glass-border-strong);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-main);
-}
-
-.drawer-menu-tabs button.active {
-  border-color: rgba(230, 186, 80, 0.42);
-  background: rgba(230, 186, 80, 0.1);
-  color: var(--gold-light);
-}
-
-.drawer-menu-tabs button > span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspace-overview-card {
-  display: grid;
-  gap: 8px;
-  padding: 11px;
-  border: 1px solid var(--glass-border);
-  border-radius: 11px;
-  background: var(--glass-inset);
-}
-
-.drawer-meta-chip {
-  max-width: 48%;
-  padding: 3px 7px;
-  overflow: hidden;
-  border: 1px solid rgba(230, 186, 80, 0.2);
+.drawer-content::-webkit-scrollbar-thumb,
+.runtime-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  color: var(--text-gold);
-  background: rgba(230, 186, 80, 0.07);
-  font: 600 9px var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background: rgba(230, 186, 80, 0.3);
 }
 
-.workspace-path-box.empty {
-  color: var(--text-muted);
-}
-
-.drawer-help-text {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.5;
-}
-
-.btn-drawer-action.primary {
-  min-height: 40px;
-  border-color: rgba(230, 186, 80, 0.44);
-  background: rgba(230, 186, 80, 0.1);
-  color: var(--gold-light);
-}
-
-.btn-drawer-action.primary:hover {
-  background: var(--gold-gradient);
-  color: #121316;
-}
-
-.secondary-actions {
-  margin-top: 0;
-}
-
-.memory-quick-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.memory-quick-stats > div {
-  min-width: 0;
-  padding: 7px 5px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
+.drawer-content::-webkit-scrollbar-track,
+.runtime-scroll::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.025);
 }
 
-.memory-quick-stats strong {
-  color: var(--gold-light);
-  font: 700 12px var(--font-mono);
-}
-
-.memory-quick-stats span {
-  color: var(--text-muted);
-  font-size: 8.5px;
-}
-
-/* Memory uses the drawer's single scroll container so long text can always be reached. */
+/* Memory must use only the drawer scroll container so every line remains reachable. */
 .memory-summary-container {
+  flex: 0 0 auto;
   max-height: none !important;
   overflow: visible !important;
   padding-right: 0;
@@ -3655,318 +3547,57 @@ body {
 
 .memory-summary-box {
   flex: 0 0 auto;
+  overflow: visible !important;
+}
+
+.memory-box-text,
+.memory-box-subtext,
+.memory-checklist-item > span:last-child,
+.memory-fact-chip,
+.memory-fact-chip span {
+  max-width: 100%;
   overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .memory-box-text {
-  font-size: 12px;
   line-height: 1.58;
-  white-space: normal;
 }
 
-.memory-box-subtext {
-  font-size: 10.5px;
-  line-height: 1.55;
-  white-space: normal;
+.memory-box-subtext,
+.memory-checklist-item,
+.memory-fact-chip {
+  line-height: 1.5;
 }
 
-.memory-collapsible {
-  padding: 0;
-}
-
-.memory-collapsible > summary {
-  min-height: 42px;
-  padding: 10px 11px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  list-style: none;
-  cursor: pointer;
-  color: var(--text-gold);
-  font-size: 10.5px;
-  font-weight: 700;
-}
-
-.memory-collapsible > summary::-webkit-details-marker {
-  display: none;
-}
-
-.memory-collapsible > summary::before {
-  content: "›";
-  flex: 0 0 auto;
-  font-size: 14px;
-  transition: transform 0.16s ease;
-}
-
-.memory-collapsible[open] > summary::before {
-  transform: rotate(90deg);
-}
-
-.memory-collapsible > summary > span:first-of-type {
-  flex: 1;
-  min-width: 0;
-}
-
-.memory-summary-count {
-  flex: 0 0 auto;
-  color: var(--text-muted);
-  font: 500 8.5px var(--font-mono);
-}
-
-.memory-collapsible .memory-checklist,
-.memory-collapsible .memory-facts-tags {
-  padding: 0 11px 11px;
+.memory-facts-tags {
+  width: 100%;
+  flex-direction: column;
+  flex-wrap: nowrap;
 }
 
 .memory-fact-chip {
-  overflow: visible !important;
-  font-size: 10px;
-  line-height: 1.55;
-}
-
-.runtime-toolbar {
-  display: flex;
+  width: 100%;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 9px;
 }
 
-.runtime-toolbar .runtime-intro {
-  flex: 1;
-  margin: 0;
+/* Put the primary update action before long status/progress details so it never sinks below the fold. */
+.update-card-actions-prominent {
+  position: relative;
+  z-index: 2;
+  margin-top: -1px;
 }
 
-.runtime-refresh-btn {
-  width: auto;
-  flex: 0 0 auto;
-  padding-inline: 10px;
-}
-
-.runtime-footer {
-  justify-content: space-between;
-}
-
-.runtime-footer-hint {
-  text-align: right;
-}
-
-.settings-drawer-content {
-  scroll-behavior: smooth;
-}
-
-.settings-quick-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
-}
-
-.settings-quick-actions button {
-  min-width: 0;
-  min-height: 55px;
-  padding: 9px 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 3px;
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  background: var(--glass-inset);
-  color: var(--text-main);
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.16s ease;
-}
-
-.settings-quick-actions button:hover:not(:disabled) {
-  border-color: var(--glass-border-strong);
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.settings-quick-actions button strong {
-  color: var(--gold-light);
-  font-size: 10.5px;
-}
-
-.settings-quick-actions button span {
-  color: var(--text-muted);
-  font-size: 9px;
-  line-height: 1.3;
-}
-
-.settings-quick-actions .update-check-quick-action {
-  border-color: rgba(230, 186, 80, 0.44);
-  background: rgba(230, 186, 80, 0.08);
-}
-
-.settings-quick-actions button:disabled {
-  opacity: 0.55;
-  cursor: progress;
-}
-
-.settings-jump-nav {
-  position: sticky;
-  top: -1px;
-  z-index: 4;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  padding: 5px;
-  border: 1px solid var(--glass-border);
-  border-radius: 9px;
-  background: rgba(18, 19, 22, 0.94);
-  backdrop-filter: blur(12px);
-}
-
-.settings-jump-nav button {
-  min-width: 0;
-  min-height: 30px;
-  padding: 5px 4px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font: 600 8.5px var(--font-sans);
-  cursor: pointer;
-}
-
-.settings-jump-nav button:hover {
-  color: var(--gold-light);
-  background: rgba(230, 186, 80, 0.08);
-}
-
-.settings-section-anchor {
-  scroll-margin-top: 48px;
-}
-
-.settings-section-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 5px 1px 0;
-}
-
-.settings-section-heading > span {
-  color: var(--gold-light);
-  font-size: 10.5px;
-  font-weight: 700;
-}
-
-.settings-section-heading > small {
-  color: var(--text-muted);
-  font-size: 9px;
-  line-height: 1.35;
-}
-
-/* Keep the update action unmistakable even when the detailed update card is long. */
-.update-card-actions {
-  position: sticky;
-  bottom: -1px;
-  z-index: 3;
-  padding-top: 8px;
-  background: linear-gradient(to top, rgba(14, 15, 18, 0.98) 72%, transparent);
-}
-
-.btn-update-primary {
+.update-card-actions-prominent .btn-update-primary {
   min-height: 42px;
   font-size: 11.5px;
 }
 
-@media (max-width: 395px) {
-  .drawer-menu-tabs button {
-    gap: 2px;
-    font-size: 8.5px;
+@media (max-height: 620px) {
+  .drawer-card {
+    max-height: calc(100vh - 8px);
+    padding-bottom: 12px;
   }
-
-  .drawer-menu-tabs button > span:first-child {
-    display: none;
-  }
-
-  .settings-quick-actions {
-    grid-template-columns: 1fr;
-  }
-}
-
-.memory-drawer-card {
-  max-height: 90%;
-}
-
-.memory-drawer-card .drawer-content {
-  padding-bottom: 10px;
-}
-
-.memory-drawer-card .drawer-content::-webkit-scrollbar,
-.settings-drawer-content::-webkit-scrollbar,
-.runtime-scroll::-webkit-scrollbar {
-  width: 7px;
-}
-
-.memory-drawer-card .drawer-content::-webkit-scrollbar-thumb,
-.settings-drawer-content::-webkit-scrollbar-thumb,
-.runtime-scroll::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(230, 186, 80, 0.28);
-}
-
-.memory-context-details {
-  margin-top: 2px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding-top: 6px;
-}
-
-.memory-context-details > summary,
-.memory-danger-zone > summary {
-  cursor: pointer;
-  color: var(--text-gold);
-  font-size: 9.5px;
-  font-weight: 600;
-  list-style: none;
-}
-
-.memory-context-details > summary::-webkit-details-marker,
-.memory-danger-zone > summary::-webkit-details-marker {
-  display: none;
-}
-
-.memory-context-details > summary::before,
-.memory-danger-zone > summary::before {
-  content: "›";
-  display: inline-block;
-  margin-right: 6px;
-  transition: transform 0.16s ease;
-}
-
-.memory-context-details[open] > summary::before,
-.memory-danger-zone[open] > summary::before {
-  transform: rotate(90deg);
-}
-
-.memory-context-details .memory-box-subtext {
-  margin-top: 7px;
-  padding: 8px 9px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.memory-primary-actions {
-  margin-top: 2px;
-}
-
-.memory-danger-zone {
-  flex: 0 0 auto;
-  padding: 7px 9px;
-  border: 1px solid rgba(239, 68, 68, 0.16);
-  border-radius: 9px;
-  background: rgba(239, 68, 68, 0.025);
-}
-
-.memory-danger-zone > summary {
-  color: rgba(252, 165, 165, 0.8);
-}
-
-.memory-danger-zone .btn-drawer-action {
-  width: 100%;
-  margin-top: 8px;
 }
