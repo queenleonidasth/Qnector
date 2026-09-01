@@ -88,12 +88,12 @@ export class DesktopUpdater {
       }
     }
 
+    let updateArtifacts:
+      { scriptPath: string; readyPath: string; logPath: string } | undefined;
     try {
-      const scriptPath = await createUpdateScript({
+      updateArtifacts = await createUpdateScript({
         mode: this.state.mode,
         processId: process.pid,
-        launcherProcessId:
-          this.state.mode === "portable" ? process.ppid : undefined,
         sourcePath: this.downloadedPath,
         targetExecutable,
       });
@@ -109,7 +109,7 @@ export class DesktopUpdater {
           "-ExecutionPolicy",
           "Bypass",
           "-File",
-          scriptPath,
+          updateArtifacts.scriptPath,
         ],
         {
           detached: true,
@@ -118,6 +118,7 @@ export class DesktopUpdater {
         },
       );
       await waitForSpawn(child);
+      await waitForHelperReady(updateArtifacts.readyPath, child, 5_000);
       child.unref();
       this.setState({
         ...this.state,
@@ -129,12 +130,18 @@ export class DesktopUpdater {
             ? "Restarting Qnector and replacing the portable executable…"
             : "Restarting Qnector and installing the new version…",
       });
-      // Quit only after Windows confirms the detached apply-update helper was
-      // actually created. spawn() reports ENOENT asynchronously.
+      // Quit only after the helper has executed the script far enough to write
+      // its handshake file. This catches PowerShell startup/script failures.
       setTimeout(() => app.quit(), 200);
       return this.getState();
     } catch (error) {
-      return this.fail(`Could not start updater: ${errorMessage(error)}`);
+      return this.fail(
+        `Could not start updater: ${errorMessage(error)}${
+          updateArtifacts?.logPath
+            ? ` Update log: ${updateArtifacts.logPath}`
+            : ""
+        }`,
+      );
     }
   }
 
@@ -360,24 +367,27 @@ async function assertPortableTargetWritable(target: string): Promise<void> {
 async function createUpdateScript(input: {
   mode: DesktopUpdateMode;
   processId: number;
-  launcherProcessId?: number;
   sourcePath: string;
   targetExecutable: string;
-}): Promise<string> {
+}): Promise<{ scriptPath: string; readyPath: string; logPath: string }> {
   const scriptPath = path.join(
     app.getPath("temp"),
     `qnector-apply-update-${randomUUID()}.ps1`,
   );
-  const logPath = path.join(path.dirname(input.sourcePath), "apply-update.log");
+  const updateDir = path.dirname(input.sourcePath);
+  const logPath = path.join(updateDir, "apply-update.log");
+  const readyPath = path.join(updateDir, "apply-update.ready");
   await rm(logPath, { force: true }).catch(() => undefined);
+  await rm(readyPath, { force: true }).catch(() => undefined);
   const script = buildWindowsUpdateScript({
     ...input,
     logPath,
+    readyPath,
   });
   // Windows PowerShell 5 treats UTF-8 without a BOM as the legacy code page.
   // Add one so update paths containing non-ASCII names remain safe.
   await writeFile(scriptPath, `\uFEFF${script}`, "utf8");
-  return scriptPath;
+  return { scriptPath, readyPath, logPath };
 }
 
 async function resolveWindowsPowerShell(): Promise<string> {
@@ -425,6 +435,28 @@ function waitForSpawn(child: ReturnType<typeof spawn>): Promise<void> {
     child.once("spawn", onSpawn);
     child.once("error", onError);
   });
+}
+
+async function waitForHelperReady(
+  readyPath: string,
+  child: ReturnType<typeof spawn>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await access(readyPath, constants.F_OK);
+      return;
+    } catch {
+      if (child.exitCode !== null) {
+        throw new Error(
+          `Update helper exited before handshake (code ${child.exitCode}).`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+  }
+  throw new Error("Update helper did not confirm readiness within 5 seconds.");
 }
 
 function errorMessage(error: unknown): string {

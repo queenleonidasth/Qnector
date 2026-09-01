@@ -3,10 +3,10 @@ import type { DesktopUpdateMode } from "../updater-types.js";
 export interface WindowsUpdateScriptInput {
   mode: DesktopUpdateMode;
   processId: number;
-  launcherProcessId?: number;
   sourcePath: string;
   targetExecutable: string;
   logPath: string;
+  readyPath: string;
 }
 
 export function buildWindowsUpdateScript(
@@ -15,18 +15,15 @@ export function buildWindowsUpdateScript(
   const source = psQuote(input.sourcePath);
   const target = psQuote(input.targetExecutable);
   const log = psQuote(input.logPath);
-  const launcherProcessId =
-    input.mode === "portable" && input.launcherProcessId
-      ? input.launcherProcessId
-      : 0;
+  const ready = psQuote(input.readyPath);
 
   const lines = [
     "$ErrorActionPreference = 'Stop'",
     `$processIdToWaitFor = ${input.processId}`,
-    `$launcherProcessIdToWaitFor = ${launcherProcessId}`,
     `$source = ${source}`,
     `$target = ${target}`,
     `$log = ${log}`,
+    `$ready = ${ready}`,
     "function Write-UpdateLog([string]$message) {",
     "  try {",
     "    $timestamp = Get-Date -Format 'o'",
@@ -39,13 +36,34 @@ export function buildWindowsUpdateScript(
     "  try { Wait-Process -Id $id -ErrorAction SilentlyContinue } catch {}",
     '  Write-UpdateLog "$label PID $id has exited"',
     "}",
+    "function Start-QnectorTarget {",
+    "  $workingDirectory = Split-Path -Parent $target",
+    "  for ($launchAttempt = 1; $launchAttempt -le 5; $launchAttempt++) {",
+    "    try {",
+    "      $launched = Start-Process -FilePath $target -WorkingDirectory $workingDirectory -PassThru",
+    '      Write-UpdateLog "Launch attempt $launchAttempt started PID $($launched.Id)"',
+    "      Start-Sleep -Milliseconds 1200",
+    "      $stillRunning = Get-Process -Id $launched.Id -ErrorAction SilentlyContinue",
+    "      if ($null -ne $stillRunning) {",
+    "        Write-UpdateLog 'Updated Qnector process is still running after launch verification'",
+    "        return",
+    "      }",
+    '      Write-UpdateLog "Launch attempt $launchAttempt exited too early"',
+    "    } catch {",
+    '      Write-UpdateLog "Launch attempt $launchAttempt failed: $($_.Exception.Message)"',
+    "    }",
+    "    Start-Sleep -Milliseconds 800",
+    "  }",
+    "  throw 'Qnector could not be relaunched after 5 attempts'",
+    "}",
     "try {",
     `  Write-UpdateLog ${psQuote(`Starting ${input.mode} update`)}`,
     '  Write-UpdateLog "Source: $source"',
     '  Write-UpdateLog "Target: $target"',
     '  if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Downloaded update is missing: $source" }',
+    "  Set-Content -LiteralPath $ready -Value 'ready' -Encoding ASCII -Force",
+    "  Write-UpdateLog 'Updater helper handshake ready'",
     "  Wait-ForQnectorProcess $processIdToWaitFor 'Electron'",
-    "  Wait-ForQnectorProcess $launcherProcessIdToWaitFor 'Portable launcher'",
     "  Start-Sleep -Milliseconds 350",
   ];
 
@@ -53,7 +71,7 @@ export function buildWindowsUpdateScript(
     lines.push(
       "  $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash",
       "  $replaced = $false",
-      "  for ($attempt = 1; $attempt -le 40; $attempt++) {",
+      "  for ($attempt = 1; $attempt -le 60; $attempt++) {",
       "    try {",
       "      Copy-Item -LiteralPath $source -Destination $target -Force",
       "      $replaced = $true",
@@ -61,7 +79,7 @@ export function buildWindowsUpdateScript(
       "      break",
       "    } catch {",
       '      Write-UpdateLog "Replace attempt $attempt failed: $($_.Exception.Message)"',
-      "      if ($attempt -ge 40) { throw }",
+      "      if ($attempt -ge 60) { throw }",
       "      Start-Sleep -Milliseconds 500",
       "    }",
       "  }",
@@ -69,23 +87,23 @@ export function buildWindowsUpdateScript(
       "  $targetHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash",
       '  if ($sourceHash -ne $targetHash) { throw "Updated executable SHA-256 mismatch: expected $sourceHash, got $targetHash" }',
       '  Write-UpdateLog "SHA-256 verified after replacement: $targetHash"',
-      "  Start-Process -FilePath $target",
-      "  Write-UpdateLog 'Updated portable Qnector launched successfully'",
+      "  Start-Sleep -Milliseconds 700",
+      "  Start-QnectorTarget",
     );
   } else {
     lines.push(
       "  Write-UpdateLog 'Launching NSIS installer'",
       "  $installer = Start-Process -FilePath $source -ArgumentList '/S' -Wait -PassThru",
       '  if ($installer.ExitCode -ne 0) { throw "Installer exited with code $($installer.ExitCode)" }',
-      "  Start-Sleep -Milliseconds 500",
+      "  Start-Sleep -Milliseconds 700",
       '  if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Installed executable is missing: $target" }',
-      "  Start-Process -FilePath $target",
-      "  Write-UpdateLog 'Updated installed Qnector launched successfully'",
+      "  Start-QnectorTarget",
     );
   }
 
   lines.push(
     "  Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue",
+    "  Remove-Item -LiteralPath $ready -Force -ErrorAction SilentlyContinue",
     "  Write-UpdateLog 'Update completed successfully'",
     "  Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue",
     "  exit 0",
@@ -94,7 +112,7 @@ export function buildWindowsUpdateScript(
     "  Write-UpdateLog $_.ScriptStackTrace",
     "  if (Test-Path -LiteralPath $target -PathType Leaf) {",
     "    try {",
-    "      Start-Process -FilePath $target",
+    "      Start-QnectorTarget",
     "      Write-UpdateLog 'Recovery launch of the existing Qnector executable succeeded'",
     "    } catch {",
     '      Write-UpdateLog "Recovery launch failed: $($_.Exception.Message)"',
