@@ -2123,39 +2123,47 @@ function App(): React.ReactElement {
                         )}
                       </div>
 
-                      <div className="update-status-panel">
+                      <div
+                        className={`update-status-panel ${
+                          updateState?.phase === "downloading"
+                            ? "downloading"
+                            : ""
+                        }`}
+                      >
                         <span className="update-status-panel-icon">
                           {updatePhaseIcon}
                         </span>
-                        <div>
-                          <strong>{updatePhaseLabel}</strong>
-                          <p>
-                            {updateState?.message ??
-                              "Qnector checks GitHub Releases for new versions."}
-                          </p>
+                        <div className="update-status-panel-copy">
+                          {updateState?.phase === "downloading" ? (
+                            <div className="update-progress-inline">
+                              <div className="update-progress-inline-heading">
+                                <strong>Downloading update</strong>
+                                <span>{updateProgressPercent}%</span>
+                              </div>
+                              <div className="update-progress-track">
+                                <span
+                                  style={{ width: `${updateProgressPercent}%` }}
+                                />
+                              </div>
+                              <div className="update-progress-inline-meta">
+                                <span>
+                                  {formatBytes(updateState.bytesDownloaded)} /{" "}
+                                  {formatBytes(updateState.totalBytes)}
+                                </span>
+                                <span>Verify after download</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <strong>{updatePhaseLabel}</strong>
+                              <p>
+                                {updateState?.message ??
+                                  "Qnector checks GitHub Releases for new versions."}
+                              </p>
+                            </>
+                          )}
                         </div>
                       </div>
-
-                      {updateState?.phase === "downloading" && (
-                        <div className="update-progress-wrap">
-                          <div className="update-progress-heading">
-                            <strong>Downloading update</strong>
-                            <span>{updateProgressPercent}%</span>
-                          </div>
-                          <div className="update-progress-track">
-                            <span
-                              style={{ width: `${updateProgressPercent}%` }}
-                            />
-                          </div>
-                          <div className="update-progress-meta">
-                            <span>
-                              {formatBytes(updateState.bytesDownloaded)} /{" "}
-                              {formatBytes(updateState.totalBytes)}
-                            </span>
-                            <span>Verified after download</span>
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     {/* Tunnel Mode Card */}

@@ -89,13 +89,19 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).toContain(".catch((reason: unknown) =>");
   });
 
-  it("places the update action before long status and progress content", () => {
+  it("keeps download progress inside the existing update status panel", () => {
     const actionIndex = renderer.indexOf("update-card-actions-prominent");
-    const statusIndex = renderer.indexOf('className="update-status-panel"');
-    const progressIndex = renderer.indexOf('className="update-progress-wrap"');
+    const statusIndex = renderer.indexOf("className={`update-status-panel");
+    const progressIndex = renderer.indexOf(
+      'className="update-progress-inline"',
+    );
     expect(actionIndex).toBeGreaterThan(0);
-    expect(actionIndex).toBeLessThan(statusIndex);
-    expect(actionIndex).toBeLessThan(progressIndex);
+    expect(statusIndex).toBeGreaterThan(actionIndex);
+    expect(progressIndex).toBeGreaterThan(statusIndex);
+    expect(renderer).not.toContain('className="update-progress-wrap"');
+    expect(styles).toContain(".update-status-panel.downloading");
+    expect(styles).toContain(".update-progress-inline");
+    expect(styles).toContain(".update-progress-inline-meta");
   });
 
   it("keeps all memory sections rendered without slicing facts or task steps", () => {
