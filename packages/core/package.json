@@ -19,6 +19,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./performance-monitor": {
+      "types": "./dist/performance-monitor.d.ts",
+      "import": "./dist/performance-monitor.js"
     }
   },
   "scripts": {

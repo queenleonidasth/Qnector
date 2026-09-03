@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, open, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ActivityEntry, ToolError } from "@qnector/shared";
@@ -29,14 +29,15 @@ export class ActivityLogger {
     private readonly file: string,
     private readonly maxEntries = 500,
     private readonly maxFileBytes = 10_000_000,
+    public readonly nonBlockingWrites = false,
   ) {}
 
   public async load(): Promise<ActivityEntry[]> {
     this.entries.length = 0;
     try {
-      const raw = await readFile(this.file, "utf8");
-      this.persistedBytes = Buffer.byteLength(raw, "utf8");
-      for (const line of raw
+      const tail = await readActivityTail(this.file, this.maxEntries);
+      this.persistedBytes = tail.sizeBytes;
+      for (const line of tail.text
         .split(/\r?\n/)
         .filter(Boolean)
         .slice(-this.maxEntries)) {
@@ -146,6 +147,66 @@ export class ActivityLogger {
     return entry;
   }
 
+  /**
+   * Records activity in memory and publishes it immediately while persistence
+   * continues through the existing serialized write queue. Tool execution uses
+   * this path so disk latency is never on the critical path; shutdown flush()
+   * still guarantees queued entries are persisted.
+   */
+  public recordBuffered(
+    input: Omit<ActivityEntry, "id" | "timestamp"> & {
+      id?: string;
+      timestamp?: string;
+    },
+  ): ActivityEntry {
+    const entry: ActivityEntry = {
+      id: input.id ?? randomUUID(),
+      timestamp: input.timestamp ?? new Date().toISOString(),
+      tool: input.tool,
+      action: input.action,
+      argsSummary: sanitizeArgsSummary(input.argsSummary),
+      status: input.status,
+      ...(input.durationMs === undefined
+        ? {}
+        : { durationMs: input.durationMs }),
+      ...(input.outputSize === undefined
+        ? {}
+        : { outputSize: input.outputSize }),
+      ...(input.summary === undefined
+        ? {}
+        : { summary: sanitizeText(input.summary).value }),
+      ...(input.error === undefined
+        ? {}
+        : { error: sanitizeValue(input.error).value as ToolError }),
+    };
+    this.entries.push(entry);
+    while (this.entries.length > this.maxEntries) this.entries.shift();
+    const line = `${JSON.stringify(entry)}\n`;
+    void this.enqueuePersist(line, Buffer.byteLength(line, "utf8")).catch(
+      () => undefined,
+    );
+    const event = { type: "activity:new" as const, entry };
+    for (const listener of this.listeners) listener(event);
+    return entry;
+  }
+
+  public errorBuffered(
+    tool: string,
+    action: string,
+    argsSummary: string,
+    error: ToolError,
+    durationMs: number,
+  ): ActivityEntry {
+    return this.recordBuffered({
+      tool,
+      action,
+      argsSummary,
+      status: "error",
+      error,
+      durationMs,
+    });
+  }
+
   private async compactFile(
     entries: readonly ActivityEntry[] = this.entries,
   ): Promise<void> {
@@ -226,6 +287,55 @@ export class ActivityLogger {
       error,
       durationMs,
     });
+  }
+}
+
+async function readActivityTail(
+  file: string,
+  maxEntries: number,
+): Promise<{ text: string; sizeBytes: number }> {
+  const info = await stat(file);
+  if (info.size === 0) return { text: "", sizeBytes: 0 };
+  const maxReadBytes = Math.min(
+    info.size,
+    Math.max(512_000, Math.min(4_000_000, maxEntries * 4_096)),
+  );
+  const handle = await open(file, "r");
+  try {
+    const chunks: Buffer[] = [];
+    let position = info.size;
+    let readBytes = 0;
+    let newlineCount = 0;
+    while (
+      position > 0 &&
+      readBytes < maxReadBytes &&
+      newlineCount <= maxEntries
+    ) {
+      const chunkBytes = Math.min(
+        128 * 1024,
+        position,
+        maxReadBytes - readBytes,
+      );
+      position -= chunkBytes;
+      const buffer = Buffer.allocUnsafe(chunkBytes);
+      const result = await handle.read(buffer, 0, chunkBytes, position);
+      const chunk = buffer.subarray(0, result.bytesRead);
+      chunks.unshift(chunk);
+      readBytes += result.bytesRead;
+      for (let index = 0; index < chunk.length; index += 1)
+        if (chunk[index] === 0x0a) newlineCount += 1;
+    }
+    let text = Buffer.concat(chunks).toString("utf8");
+    // A bounded tail may begin in the middle of a JSONL record (or UTF-8 code
+    // point). Drop that partial first record; all complete trailing records are
+    // retained and parsed normally.
+    if (position > 0) {
+      const firstNewline = text.indexOf("\n");
+      text = firstNewline >= 0 ? text.slice(firstNewline + 1) : "";
+    }
+    return { text, sizeBytes: info.size };
+  } finally {
+    await handle.close();
   }
 }
 

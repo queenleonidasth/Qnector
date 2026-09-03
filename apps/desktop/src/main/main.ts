@@ -11,11 +11,17 @@ import {
   Tray,
 } from "electron";
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, configPath, QNECTOR_VERSION } from "@qnector/core";
-import { QnectorRuntime } from "@qnector/mcp-server";
+import {
+  loadConfig,
+  configDirectory,
+  configPath,
+  QNECTOR_VERSION,
+} from "@qnector/core/config";
+import { qnectorPerformance } from "@qnector/core/performance-monitor";
+import type { QnectorRuntime } from "@qnector/mcp-server";
 import {
   CloudflareNamedAdapter,
   CloudflareQuickAdapter,
@@ -47,6 +53,9 @@ const WINDOWS_APP_ID = WINDOWS_LOGIN_ITEM_NAME;
 let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let runtime: QnectorRuntime | undefined;
+let runtimeReadyPromise: Promise<QnectorRuntime> | undefined;
+let bootstrapConfig: QnectorConfig | undefined;
+const desktopStartedAt = new Date().toISOString();
 let transport: TransportAdapter | undefined;
 let updater: DesktopUpdater | undefined;
 let isQuitting = false;
@@ -63,46 +72,87 @@ type ConfigPatch = {
 };
 
 export async function bootstrap(): Promise<void> {
+  qnectorPerformance.mark("desktop-bootstrap-start");
+  const startupProbe = process.env.QNECTOR_STARTUP_PROBE === "1";
   if (process.platform === "win32") app.setAppUserModelId(WINDOWS_APP_ID);
-  if (!app.requestSingleInstanceLock()) {
+  if (!startupProbe && !app.requestSingleInstanceLock()) {
     app.quit();
     return;
   }
-  app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+  if (!startupProbe)
+    app.on("second-instance", () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
   await app.whenReady();
+  qnectorPerformance.mark("electron-ready");
   const config = await loadConfig({
     file: configPath(),
     ...(process.env.QNECTOR_WORKSPACE
       ? { workspace: process.env.QNECTOR_WORKSPACE }
       : {}),
   });
-  runtime = new QnectorRuntime({
-    config,
-    configFile: configPath(),
-    platform: new ElectronPlatformServices(),
-  });
-  await runtime.start();
+  bootstrapConfig = config;
+  qnectorPerformance.mark("config-loaded");
   updater = new DesktopUpdater((state) => broadcast("updater:state", state));
-  applyLoginItemSetting(config);
   registerIpc();
-  runtime.activity.subscribe((event) => broadcast("activity:new", event.entry));
-  runtime.processManager.subscribeAll((snapshot) =>
-    broadcast("process:update", snapshot),
-  );
+  if (startupProbe) {
+    createWindow();
+    qnectorPerformance.mark("window-created");
+    const probeFile = process.env.QNECTOR_STARTUP_PROBE_FILE?.trim();
+    if (probeFile)
+      await writeFile(
+        path.resolve(probeFile),
+        `${JSON.stringify(qnectorPerformance.snapshot(), null, 2)}\n`,
+        "utf8",
+      ).catch(() => undefined);
+    setTimeout(() => app.exit(0), 200);
+    return;
+  }
+  applyLoginItemSetting(config);
+  // Begin importing/starting the heavy MCP runtime, but do not put it on the
+  // BrowserWindow critical path. IPC actions that require it await this promise.
+  runtimeReadyPromise = initializeRuntime(config);
+  void runtimeReadyPromise.catch(() => undefined);
   createWindow();
+  qnectorPerformance.mark("window-created");
   createTray();
   setTimeout(() => void updater?.check(), 4_000);
   applyGlobalShortcut(config);
-  transport = makeTransport(config);
+  schedulePortableCacheCleanup();
+}
+
+async function initializeRuntime(
+  config: QnectorConfig,
+): Promise<QnectorRuntime> {
+  const importStarted = Date.now();
+  const { QnectorRuntime: Runtime } = await import("@qnector/mcp-server");
+  qnectorPerformance.mark("mcp-runtime-imported", {
+    importMs: Date.now() - importStarted,
+  });
+  const instance = new Runtime({
+    config,
+    configFile: configPath(),
+    platform: new ElectronPlatformServices(),
+    nonBlockingActivityWrites: true,
+  });
+  runtime = instance;
+  instance.activity.subscribe((event) =>
+    broadcast("activity:new", event.entry),
+  );
+  instance.processManager.subscribeAll((snapshot) =>
+    broadcast("process:update", snapshot),
+  );
+  await instance.start();
+  qnectorPerformance.mark("mcp-runtime-ready");
+  transport = makeTransport(instance.getConfig());
   transport.onState((snapshot) =>
     broadcast("bridge:state", statusWithBridge(snapshot)),
   );
+  broadcast("runtime:ready", createBootstrapSnapshot());
   broadcast("bridge:state", statusWithBridge(transport.getSnapshot()));
   if (config.ui.setupCompleted !== false) {
     void connectBridge().catch((error: unknown) => {
@@ -125,6 +175,13 @@ export async function bootstrap(): Promise<void> {
       }),
     );
   }
+  return instance;
+}
+
+async function requireRuntime(): Promise<QnectorRuntime> {
+  if (runtime) return runtime;
+  if (runtimeReadyPromise) return runtimeReadyPromise;
+  throw new Error("RUNTIME_NOT_READY: Qnector runtime has not started");
 }
 
 function getResourcePath(relativePath: string): string {
@@ -156,7 +213,13 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    show: !runtime?.getConfig().ui.startMinimized,
+    show:
+      process.env.QNECTOR_STARTUP_PROBE !== "1" &&
+      process.env.QNECTOR_START_HIDDEN !== "1" &&
+      !(
+        runtime?.getConfig().ui.startMinimized ??
+        bootstrapConfig?.ui.startMinimized
+      ),
   });
   if (process.platform === "win32") {
     mainWindow.setAppDetails({
@@ -167,7 +230,7 @@ function createWindow(): void {
   }
   void mainWindow.loadFile(path.join(currentDir, "../../index.html"));
   mainWindow.on("close", (event) => {
-    const config = runtime?.getConfig();
+    const config = runtime?.getConfig() ?? bootstrapConfig;
     if (!isQuitting && config?.ui.minimizeToTray) {
       event.preventDefault();
       mainWindow?.hide();
@@ -227,15 +290,19 @@ function createTray(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("app:bootstrap", () => createBootstrapSnapshot());
   ipcMain.handle("status:get", () =>
     statusWithBridge(
       transport?.getSnapshot() ?? {
         state: "disconnected",
-        mode: runtime?.getConfig().transport.mode ?? "local-only",
+        mode:
+          runtime?.getConfig().transport.mode ??
+          bootstrapConfig?.transport.mode ??
+          "local-only",
       },
     ),
   );
-  ipcMain.handle("config:get", () => runtime?.getConfig());
+  ipcMain.handle("config:get", () => runtime?.getConfig() ?? bootstrapConfig);
   ipcMain.handle("setup:inspect", () => inspectConnectionSetup());
   ipcMain.handle("updater:get-state", () => updater?.getState());
   ipcMain.handle("updater:check", () => updater?.check());
@@ -253,8 +320,16 @@ function registerIpc(): void {
     updateConfig(patch),
   );
   ipcMain.handle("activity:list", () => runtime?.activity.list() ?? []);
-  ipcMain.handle("memory:call", (_event, input: Record<string, unknown>) =>
-    runtime!.registry.call("memory", runtime!.context(), input),
+  ipcMain.handle(
+    "memory:call",
+    async (_event, input: Record<string, unknown>) => {
+      const activeRuntime = await requireRuntime();
+      return activeRuntime.registry.call(
+        "memory",
+        activeRuntime.context(),
+        input,
+      );
+    },
   );
   ipcMain.handle(
     "tool:call",
@@ -270,7 +345,10 @@ function registerIpc(): void {
         | "browser"
         | "computer",
       input: Record<string, unknown>,
-    ) => runtime!.registry.call(tool, runtime!.context(), input),
+    ) =>
+      requireRuntime().then((activeRuntime) =>
+        activeRuntime.registry.call(tool, activeRuntime.context(), input),
+      ),
   );
   ipcMain.handle(
     "activity:export",
@@ -290,10 +368,18 @@ function registerIpc(): void {
       maxChars = 20_000,
       outputMode: "raw" | "smart" = "raw",
     ) =>
-      runtime!.processManager.output(processId, cursor, maxChars, outputMode),
+      requireRuntime().then((activeRuntime) =>
+        activeRuntime.processManager.output(
+          processId,
+          cursor,
+          maxChars,
+          outputMode,
+        ),
+      ),
   );
   ipcMain.handle("process:stop", async (_event, processId: string) => {
-    const snapshot = await runtime!.processManager.stop(processId);
+    const activeRuntime = await requireRuntime();
+    const snapshot = await activeRuntime.processManager.stop(processId);
     broadcast("process:update", snapshot);
     return snapshot;
   });
@@ -313,7 +399,9 @@ function registerIpc(): void {
   ipcMain.handle("system:open-terminal", (_event, target: string) =>
     openTerminalWindow(
       path.resolve(target),
-      runtime?.getConfig().shell.powershellPath ?? "powershell.exe",
+      runtime?.getConfig().shell.powershellPath ??
+        bootstrapConfig?.shell.powershellPath ??
+        "powershell.exe",
     ),
   );
   ipcMain.handle("system:open-url", (_event, url: string) =>
@@ -322,8 +410,16 @@ function registerIpc(): void {
 }
 
 async function connectBridge(): Promise<TransportSnapshot> {
-  if (!transport) transport = makeTransport(runtime!.getConfig());
+  const activeRuntime = await requireRuntime();
+  if (!transport) transport = makeTransport(activeRuntime.getConfig());
+  const started = Date.now();
   const snapshot = await transport.start();
+  const durationMs = Date.now() - started;
+  qnectorPerformance.operation("bridge", "connect", durationMs);
+  qnectorPerformance.mark("bridge-connected", {
+    mode: snapshot.mode,
+    durationMs,
+  });
   broadcast("bridge:state", statusWithBridge(snapshot));
   return snapshot;
 }
@@ -334,7 +430,8 @@ async function disconnectBridge(): Promise<void> {
 }
 
 async function updateConfig(patch: ConfigPatch): Promise<QnectorConfig> {
-  const current = runtime!.getConfig();
+  const activeRuntime = await requireRuntime();
+  const current = activeRuntime.getConfig();
   const localPort = patch.localPort ?? current.localPort;
   if (!Number.isInteger(localPort) || localPort < 1 || localPort > 65_535)
     throw new Error(
@@ -357,10 +454,11 @@ async function updateConfig(patch: ConfigPatch): Promise<QnectorConfig> {
     transportChanged || serverChanged ? makeTransport(next) : undefined;
 
   if (nextTransport) await transport?.stop();
-  if (serverChanged) await runtime!.stop();
-  await runtime!.setConfig(next);
+  if (serverChanged) await activeRuntime.stop();
+  await activeRuntime.setConfig(next);
+  bootstrapConfig = next;
   if (serverChanged)
-    await runtime!.start({ host: next.host, port: next.localPort });
+    await activeRuntime.start({ host: next.host, port: next.localPort });
   if (nextTransport) {
     transport = nextTransport;
     transport.onState((snapshot) =>
@@ -423,9 +521,11 @@ async function exportMemory(
 }
 
 async function copyUrl(): Promise<string> {
+  const config = runtime?.getConfig() ?? bootstrapConfig;
+  if (!config) throw new Error("RUNTIME_NOT_READY: configuration unavailable");
   const url =
     transport?.getSnapshot().publicUrl ??
-    localMcpUrl(runtime!.getConfig().host, runtime!.getConfig().localPort);
+    localMcpUrl(config.host, config.localPort);
   clipboard.writeText(url);
   return url;
 }
@@ -433,21 +533,25 @@ async function copyUrl(): Promise<string> {
 async function chooseWorkspace(): Promise<
   ReturnType<QnectorRuntime["status"]>
 > {
-  if (!mainWindow) return runtime!.status();
+  const activeRuntime = await requireRuntime();
+  if (!mainWindow) return activeRuntime.status();
   const selection = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory", "createDirectory"],
   });
-  if (selection.canceled || !selection.filePaths[0]) return runtime!.status();
+  if (selection.canceled || !selection.filePaths[0])
+    return activeRuntime.status();
   return setWorkspace(selection.filePaths[0]);
 }
 
 async function setWorkspace(
   workspace: string,
 ): Promise<ReturnType<QnectorRuntime["status"]>> {
-  const next = await runtime!.workspace.set(workspace);
-  await runtime!.setConfig(next);
+  const activeRuntime = await requireRuntime();
+  const next = await activeRuntime.workspace.set(workspace);
+  await activeRuntime.setConfig(next);
+  bootstrapConfig = next;
   broadcast("bridge:state", statusWithBridge(transport?.getSnapshot()));
-  return runtime!.status();
+  return activeRuntime.status();
 }
 
 function makeTransport(config: QnectorConfig): TransportAdapter {
@@ -482,6 +586,11 @@ function makeTransport(config: QnectorConfig): TransportAdapter {
         profile: config.transport.openaiProfile,
         tunnelId: config.transport.openaiTunnelId,
         runtimeApiKey: config.transport.openaiRuntimeApiKey,
+        validationCacheFile: path.join(
+          configDirectory(),
+          "cache",
+          "openai-tunnel-validation.json",
+        ),
       });
     case "relay": {
       const relayBase = config.transport.relayUrl ?? "";
@@ -563,7 +672,8 @@ function inspectConnectionSetup(): {
   runtimeApiKeyConfigured: boolean;
   bridge: TransportSnapshot;
 } {
-  const config = runtime!.getConfig();
+  const config = runtime?.getConfig() ?? bootstrapConfig;
+  if (!config) throw new Error("RUNTIME_NOT_READY: configuration unavailable");
   const clientPath = resolveOpenAiTunnelClientExecutable(
     config.transport.openaiTunnelClientPath,
   );
@@ -584,13 +694,41 @@ function inspectConnectionSetup(): {
   };
 }
 
+function createBootstrapSnapshot() {
+  const config = runtime?.getConfig() ?? bootstrapConfig;
+  if (!config) throw new Error("RUNTIME_NOT_READY: configuration unavailable");
+  return {
+    status: statusWithBridge(transport?.getSnapshot()),
+    config,
+    activity: runtime?.activity.list() ?? [],
+    processes: runtime?.processManager.list() ?? [],
+    update: updater?.getState(),
+    runtimeReady: runtime?.status().state === "connected",
+  };
+}
+
 function statusWithBridge(snapshot: TransportSnapshot | undefined): ReturnType<
   QnectorRuntime["status"]
 > & {
   bridge: TransportSnapshot;
   publicUrl?: string;
 } {
-  const status = runtime!.status();
+  const config = runtime?.getConfig() ?? bootstrapConfig;
+  if (!config) throw new Error("RUNTIME_NOT_READY: configuration unavailable");
+  const status = runtime?.status() ?? {
+    name: "Qnector" as const,
+    version: QNECTOR_VERSION,
+    state: "connecting" as const,
+    host: config.host,
+    port: config.localPort,
+    localUrl: localMcpUrl(config.host, config.localPort),
+    deviceId: config.deviceId,
+    machineName: config.machineName,
+    activeWorkspace: config.activeWorkspace,
+    transport: config.transport.mode,
+    startedAt: desktopStartedAt,
+    processCount: 0,
+  };
   const bridge = snapshot ?? {
     state: "disconnected" as const,
     mode: status.transport,
@@ -601,6 +739,52 @@ function statusWithBridge(snapshot: TransportSnapshot | undefined): ReturnType<
     bridge,
     ...(bridge.publicUrl ? { publicUrl: bridge.publicUrl } : {}),
   };
+}
+
+function schedulePortableCacheCleanup(): void {
+  if (process.platform !== "win32" || !process.env.LOCALAPPDATA) return;
+  const root = path.join(process.env.LOCALAPPDATA, "Qnector", "PortableCache");
+  setTimeout(() => {
+    void (async () => {
+      let entries;
+      try {
+        entries = await readdir(root, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      const currentDir = path.dirname(process.execPath).toLowerCase();
+      const directories = (
+        await Promise.all(
+          entries
+            .filter((entry) => entry.isDirectory())
+            .map(async (entry) => {
+              const absolute = path.join(root, entry.name);
+              const info = await stat(absolute).catch(() => null);
+              return info ? { absolute, modifiedAt: info.mtimeMs } : null;
+            }),
+        )
+      )
+        .filter((entry): entry is { absolute: string; modifiedAt: number } =>
+          Boolean(entry),
+        )
+        .sort((a, b) => b.modifiedAt - a.modifiedAt);
+      const protectedPaths = new Set(
+        directories
+          .slice(0, 3)
+          .map((entry) => path.resolve(entry.absolute).toLowerCase()),
+      );
+      protectedPaths.add(currentDir);
+      const staleBefore = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      for (const entry of directories) {
+        const normalized = path.resolve(entry.absolute).toLowerCase();
+        if (protectedPaths.has(normalized) || entry.modifiedAt >= staleBefore)
+          continue;
+        await rm(entry.absolute, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+      }
+    })();
+  }, 20_000).unref?.();
 }
 
 function broadcast(channel: string, payload: unknown): void {
@@ -636,8 +820,12 @@ async function shutdown(): Promise<void> {
     globalShortcut.unregister(registeredShortcut);
     registeredShortcut = undefined;
   }
-  await transport?.stop().catch(() => undefined);
-  await runtime?.stop().catch(() => undefined);
+  const started = Date.now();
+  await Promise.all([
+    transport?.stop().catch(() => undefined),
+    runtime?.stop().catch(() => undefined),
+  ]);
+  qnectorPerformance.operation("lifecycle", "shutdown", Date.now() - started);
   tray?.destroy();
 }
 

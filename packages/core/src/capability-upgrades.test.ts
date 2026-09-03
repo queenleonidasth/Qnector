@@ -78,11 +78,8 @@ describe("P1-P10 capability upgrades", () => {
       `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(pidFile)}, String(process.pid));\nsetInterval(() => {}, 1000);\n`,
       "utf8",
     );
-    const isWindows = process.platform === "win32";
-    const shell = isWindows ? "powershell" : "direct";
-    const command = isWindows
-      ? `Set-Content -LiteralPath '${pidFile.replaceAll("'", "''")}' -Value $PID; Start-Sleep -Seconds 30`
-      : `"${process.execPath}" "${script}"`;
+    const shell = "direct";
+    const command = `"${process.execPath}" "${script}"`;
     const manager = new ProcessManager(shell);
     const result = await manager.run({
       command,

@@ -1,8 +1,17 @@
 import { app } from "electron";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { access, mkdir, open, rm, unlink, writeFile } from "node:fs/promises";
+import { constants, createReadStream } from "node:fs";
+import {
+  access,
+  mkdir,
+  open,
+  rename,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import type {
   DesktopUpdateMode,
@@ -251,39 +260,80 @@ export class DesktopUpdater {
       return this.fail("This build cannot download a self-update package.");
 
     const asset = this.asset;
+    const expectedSha256 = parseSha256Digest(asset.digest);
     const updateDir = path.join(
-      app.getPath("temp"),
-      "Qnector",
+      app.getPath("userData"),
       "updates",
       this.state.latestVersion || "latest",
     );
     const destination = path.join(updateDir, asset.name);
+    const partial = `${destination}.part`;
     await mkdir(updateDir, { recursive: true });
-    await rm(destination, { force: true }).catch(() => undefined);
-
-    this.setState({
-      ...this.state,
-      phase: "downloading",
-      progress: 0,
-      bytesDownloaded: 0,
-      totalBytes: asset.size,
-      canDownload: false,
-      canInstall: false,
-      message: `Downloading ${asset.name}…`,
-    });
 
     try {
+      if (
+        expectedSha256 &&
+        (await verifiedCachedAsset(destination, asset.size, expectedSha256))
+      ) {
+        this.downloadedPath = destination;
+        this.setState({
+          ...this.state,
+          phase: "downloaded",
+          progress: 1,
+          bytesDownloaded: asset.size,
+          totalBytes: asset.size,
+          canDownload: false,
+          canInstall: true,
+          message: "Verified update reused from local cache. Ready to restart.",
+        });
+        return this.getState();
+      }
+      await rm(destination, { force: true }).catch(() => undefined);
+
+      let resumeBytes = await stat(partial)
+        .then((info) => info.size)
+        .catch(() => 0);
+      if (resumeBytes < 0 || (asset.size > 0 && resumeBytes >= asset.size)) {
+        await rm(partial, { force: true }).catch(() => undefined);
+        resumeBytes = 0;
+      }
+
+      this.setState({
+        ...this.state,
+        phase: "downloading",
+        progress: asset.size > 0 ? Math.min(resumeBytes / asset.size, 1) : 0,
+        bytesDownloaded: resumeBytes,
+        totalBytes: asset.size,
+        canDownload: false,
+        canInstall: false,
+        message:
+          resumeBytes > 0
+            ? `Resuming ${asset.name}…`
+            : `Downloading ${asset.name}…`,
+      });
+
+      const headers: Record<string, string> = {
+        "User-Agent": `Qnector/${app.getVersion()}`,
+      };
+      if (resumeBytes > 0) headers.Range = `bytes=${resumeBytes}-`;
       const response = await fetch(asset.browser_download_url, {
-        headers: { "User-Agent": `Qnector/${app.getVersion()}` },
+        headers,
         redirect: "follow",
         signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
       });
       if (!response.ok || !response.body)
         throw new Error(`Download returned HTTP ${response.status}`);
 
-      const file = await open(destination, "w");
-      const hash = createHash("sha256");
-      let downloaded = 0;
+      // GitHub/CDN should answer a Range request with 206. If a proxy ignores
+      // Range and sends 200, restart safely from byte zero rather than appending
+      // a duplicate full payload to the partial file.
+      const resumed = resumeBytes > 0 && response.status === 206;
+      if (resumeBytes > 0 && !resumed) {
+        resumeBytes = 0;
+        await rm(partial, { force: true }).catch(() => undefined);
+      }
+      const file = await open(partial, resumed ? "a" : "w");
+      let downloaded = resumeBytes;
       let lastPublish = 0;
       try {
         const reader = response.body.getReader();
@@ -292,7 +342,6 @@ export class DesktopUpdater {
           if (done) break;
           if (!value?.byteLength) continue;
           await file.write(value);
-          hash.update(value);
           downloaded += value.byteLength;
           const now = Date.now();
           if (now - lastPublish >= 150 || downloaded >= asset.size) {
@@ -306,7 +355,9 @@ export class DesktopUpdater {
               totalBytes: asset.size,
               canDownload: false,
               canInstall: false,
-              message: `Downloading ${asset.name}…`,
+              message: resumed
+                ? `Resuming ${asset.name}…`
+                : `Downloading ${asset.name}…`,
             });
           }
         }
@@ -314,17 +365,23 @@ export class DesktopUpdater {
         await file.close();
       }
 
-      if (asset.size > 0 && downloaded !== asset.size)
+      if (asset.size > 0 && downloaded !== asset.size) {
+        if (downloaded > asset.size)
+          await rm(partial, { force: true }).catch(() => undefined);
         throw new Error(
           `Downloaded ${downloaded} bytes, expected ${asset.size} bytes`,
         );
-      const actualSha256 = hash.digest("hex").toLowerCase();
-      const expectedSha256 = parseSha256Digest(asset.digest);
-      if (expectedSha256 && actualSha256 !== expectedSha256)
+      }
+      const actualSha256 = await hashFile(partial);
+      if (expectedSha256 && actualSha256 !== expectedSha256) {
+        await rm(partial, { force: true }).catch(() => undefined);
         throw new Error(
           "SHA-256 digest from GitHub does not match the download",
         );
+      }
 
+      await rm(destination, { force: true }).catch(() => undefined);
+      await rename(partial, destination);
       this.downloadedPath = destination;
       this.setState({
         ...this.state,
@@ -335,12 +392,15 @@ export class DesktopUpdater {
         canDownload: false,
         canInstall: true,
         message: expectedSha256
-          ? "Update downloaded and SHA-256 verified. Ready to restart."
+          ? resumed
+            ? "Update resumed and SHA-256 verified. Ready to restart."
+            : "Update downloaded and SHA-256 verified. Ready to restart."
           : "Update downloaded from GitHub. Ready to restart.",
       });
       return this.getState();
     } catch (error) {
-      await rm(destination, { force: true }).catch(() => undefined);
+      // Keep a valid-sized partial download so a network interruption can resume
+      // next time. Corrupt/oversized data is explicitly removed above.
       this.downloadedPath = undefined;
       return this.fail(`Update download failed: ${errorMessage(error)}`);
     }
@@ -361,6 +421,28 @@ export class DesktopUpdater {
     this.state = next;
     this.publish(this.getState());
   }
+}
+
+async function verifiedCachedAsset(
+  file: string,
+  expectedSize: number,
+  expectedSha256: string,
+): Promise<boolean> {
+  const info = await stat(file).catch(() => null);
+  if (!info?.isFile()) return false;
+  if (expectedSize > 0 && info.size !== expectedSize) return false;
+  return (await hashFile(file).catch(() => "")) === expectedSha256;
+}
+
+async function hashFile(file: string): Promise<string> {
+  const hash = createHash("sha256");
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(file);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.once("end", resolve);
+    stream.once("error", reject);
+  });
+  return hash.digest("hex").toLowerCase();
 }
 
 export function detectUpdateMode(): DesktopUpdateMode {

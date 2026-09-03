@@ -4,7 +4,11 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { localMcpUrl } from "@qnector/shared";
-import { getBuildIdentity, sanitizedHash } from "@qnector/core";
+import {
+  getBuildIdentity,
+  qnectorPerformance,
+  sanitizedHash,
+} from "@qnector/core";
 import { stat } from "node:fs/promises";
 import type { ToolDefinition, ToolResult } from "@qnector/shared";
 import {
@@ -39,6 +43,7 @@ export const systemDefinition: ToolDefinition = {
           "build_info",
           "release_status",
           "context_snapshot",
+          "performance",
           "processes",
           "process_info",
           "find_process",
@@ -214,6 +219,13 @@ export async function executeSystem(
         return {
           summary: `Qnector ${build.version} build ${build.buildId}`,
           data: build,
+        };
+      }
+      if (action === "performance") {
+        const snapshot = qnectorPerformance.snapshot();
+        return {
+          summary: `Performance snapshot: ${snapshot.milestones.length} milestone(s), ${snapshot.aggregates.length} operation group(s)`,
+          data: snapshot,
         };
       }
       if (action === "release_status") {

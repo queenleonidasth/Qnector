@@ -6,6 +6,7 @@ import type { DesktopUpdateState } from "../updater-types.js";
 import type {
   ActivityEntry,
   ConnectionSetupStatus,
+  DesktopBootstrapSnapshot,
   ProcessSnapshot,
   ServerStatus,
   ToolResult,
@@ -85,6 +86,23 @@ interface MemoryFactView {
 }
 
 interface RuntimeDashboardView {
+  performance?: {
+    uptimeMs: number;
+    portableCache: { enabled: boolean; hit: boolean | null };
+    milestones: Array<{
+      name: string;
+      elapsedMs: number;
+      details?: Record<string, string | number | boolean | null>;
+    }>;
+    aggregates: Array<{
+      category: string;
+      name: string;
+      count: number;
+      averageMs: number;
+      maxMs: number;
+      lastMs: number;
+    }>;
+  };
   doctor?: {
     checks: Array<{
       name: string;
@@ -139,20 +157,281 @@ interface MemoryRecallView {
   warning?: string;
 }
 
+const ActivityPanel = React.memo(function ActivityPanel({
+  initialActivity,
+}: {
+  initialActivity: ActivityEntry[];
+}): React.ReactElement {
+  const [activity, setActivity] = useState<ActivityEntry[]>(initialActivity);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityEntry>();
+  const [enteringActivityId, setEnteringActivityId] = useState<string>();
+  const [visibleRows, setVisibleRows] = useState(4);
+  const [scrollTop, setScrollTop] = useState(0);
+  const streamRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setActivity((current) =>
+      coalesceActivity([...initialActivity, ...current]).slice(0, 50),
+    );
+  }, [initialActivity]);
+
+  useEffect(() => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const updateVisibleRows = (): void => {
+      const usableHeight = Math.max(44, stream.clientHeight - 8);
+      setVisibleRows(Math.max(1, Math.min(15, Math.ceil(usableHeight / 50))));
+    };
+    updateVisibleRows();
+    const observer = new ResizeObserver(updateVisibleRows);
+    observer.observe(stream);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    let activityDrainTimer: number | undefined;
+    const activityQueue: ActivityEntry[] = [];
+    const drainActivityQueue = (): void => {
+      activityDrainTimer = undefined;
+      if (!mounted) return;
+      const entry = activityQueue.shift();
+      if (!entry) return;
+      if (entry.status === "running") {
+        setEnteringActivityId(entry.id);
+        window.setTimeout(() => {
+          if (!mounted) return;
+          setEnteringActivityId((current) =>
+            current === entry.id ? undefined : current,
+          );
+        }, 240);
+      }
+      setActivity((items) => mergeActivityEntry(items, entry).slice(0, 50));
+      if (entry.status !== "running") {
+        setSelectedActivity((current) =>
+          current?.status === "running" && sameActivityCall(current, entry)
+            ? { ...entry, id: current.id }
+            : current,
+        );
+      }
+      if (activityQueue.length > 0) {
+        const delay =
+          entry.status === "running"
+            ? activityQueue.length > 24
+              ? 95
+              : activityQueue.length > 8
+                ? 110
+                : 125
+            : 28;
+        activityDrainTimer = window.setTimeout(drainActivityQueue, delay);
+      }
+    };
+    const enqueueActivity = (entry: ActivityEntry): void => {
+      activityQueue.push(entry);
+      if (activityQueue.length > 120)
+        activityQueue.splice(0, activityQueue.length - 120);
+      if (activityDrainTimer === undefined)
+        activityDrainTimer = window.setTimeout(drainActivityQueue, 0);
+    };
+    const offActivity = window.qnector.onActivity(enqueueActivity);
+    return () => {
+      mounted = false;
+      offActivity();
+      if (activityDrainTimer !== undefined) clearTimeout(activityDrainTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedActivity) return;
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setSelectedActivity(undefined);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedActivity]);
+
+  const rowHeight = 50;
+  const overscan = 3;
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const endIndex = Math.min(
+    activity.length,
+    startIndex + visibleRows + overscan * 2,
+  );
+  const visibleActivity = activity.slice(startIndex, endIndex);
+
+  return (
+    <>
+      <section className="glass-card activity-glass-card">
+        <div className="card-eyebrow-row">
+          <span className="card-eyebrow">Live Activity Feed</span>
+          <span className="live-badge">
+            <span className="live-beacon" />
+            <span>LIVE</span>
+          </span>
+        </div>
+        <div
+          className="activity-stream"
+          ref={streamRef}
+          onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        >
+          <div
+            className="activity-track"
+            style={{
+              height: `${Math.max(activity.length, visibleRows) * rowHeight + 8}px`,
+            }}
+          >
+            {visibleActivity.map((item, localIndex) => {
+              const index = startIndex + localIndex;
+              return (
+                <button
+                  type="button"
+                  className={`activity-item ${enteringActivityId === item.id ? "entering" : ""}`}
+                  data-activity-id={item.id}
+                  key={item.id}
+                  style={{
+                    transform: `translate3d(0, ${index * rowHeight}px, 0)`,
+                  }}
+                  onClick={() => setSelectedActivity(item)}
+                  aria-label={`View details for ${item.tool}.${item.action}`}
+                >
+                  <div className="item-left">
+                    <div className="item-title">
+                      {item.tool}.{item.action}
+                    </div>
+                    <div className="item-args">{item.argsSummary || "—"}</div>
+                  </div>
+                  <div className="item-right">
+                    {item.durationMs !== undefined && (
+                      <span>{item.durationMs}ms</span>
+                    )}
+                    <span>{formatTime(item.timestamp)}</span>
+                    <span className={`item-bead ${item.status}`} />
+                    <span className="activity-open-glyph">›</span>
+                  </div>
+                </button>
+              );
+            })}
+            {activity.length === 0 && (
+              <div className="empty-activity">
+                <span className="empty-spark">✦</span>
+                <span>Ready for incoming tool calls</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {selectedActivity && (
+        <div
+          className="activity-detail-backdrop"
+          onClick={() => setSelectedActivity(undefined)}
+        >
+          <section
+            className="activity-detail-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${selectedActivity.tool}.${selectedActivity.action} tool call details`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="activity-detail-header">
+              <div className="activity-detail-title-wrap">
+                <span
+                  className={`activity-detail-status ${selectedActivity.status}`}
+                >
+                  {selectedActivity.status}
+                </span>
+                <div className="activity-detail-title">
+                  {selectedActivity.tool}.{selectedActivity.action}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-drawer-close"
+                onClick={() => setSelectedActivity(undefined)}
+                aria-label="Close tool call details"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="activity-detail-meta-grid">
+              <div className="activity-detail-meta">
+                <span>Started / Updated</span>
+                <strong>{formatDateTime(selectedActivity.timestamp)}</strong>
+              </div>
+              <div className="activity-detail-meta">
+                <span>Duration</span>
+                <strong>
+                  {selectedActivity.durationMs === undefined
+                    ? "Running"
+                    : `${selectedActivity.durationMs} ms`}
+                </strong>
+              </div>
+              <div className="activity-detail-meta">
+                <span>Output</span>
+                <strong>{formatBytes(selectedActivity.outputSize)}</strong>
+              </div>
+              <div className="activity-detail-meta">
+                <span>Call ID</span>
+                <strong title={selectedActivity.id}>
+                  {shortActivityId(selectedActivity.id)}
+                </strong>
+              </div>
+            </div>
+            <div className="activity-detail-section">
+              <span className="activity-detail-label">REQUEST / ARGUMENTS</span>
+              <pre className="activity-detail-code">
+                {selectedActivity.argsSummary || "No arguments"}
+              </pre>
+            </div>
+            <div className="activity-detail-section">
+              <span className="activity-detail-label">WHAT IT DID</span>
+              <div className="activity-detail-summary">
+                {selectedActivity.summary ??
+                  (selectedActivity.status === "running"
+                    ? "This tool call is still running. Result details will update when it completes."
+                    : "No result summary was recorded.")}
+              </div>
+            </div>
+            {selectedActivity.error && (
+              <div className="activity-detail-section error">
+                <span className="activity-detail-label">ERROR</span>
+                <div className="activity-detail-error-title">
+                  {selectedActivity.error.code}:{" "}
+                  {selectedActivity.error.message}
+                </div>
+                {selectedActivity.error.hint && (
+                  <div className="activity-detail-summary">
+                    Hint: {selectedActivity.error.hint}
+                  </div>
+                )}
+                {selectedActivity.error.details !== undefined && (
+                  <pre className="activity-detail-code error">
+                    {formatActivityDetails(selectedActivity.error.details)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </>
+  );
+});
+
 function App(): React.ReactElement {
   const [status, setStatus] = useState<
     | (ServerStatus & { publicUrl?: string; bridge: TransportSnapshot })
     | undefined
   >();
   const [bridge, setBridge] = useState<TransportSnapshot>(fallbackBridge);
-  const [activity, setActivity] = useState<ActivityEntry[]>([]);
-  const [selectedActivity, setSelectedActivity] = useState<ActivityEntry>();
+  const [initialActivity, setInitialActivity] = useState<ActivityEntry[]>([]);
   const [processes, setProcesses] = useState<ProcessSnapshot[]>([]);
   const [config, setConfig] = useState<QnectorConfig>();
   const [memory, setMemory] = useState<MemoryRecallView>();
   const [runtimeDashboard, setRuntimeDashboard] =
     useState<RuntimeDashboardView>({ workflowRuns: [] });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
+  const runtimeLastRefreshRef = useRef(0);
   const [activeDrawer, setActiveDrawer] = useState<DrawerName | null>(null);
   const [drawerTransition, setDrawerTransition] =
     useState<DrawerTransition>(null);
@@ -172,9 +451,6 @@ function App(): React.ReactElement {
   const [holdProgress, setHoldProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const [burstFlash, setBurstFlash] = useState(false);
-  const [enteringActivityId, setEnteringActivityId] = useState<string>();
-  const [activityVisibleRows, setActivityVisibleRows] = useState(4);
-  const activityStreamRef = useRef<HTMLDivElement | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupStep, setSetupStep] = useState(0);
   const [setupInfo, setSetupInfo] = useState<ConnectionSetupStatus>();
@@ -185,29 +461,7 @@ function App(): React.ReactElement {
   const [setupError, setSetupError] = useState<string>();
   const [updateState, setUpdateState] = useState<DesktopUpdateState>();
 
-  useEffect(() => {
-    const stream = activityStreamRef.current;
-    if (!stream) return;
-    const updateVisibleRows = (): void => {
-      const usableHeight = Math.max(44, stream.clientHeight - 8);
-      setActivityVisibleRows(
-        Math.max(1, Math.min(15, Math.ceil(usableHeight / 50))),
-      );
-    };
-    updateVisibleRows();
-    const observer = new ResizeObserver(updateVisibleRows);
-    observer.observe(stream);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedActivity) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelectedActivity(undefined);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [selectedActivity]);
+  // Live Activity owns its own subscription/render state to avoid rerendering App.
 
   useEffect(() => {
     if (!setupOpen || setupBusy) return;
@@ -315,18 +569,21 @@ function App(): React.ReactElement {
     </nav>
   );
 
-  const refreshRuntime = async (): Promise<void> => {
+  const refreshRuntime = async (force = false): Promise<void> => {
+    if (!force && Date.now() - runtimeLastRefreshRef.current < 15_000) return;
     setRuntimeBusy(true);
     try {
-      const [doctor, release, snapshot, workflows] = await Promise.all([
-        window.qnector.callTool("system", { action: "doctor" }),
-        window.qnector.callTool("system", { action: "release_status" }),
-        window.qnector.callTool("system", { action: "context_snapshot" }),
-        window.qnector.callTool("process", {
-          action: "workflow_runs",
-          maxResults: 10,
-        }),
-      ]);
+      const [doctor, release, snapshot, workflows, performance] =
+        await Promise.all([
+          window.qnector.callTool("system", { action: "doctor" }),
+          window.qnector.callTool("system", { action: "release_status" }),
+          window.qnector.callTool("system", { action: "context_snapshot" }),
+          window.qnector.callTool("process", {
+            action: "workflow_runs",
+            maxResults: 10,
+          }),
+          window.qnector.callTool("system", { action: "performance" }),
+        ]);
       const unwrap = <T,>(result: ToolResult): T | undefined => {
         if (!result.ok) return undefined;
         const outer = result.data as { data?: unknown } | undefined;
@@ -336,11 +593,13 @@ function App(): React.ReactElement {
         runs: RuntimeDashboardView["workflowRuns"];
       }>(workflows);
       setRuntimeDashboard({
+        performance: unwrap<RuntimeDashboardView["performance"]>(performance),
         doctor: unwrap<RuntimeDashboardView["doctor"]>(doctor),
         release: unwrap<RuntimeDashboardView["release"]>(release),
         snapshot: unwrap<RuntimeDashboardView["snapshot"]>(snapshot),
         workflowRuns: workflowData?.runs ?? [],
       });
+      runtimeLastRefreshRef.current = Date.now();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -368,97 +627,44 @@ function App(): React.ReactElement {
 
   useEffect(() => {
     let mounted = true;
-    let activityDrainTimer: number | undefined;
-    const activityQueue: ActivityEntry[] = [];
+    // Activity feed subscribes independently so frequent tool events do not
+    // rerender the full application shell or active drawer.
 
-    const drainActivityQueue = (): void => {
-      activityDrainTimer = undefined;
+    const applyBootstrap = (snapshot: DesktopBootstrapSnapshot): void => {
       if (!mounted) return;
-      const entry = activityQueue.shift();
-      if (!entry) return;
-
-      if (entry.status === "running") {
-        setEnteringActivityId(entry.id);
-        window.setTimeout(() => {
-          if (!mounted) return;
-          setEnteringActivityId((current) =>
-            current === entry.id ? undefined : current,
-          );
-        }, 240);
+      const nextStatus = snapshot.status;
+      const nextConfig = snapshot.config;
+      setStatus(nextStatus);
+      setBridge(nextStatus.bridge);
+      if (nextStatus.bridge.state !== "error") setError(undefined);
+      setInitialActivity(coalesceActivity(snapshot.activity).slice(0, 50));
+      setProcesses(snapshot.processes);
+      setConfig(nextConfig);
+      if (snapshot.update) setUpdateState(snapshot.update);
+      setSetupProfile(nextConfig.transport.openaiProfile?.trim() || "qnector");
+      setSetupTunnelId(nextConfig.transport.openaiTunnelId ?? "");
+      setSetupRuntimeApiKey(nextConfig.transport.openaiRuntimeApiKey ?? "");
+      if (nextConfig.ui.setupCompleted !== true) {
+        setSetupOpen(true);
+        setSetupStep(0);
       }
-
-      setActivity((items) => mergeActivityEntry(items, entry).slice(0, 50));
-      if (entry.status !== "running") {
-        setSelectedActivity((current) =>
-          current?.status === "running" && sameActivityCall(current, entry)
-            ? { ...entry, id: current.id }
-            : current,
-        );
-      }
-
-      if (activityQueue.length > 0) {
-        const delay =
-          entry.status === "running"
-            ? activityQueue.length > 24
-              ? 95
-              : activityQueue.length > 8
-                ? 110
-                : 125
-            : 28;
-        activityDrainTimer = window.setTimeout(drainActivityQueue, delay);
-      }
+      void window.qnector
+        .getConnectionSetup()
+        .then((info) => mounted && setSetupInfo(info))
+        .catch(() => undefined);
     };
 
-    const enqueueActivity = (entry: ActivityEntry): void => {
-      activityQueue.push(entry);
-      if (activityQueue.length > 120) {
-        activityQueue.splice(0, activityQueue.length - 120);
-      }
-      if (activityDrainTimer === undefined) {
-        activityDrainTimer = window.setTimeout(drainActivityQueue, 0);
-      }
-    };
-
-    void Promise.all([
-      window.qnector.getStatus(),
-      window.qnector.getActivity(),
-      window.qnector.getProcesses(),
-      window.qnector.getConfig(),
-    ])
-      .then(([nextStatus, nextActivity, nextProcesses, nextConfig]) => {
-        if (!mounted) return;
-        setStatus(nextStatus);
-        setBridge(nextStatus.bridge);
-        if (nextStatus.bridge.state !== "error") setError(undefined);
-        setActivity(coalesceActivity(nextActivity).slice(0, 50));
-        setProcesses(nextProcesses);
-        setConfig(nextConfig);
-        setSetupProfile(
-          nextConfig.transport.openaiProfile?.trim() || "qnector",
-        );
-        setSetupTunnelId(nextConfig.transport.openaiTunnelId ?? "");
-        setSetupRuntimeApiKey(nextConfig.transport.openaiRuntimeApiKey ?? "");
-        if (nextConfig.ui.setupCompleted !== true) {
-          setSetupOpen(true);
-          setSetupStep(0);
-        }
-        void window.qnector
-          .getConnectionSetup()
-          .then((info) => mounted && setSetupInfo(info))
-          .catch(() => undefined);
-      })
-      .catch((reason: unknown) => setError(String(reason)));
     void window.qnector
-      .getUpdateState()
-      .then((next) => mounted && setUpdateState(next))
-      .catch(() => undefined);
+      .getBootstrap()
+      .then(applyBootstrap)
+      .catch((reason: unknown) => setError(String(reason)));
 
+    const offRuntimeReady = window.qnector.onRuntimeReady(applyBootstrap);
     const offStatus = window.qnector.onStatus((next) => {
       setStatus(next);
       setBridge(next.bridge);
       if (next.bridge.state !== "error") setError(undefined);
     });
-    const offActivity = window.qnector.onActivity(enqueueActivity);
     const offProcess = window.qnector.onProcess((entry) =>
       setProcesses((items) => [
         entry,
@@ -469,11 +675,10 @@ function App(): React.ReactElement {
 
     return () => {
       mounted = false;
+      offRuntimeReady();
       offStatus();
-      offActivity();
       offProcess();
       offUpdate();
-      if (activityDrainTimer !== undefined) clearTimeout(activityDrainTimer);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
@@ -799,6 +1004,25 @@ function App(): React.ReactElement {
     runtimeDashboard.snapshot?.nativeQnectorProcesses ?? [];
   const runtimeProcessCount =
     runtimeManagedProcesses.length + runtimeNativeProcesses.length;
+  const runtimePerformance = runtimeDashboard.performance;
+  const startupMilestone = runtimePerformance?.milestones.find(
+    (entry) => entry.name === "window-created",
+  );
+  const runtimeReadyMilestone = runtimePerformance?.milestones.find(
+    (entry) => entry.name === "mcp-runtime-ready",
+  );
+  const bridgeMilestone = runtimePerformance?.milestones.find(
+    (entry) => entry.name === "bridge-connected",
+  );
+  const topPerformanceOperations =
+    runtimePerformance?.aggregates.slice(0, 8) ?? [];
+  const portableCacheLabel = !runtimePerformance?.portableCache.enabled
+    ? "installed / development"
+    : runtimePerformance.portableCache.hit === true
+      ? "portable cache hit"
+      : runtimePerformance.portableCache.hit === false
+        ? "portable cache miss"
+        : "portable cache pending";
   const updateAttention =
     updateState?.phase === "available" ||
     updateState?.phase === "downloading" ||
@@ -1055,58 +1279,7 @@ function App(): React.ReactElement {
           </div>
         </section>
 
-        <section className="glass-card activity-glass-card">
-          <div className="card-eyebrow-row">
-            <span className="card-eyebrow">Live Activity Feed</span>
-            <span className="live-badge">
-              <span className="live-beacon" />
-              <span>LIVE</span>
-            </span>
-          </div>
-
-          <div className="activity-stream" ref={activityStreamRef}>
-            <div
-              className="activity-track"
-              style={{
-                height: `${Math.max(activity.length, activityVisibleRows) * 50 + 8}px`,
-              }}
-            >
-              {activity.map((item, index) => (
-                <button
-                  type="button"
-                  className={`activity-item ${enteringActivityId === item.id ? "entering" : ""}`}
-                  data-activity-id={item.id}
-                  key={item.id}
-                  style={{ transform: `translate3d(0, ${index * 50}px, 0)` }}
-                  onClick={() => setSelectedActivity(item)}
-                  aria-label={`View details for ${item.tool}.${item.action}`}
-                >
-                  <div className="item-left">
-                    <div className="item-title">
-                      {item.tool}.{item.action}
-                    </div>
-                    <div className="item-args">{item.argsSummary || "—"}</div>
-                  </div>
-                  <div className="item-right">
-                    {item.durationMs !== undefined && (
-                      <span>{item.durationMs}ms</span>
-                    )}
-                    <span>{formatTime(item.timestamp)}</span>
-                    <span className={`item-bead ${item.status}`} />
-                    <span className="activity-open-glyph">›</span>
-                  </div>
-                </button>
-              ))}
-
-              {activity.length === 0 && (
-                <div className="empty-activity">
-                  <span className="empty-spark">✦</span>
-                  <span>Ready for incoming tool calls</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
+        <ActivityPanel initialActivity={initialActivity} />
       </main>
 
       <footer className="floating-glass-dock">
@@ -1476,103 +1649,7 @@ function App(): React.ReactElement {
         </div>
       )}
 
-      {selectedActivity && (
-        <div
-          className="activity-detail-backdrop"
-          onClick={() => setSelectedActivity(undefined)}
-        >
-          <section
-            className="activity-detail-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${selectedActivity.tool}.${selectedActivity.action} tool call details`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="activity-detail-header">
-              <div className="activity-detail-title-wrap">
-                <span
-                  className={`activity-detail-status ${selectedActivity.status}`}
-                >
-                  {selectedActivity.status}
-                </span>
-                <div className="activity-detail-title">
-                  {selectedActivity.tool}.{selectedActivity.action}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn-drawer-close"
-                onClick={() => setSelectedActivity(undefined)}
-                aria-label="Close tool call details"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="activity-detail-meta-grid">
-              <div className="activity-detail-meta">
-                <span>Started / Updated</span>
-                <strong>{formatDateTime(selectedActivity.timestamp)}</strong>
-              </div>
-              <div className="activity-detail-meta">
-                <span>Duration</span>
-                <strong>
-                  {selectedActivity.durationMs === undefined
-                    ? "Running"
-                    : `${selectedActivity.durationMs} ms`}
-                </strong>
-              </div>
-              <div className="activity-detail-meta">
-                <span>Output</span>
-                <strong>{formatBytes(selectedActivity.outputSize)}</strong>
-              </div>
-              <div className="activity-detail-meta">
-                <span>Call ID</span>
-                <strong title={selectedActivity.id}>
-                  {shortActivityId(selectedActivity.id)}
-                </strong>
-              </div>
-            </div>
-
-            <div className="activity-detail-section">
-              <span className="activity-detail-label">REQUEST / ARGUMENTS</span>
-              <pre className="activity-detail-code">
-                {selectedActivity.argsSummary || "No arguments"}
-              </pre>
-            </div>
-
-            <div className="activity-detail-section">
-              <span className="activity-detail-label">WHAT IT DID</span>
-              <div className="activity-detail-summary">
-                {selectedActivity.summary ??
-                  (selectedActivity.status === "running"
-                    ? "This tool call is still running. Result details will update when it completes."
-                    : "No result summary was recorded.")}
-              </div>
-            </div>
-
-            {selectedActivity.error && (
-              <div className="activity-detail-section error">
-                <span className="activity-detail-label">ERROR</span>
-                <div className="activity-detail-error-title">
-                  {selectedActivity.error.code}:{" "}
-                  {selectedActivity.error.message}
-                </div>
-                {selectedActivity.error.hint && (
-                  <div className="activity-detail-summary">
-                    Hint: {selectedActivity.error.hint}
-                  </div>
-                )}
-                {selectedActivity.error.details !== undefined && (
-                  <pre className="activity-detail-code error">
-                    {formatActivityDetails(selectedActivity.error.details)}
-                  </pre>
-                )}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
+      {/* Activity detail dialog is isolated inside ActivityPanel. */}
 
       {activeDrawer && (
         <div
@@ -1839,7 +1916,91 @@ function App(): React.ReactElement {
                         <strong>{runtimeDashboard.workflowRuns.length}</strong>
                         <small>recent runs</small>
                       </div>
+                      <div className="runtime-summary-card">
+                        <span className="runtime-summary-label">Startup</span>
+                        <strong>
+                          {startupMilestone
+                            ? `${Math.round(startupMilestone.elapsedMs)} ms`
+                            : runtimeBusy
+                              ? "Measuring…"
+                              : "Not measured"}
+                        </strong>
+                        <small>{portableCacheLabel}</small>
+                      </div>
                     </div>
+
+                    <details className="runtime-section">
+                      <summary>
+                        <span>Performance timeline</span>
+                        <span className="runtime-section-count">
+                          {runtimePerformance?.milestones.length ?? 0} marks
+                        </span>
+                      </summary>
+                      <div className="runtime-section-body runtime-list">
+                        {startupMilestone && (
+                          <div className="runtime-list-row">
+                            <span className="check-icon">⚡</span>
+                            <div>
+                              <strong>
+                                Window created ·{" "}
+                                {Math.round(startupMilestone.elapsedMs)} ms
+                              </strong>
+                              <span>{portableCacheLabel}</span>
+                            </div>
+                          </div>
+                        )}
+                        {runtimeReadyMilestone && (
+                          <div className="runtime-list-row">
+                            <span className="check-icon">◆</span>
+                            <div>
+                              <strong>
+                                MCP runtime ready ·{" "}
+                                {Math.round(runtimeReadyMilestone.elapsedMs)} ms
+                              </strong>
+                              <span>
+                                Heavy runtime loads after the desktop shell.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {bridgeMilestone && (
+                          <div className="runtime-list-row">
+                            <span className="check-icon">↗</span>
+                            <div>
+                              <strong>
+                                Bridge connected ·{" "}
+                                {Math.round(bridgeMilestone.elapsedMs)} ms
+                              </strong>
+                              <span>Measured from desktop process start.</span>
+                            </div>
+                          </div>
+                        )}
+                        {topPerformanceOperations.map((entry) => (
+                          <div
+                            className="runtime-list-row"
+                            key={`${entry.category}-${entry.name}`}
+                          >
+                            <span className="item-bead running" />
+                            <div>
+                              <strong>
+                                {entry.category}.{entry.name} ·{" "}
+                                {Math.round(entry.lastMs)} ms
+                              </strong>
+                              <span>
+                                avg {Math.round(entry.averageMs)} ms · max{" "}
+                                {Math.round(entry.maxMs)} ms · {entry.count}{" "}
+                                call(s)
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {!runtimePerformance && (
+                          <div className="runtime-empty">
+                            Performance data has not been loaded yet.
+                          </div>
+                        )}
+                      </div>
+                    </details>
 
                     <details className="runtime-section" open>
                       <summary>
@@ -2007,7 +2168,7 @@ function App(): React.ReactElement {
                     <button
                       className="btn-drawer-action"
                       disabled={runtimeBusy}
-                      onClick={() => void refreshRuntime()}
+                      onClick={() => void refreshRuntime(true)}
                     >
                       {runtimeBusy ? "↻ Refreshing…" : "↻ Refresh"}
                     </button>

@@ -59,6 +59,7 @@ interface FileSearchRuntime {
 const DEFAULT_MAX_RESULTS = 100;
 const MAX_RESULTS = 1_000;
 const FALLBACK_ENTRY_BUDGET = 50_000;
+let everythingExecutablePromise: Promise<string | null> | undefined;
 
 export class WindowsFileSearchService implements FileSearchService {
   public constructor(
@@ -188,28 +189,41 @@ export class WindowsFileSearchService implements FileSearchService {
     for (const root of roots) {
       const queue = [root];
       while (queue.length > 0 && visited < FALLBACK_ENTRY_BUDGET) {
-        const current = queue.shift()!;
-        let entries;
-        try {
-          entries = await readdir(current, { withFileTypes: true });
-        } catch {
-          continue;
-        }
-        entries.sort((left, right) => left.name.localeCompare(right.name));
-        for (const entry of entries) {
-          visited += 1;
-          if (visited > FALLBACK_ENTRY_BUDGET) break;
-          const absolute = path.join(current, entry.name);
-          const key = comparablePath(absolute);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          if (entry.isDirectory()) {
-            if (!skipFallbackDirectory(entry.name)) queue.push(absolute);
-            continue;
+        // Read a small deterministic BFS batch concurrently. Processing still
+        // happens in queue order, so result ordering remains identical to the
+        // serial fallback while slow network/filesystem directories no longer
+        // block every other directory behind one readdir call.
+        const batch = queue.splice(0, 8);
+        const batches = await Promise.all(
+          batch.map(async (current) => {
+            try {
+              const entries = await readdir(current, { withFileTypes: true });
+              entries.sort((left, right) =>
+                left.name.localeCompare(right.name),
+              );
+              return { current, entries };
+            } catch {
+              return { current, entries: [] };
+            }
+          }),
+        );
+        for (const { current, entries } of batches) {
+          for (const entry of entries) {
+            visited += 1;
+            if (visited > FALLBACK_ENTRY_BUDGET) break;
+            const absolute = path.join(current, entry.name);
+            const key = comparablePath(absolute);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            if (entry.isDirectory()) {
+              if (!skipFallbackDirectory(entry.name)) queue.push(absolute);
+              continue;
+            }
+            if (!entry.isFile()) continue;
+            if (matcher(absolute)) paths.push(absolute);
+            if (paths.length >= wanted) break;
           }
-          if (!entry.isFile()) continue;
-          if (matcher(absolute)) paths.push(absolute);
-          if (paths.length >= wanted) break;
+          if (paths.length >= wanted || visited >= FALLBACK_ENTRY_BUDGET) break;
         }
         if (paths.length >= wanted) break;
       }
@@ -251,6 +265,11 @@ function defaultRuntime(): FileSearchRuntime {
 }
 
 async function findEverythingExecutable(): Promise<string | null> {
+  everythingExecutablePromise ??= probeEverythingExecutable();
+  return everythingExecutablePromise;
+}
+
+async function probeEverythingExecutable(): Promise<string | null> {
   if (process.platform !== "win32") return null;
   try {
     const result = await execFileAsync("where.exe", ["es.exe"], {

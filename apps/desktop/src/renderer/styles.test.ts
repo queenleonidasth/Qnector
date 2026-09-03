@@ -85,7 +85,7 @@ describe("desktop UI overflow guards", () => {
   it("keeps App Updates visually prominent and easy to scan", async () => {
     const css = await styles();
     expect(css).toMatch(
-      /\.update-settings-card \{[\s\S]*?padding:\s*15px;[\s\S]*?border:\s*1px solid rgba\(230, 186, 80, 0\.3\);/,
+      /\.update-settings-card \{[\s\S]*?flex:\s*0 0 auto;[\s\S]*?padding:\s*15px;[\s\S]*?border:\s*1px solid rgba\(230, 186, 80, 0\.3\);/,
     );
     expect(css).toMatch(
       /\.update-card-copy strong \{[\s\S]*?font-size:\s*13\.5px;/,

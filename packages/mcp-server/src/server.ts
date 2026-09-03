@@ -66,6 +66,7 @@ export interface QnectorRuntimeOptions {
   config?: QnectorConfig;
   configFile?: string;
   logger?: ActivityLogger;
+  nonBlockingActivityWrites?: boolean;
   processManager?: ProcessManager;
   codeIntelligence?: CodeIntelligenceService;
   fileSearch?: FileSearchService;
@@ -162,7 +163,14 @@ export class QnectorRuntime {
       new WorkflowManager(this.processManager, this.fileWatch);
     this.ptyManager =
       options.ptyManager ?? new PtyManager(this.config.shell.windows);
-    this.activity = options.logger ?? new ActivityLogger(activityLogPath());
+    this.activity =
+      options.logger ??
+      new ActivityLogger(
+        activityLogPath(),
+        500,
+        10_000_000,
+        options.nonBlockingActivityWrites ?? false,
+      );
     this.workspace = new WorkspaceState(this.config);
     this.memory =
       options.memory ??
@@ -273,7 +281,10 @@ export class QnectorRuntime {
   public async stop(): Promise<void> {
     await this.mcpHandler.close().catch(() => undefined);
     this.fileWatch.stopAll();
-    await this.browserRuntime.close().catch(() => undefined);
+    await Promise.all([
+      this.browserRuntime.close().catch(() => undefined),
+      Promise.resolve(this.uiAutomation.close?.()).catch(() => undefined),
+    ]);
     await this.processManager.stopAll();
     await this.activity.flush();
     if (this.listening) await this.app.close();

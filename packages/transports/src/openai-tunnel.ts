@@ -1,4 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { TransportSnapshot } from "@qnector/shared";
 import { BaseTransportAdapter } from "./base.js";
 
@@ -12,6 +15,7 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
       tunnelId?: string;
       runtimeApiKey?: string;
       publicUrl?: string;
+      validationCacheFile?: string;
     },
   ) {
     super(localUrl);
@@ -28,6 +32,51 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
       throw new Error(
         "OPENAI_RUNTIME_API_KEY_REQUIRED: enter a Runtime API key in Qnector Settings",
       );
+
+    const fingerprint = await this.validationFingerprint(profile);
+    let warmValidated = await cacheMatches(
+      this.options.validationCacheFile,
+      fingerprint,
+    );
+    if (!warmValidated) await this.validateProfile(profile);
+
+    try {
+      this.child = this.spawnRun(profile);
+      this.watchExit(this.child);
+      await waitForStableChild(this.child, warmValidated ? 220 : 1_500);
+    } catch (error) {
+      if (!warmValidated) throw error;
+      // A stale profile cache must never trade reliability for speed. If the
+      // warm launch fails immediately, invalidate it and retry through the
+      // original init + doctor path before surfacing the error.
+      warmValidated = false;
+      await clearValidationCache(this.options.validationCacheFile);
+      await this.validateProfile(profile);
+      this.child = this.spawnRun(profile);
+      this.watchExit(this.child);
+      await waitForStableChild(this.child, 1_500);
+    }
+
+    if (!warmValidated)
+      await writeValidationCache(
+        this.options.validationCacheFile,
+        fingerprint,
+      ).catch(() => undefined);
+    const snapshot: TransportSnapshot = {
+      state: "connected",
+      mode: this.mode,
+      ...(this.options.publicUrl
+        ? { publicUrl: this.options.publicUrl.replace(/\/$/, "") + "/mcp" }
+        : {}),
+      message: warmValidated
+        ? "OpenAI tunnel-client running (validated profile cache)"
+        : "OpenAI tunnel-client running",
+    };
+    this.setSnapshot(snapshot);
+    return snapshot;
+  }
+
+  private async validateProfile(profile: string): Promise<void> {
     if (this.options.tunnelId && this.options.runtimeApiKey) {
       await runClientCommand(
         this.options.executable,
@@ -55,7 +104,10 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
         "OPENAI_TUNNEL_DOCTOR_FAILED",
       );
     }
-    this.child = spawn(this.options.executable, ["run", "--profile", profile], {
+  }
+
+  private spawnRun(profile: string): ChildProcess {
+    return spawn(this.options.executable, ["run", "--profile", profile], {
       windowsHide: true,
       env: {
         ...process.env,
@@ -65,21 +117,85 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
       },
       stdio: "ignore",
     });
-    this.watchExit(this.child);
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    if (this.child.exitCode !== null)
-      throw new Error("OPENAI_TUNNEL_CLIENT_EXITED");
-    const snapshot: TransportSnapshot = {
-      state: "connected",
-      mode: this.mode,
-      ...(this.options.publicUrl
-        ? { publicUrl: this.options.publicUrl.replace(/\/$/, "") + "/mcp" }
-        : {}),
-      message: "OpenAI tunnel-client running",
-    };
-    this.setSnapshot(snapshot);
-    return snapshot;
   }
+
+  private async validationFingerprint(profile: string): Promise<string> {
+    const executable = await stat(this.options.executable).catch(() => null);
+    return createHash("sha256")
+      .update(
+        JSON.stringify({
+          executable: path.resolve(this.options.executable),
+          executableSize: executable?.size ?? null,
+          executableMtime: executable?.mtimeMs ?? null,
+          profile,
+          tunnelId: this.options.tunnelId ?? null,
+          localUrl: this.localUrl,
+          runtimeKeyHash: this.options.runtimeApiKey
+            ? createHash("sha256")
+                .update(this.options.runtimeApiKey)
+                .digest("hex")
+            : null,
+        }),
+      )
+      .digest("hex");
+  }
+}
+
+async function cacheMatches(
+  file: string | undefined,
+  fingerprint: string,
+): Promise<boolean> {
+  if (!file) return false;
+  try {
+    const parsed = JSON.parse(await readFile(file, "utf8")) as {
+      fingerprint?: string;
+    };
+    return parsed.fingerprint === fingerprint;
+  } catch {
+    return false;
+  }
+}
+
+async function writeValidationCache(
+  file: string | undefined,
+  fingerprint: string,
+): Promise<void> {
+  if (!file) return;
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(
+    file,
+    `${JSON.stringify({ fingerprint, validatedAt: new Date().toISOString() }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+async function clearValidationCache(file: string | undefined): Promise<void> {
+  if (!file) return;
+  await rm(file, { force: true }).catch(() => undefined);
+}
+
+async function waitForStableChild(
+  child: ChildProcess,
+  delayMs: number,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.removeListener("error", onError);
+      child.removeListener("exit", onExit);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onError = (error: Error): void => finish(error);
+    const onExit = (): void => finish(new Error("OPENAI_TUNNEL_CLIENT_EXITED"));
+    const timer = setTimeout(() => finish(), delayMs);
+    child.once("error", onError);
+    child.once("exit", onExit);
+  });
+  if (child.exitCode !== null) throw new Error("OPENAI_TUNNEL_CLIENT_EXITED");
 }
 
 function runClientCommand(

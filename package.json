@@ -1,6 +1,6 @@
 {
   "name": "qnector",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "private": true,
   "description": "Personal full-access desktop bridge between ChatGPT MCP and a local Windows computer",
   "type": "module",
@@ -28,6 +28,7 @@
     "accept:p1-p10": "tsx scripts/accept-p1-p10.ts",
     "accept:p11-p18": "tsx scripts/accept-p11-p18.ts",
     "accept:p23": "tsx scripts/accept-p23.ts",
+    "accept:performance": "tsx scripts/accept-performance.ts",
     "accept:browser": "tsx scripts/accept-browser-automation.ts",
     "test:plus": "tsx scripts/test-plus-compatibility.ts",
     "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",

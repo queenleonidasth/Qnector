@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { QnectorApi } from "./api.js";
 
 const api: QnectorApi = {
+  getBootstrap: () => ipcRenderer.invoke("app:bootstrap"),
   getStatus: () => ipcRenderer.invoke("status:get"),
   connect: () => ipcRenderer.invoke("bridge:connect"),
   disconnect: () => ipcRenderer.invoke("bridge:disconnect"),
@@ -36,6 +37,7 @@ const api: QnectorApi = {
   installUpdate: () => ipcRenderer.invoke("updater:install"),
   openUpdateRelease: () => ipcRenderer.invoke("updater:open-release"),
   updateConfig: (patch) => ipcRenderer.invoke("config:update", patch),
+  onRuntimeReady: (listener) => subscribe("runtime:ready", listener),
   onStatus: (listener) => subscribe("bridge:state", listener),
   onActivity: (listener) => subscribe("activity:new", listener),
   onProcess: (listener) => subscribe("process:update", listener),

@@ -1,7 +1,15 @@
-import { execFile } from "node:child_process";
+import {
+  execFile,
+  spawn,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import {
+  createInterface,
+  type Interface as ReadLineInterface,
+} from "node:readline";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -89,6 +97,7 @@ export interface UiAutomationService {
     elapsedMs: number;
     element?: UiAutomationElement;
   }>;
+  close?(): Promise<void> | void;
 }
 
 interface RawElement {
@@ -136,6 +145,10 @@ export class WindowsUiAutomationService implements UiAutomationService {
   private readonly runOverride?: (script: string) => Promise<string>;
   private readonly windowsById = new Map<string, WindowLocator>();
   private readonly elementsById = new Map<string, ElementLocator>();
+  private helperProcess?: ChildProcessWithoutNullStreams;
+  private helperReader?: ReadLineInterface;
+  private helperQueue: Promise<void> = Promise.resolve();
+  private helperStderr = "";
 
   public constructor(options: WindowsUiAutomationOptions = {}) {
     this.powershellPath = options.powershellPath;
@@ -383,30 +396,19 @@ export class WindowsUiAutomationService implements UiAutomationService {
     );
     const script = buildPowerShellScript(action, payload);
     try {
+      if (this.helperPath && !this.runOverride)
+        return await this.runPersistentHelper(action, input);
       const stdout = this.runOverride
         ? await this.runOverride(script)
-        : this.helperPath
-          ? (
-              await execFileAsync(this.helperPath, [action, payload], {
-                windowsHide: true,
-                maxBuffer: 8_000_000,
-              })
-            ).stdout
-          : (
-              await execFileAsync(
-                this.powershellPath ??
-                  process.env.QNECTOR_POWERSHELL_PATH ??
-                  "powershell.exe",
-                [
-                  "-NoLogo",
-                  "-NoProfile",
-                  "-NonInteractive",
-                  "-Command",
-                  script,
-                ],
-                { windowsHide: true, maxBuffer: 8_000_000 },
-              )
-            ).stdout;
+        : (
+            await execFileAsync(
+              this.powershellPath ??
+                process.env.QNECTOR_POWERSHELL_PATH ??
+                "powershell.exe",
+              ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+              { windowsHide: true, maxBuffer: 8_000_000 },
+            )
+          ).stdout;
       const text = stdout.trim();
       if (!text) return [];
       return JSON.parse(text) as unknown;
@@ -424,6 +426,134 @@ export class WindowsUiAutomationService implements UiAutomationService {
       if (known) throw new Error(`${known[1]}: ${known[2]}`);
       throw new Error(`UIA_COMMAND_FAILED: ${details}`);
     }
+  }
+
+  public async close(): Promise<void> {
+    this.resetHelperProcess();
+  }
+
+  private async runPersistentHelper(
+    action: string,
+    input: Record<string, unknown>,
+  ): Promise<unknown> {
+    const previous = this.helperQueue;
+    let release!: () => void;
+    this.helperQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      try {
+        return await this.sendHelperRequest(action, input);
+      } catch {
+        // One transparent restart preserves the old exec-per-call reliability if
+        // the long-lived worker was killed or became stale between operations.
+        this.resetHelperProcess();
+        return await this.sendHelperRequest(action, input);
+      }
+    } finally {
+      release();
+    }
+  }
+
+  private ensureHelperProcess(): ChildProcessWithoutNullStreams {
+    if (
+      this.helperProcess &&
+      this.helperProcess.exitCode === null &&
+      !this.helperProcess.killed
+    )
+      return this.helperProcess;
+    if (!this.helperPath)
+      throw new Error(
+        "UIA_HELPER_UNAVAILABLE: helper executable is not configured",
+      );
+    this.helperStderr = "";
+    const child = spawn(this.helperPath, [], {
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    this.helperProcess = child;
+    this.helperReader = createInterface({ input: child.stdout });
+    child.stderr.on("data", (chunk: Buffer) => {
+      this.helperStderr = `${this.helperStderr}${chunk.toString("utf8")}`.slice(
+        -16_000,
+      );
+    });
+    child.once("exit", () => {
+      if (this.helperProcess === child) this.resetHelperProcess(false);
+    });
+    return child;
+  }
+
+  private sendHelperRequest(
+    action: string,
+    input: Record<string, unknown>,
+  ): Promise<unknown> {
+    const child = this.ensureHelperProcess();
+    const reader = this.helperReader!;
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error, value?: unknown): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reader.removeListener("line", onLine);
+        child.removeListener("error", onError);
+        child.removeListener("exit", onExit);
+        if (error) reject(error);
+        else resolve(value);
+      };
+      const onLine = (line: string): void => {
+        try {
+          const envelope = JSON.parse(line) as {
+            ok?: boolean;
+            result?: unknown;
+            error?: string;
+          };
+          if (envelope.ok === false)
+            return finish(new Error(envelope.error || "UIA_COMMAND_FAILED"));
+          finish(undefined, envelope.result ?? []);
+        } catch (error) {
+          finish(
+            new Error(
+              `UIA_COMMAND_FAILED: invalid helper response: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            ),
+          );
+        }
+      };
+      const onError = (error: Error): void => finish(error);
+      const onExit = (): void =>
+        finish(
+          new Error(
+            `UIA_COMMAND_FAILED: helper exited${this.helperStderr ? `: ${this.helperStderr.trim()}` : ""}`,
+          ),
+        );
+      const timer = setTimeout(
+        () =>
+          finish(new Error("UIA_TIMEOUT: helper response exceeded 30000 ms")),
+        30_000,
+      );
+      reader.once("line", onLine);
+      child.once("error", onError);
+      child.once("exit", onExit);
+      child.stdin.write(
+        `${JSON.stringify({ action, input })}\n`,
+        "utf8",
+        (error) => {
+          if (error) finish(error);
+        },
+      );
+    });
+  }
+
+  private resetHelperProcess(kill = true): void {
+    const child = this.helperProcess;
+    this.helperProcess = undefined;
+    this.helperReader?.close();
+    this.helperReader = undefined;
+    if (kill && child && child.exitCode === null && !child.killed) child.kill();
   }
 
   private requireWindows(): void {

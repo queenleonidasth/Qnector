@@ -1584,6 +1584,7 @@ body {
 .update-settings-card {
   position: relative;
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 13px;
   padding: 15px;

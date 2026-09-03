@@ -18,3 +18,4 @@ export * from "./release-manager.js";
 export * from "./document-intelligence.js";
 export * from "./workflow-manager.js";
 export * from "./pty-manager.js";
+export * from "./performance-monitor.js";

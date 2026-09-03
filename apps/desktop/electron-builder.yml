@@ -16,6 +16,8 @@ files:
   - "!node_modules/@qnector/*/dist/**/*.map"
   - "!node_modules/@qnector/*/dist/**/*.test.*"
   - "!node_modules/@qnector/*/tsconfig*"
+  - "!node_modules/node-pty/prebuilds/win32-arm64/**"
+  - "!node_modules/node-pty/third_party/conpty/**/win10-arm64/**"
 asar: true
 extraResources:
   - from: ../../tools/uia-helper/publish/qnector-uia.exe
@@ -43,6 +45,9 @@ extraResources:
       - "*.d.ts"
 win:
   icon: resources/icon.ico
+  electronLanguages:
+    - en-US
+    - th
   target:
     - nsis
     - portable

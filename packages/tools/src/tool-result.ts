@@ -1,4 +1,4 @@
-import { sanitizeText, sanitizeValue } from "@qnector/core";
+import { qnectorPerformance, sanitizeText, sanitizeValue } from "@qnector/core";
 import type {
   ActivityLogger,
   CodeIntelligenceService,
@@ -180,14 +180,27 @@ export async function runWithActivity<T>(
   work: () => Promise<T>,
 ): Promise<ToolResult<T>> {
   const startedAt = Date.now();
-  await context.activity.record({
-    tool,
-    action,
-    argsSummary: argsSummary(input),
-    status: "running",
-  });
+  if (context.activity.nonBlockingWrites)
+    context.activity.recordBuffered({
+      tool,
+      action,
+      argsSummary: argsSummary(input),
+      status: "running",
+    });
+  else
+    await context.activity.record({
+      tool,
+      action,
+      argsSummary: argsSummary(input),
+      status: "running",
+    });
   try {
     const result = await work();
+    qnectorPerformance.operation(
+      "tool",
+      `${tool}.${action}`,
+      Date.now() - startedAt,
+    );
     const output = result as {
       summary?: string;
       truncated?: boolean;
@@ -199,15 +212,26 @@ export async function runWithActivity<T>(
         ? output.summary
         : `${tool}.${action} completed`;
     const summary = sanitizeText(rawSummary).value;
-    await context.activity.record({
-      tool,
-      action,
-      argsSummary: argsSummary(input),
-      status: "success",
-      durationMs: Date.now() - startedAt,
-      outputSize: JSON.stringify(result).length,
-      summary,
-    });
+    if (context.activity.nonBlockingWrites)
+      context.activity.recordBuffered({
+        tool,
+        action,
+        argsSummary: argsSummary(input),
+        status: "success",
+        durationMs: Date.now() - startedAt,
+        outputSize: JSON.stringify(result).length,
+        summary,
+      });
+    else
+      await context.activity.record({
+        tool,
+        action,
+        argsSummary: argsSummary(input),
+        status: "success",
+        durationMs: Date.now() - startedAt,
+        outputSize: JSON.stringify(result).length,
+        summary,
+      });
     const response = success(
       tool,
       action,
@@ -228,14 +252,28 @@ export async function runWithActivity<T>(
     }
     return response;
   } catch (error) {
-    const parsed = errorFromUnknown(error);
-    await context.activity.error(
-      tool,
-      action,
-      argsSummary(input),
-      parsed,
+    qnectorPerformance.operation(
+      "tool",
+      `${tool}.${action}`,
       Date.now() - startedAt,
     );
+    const parsed = errorFromUnknown(error);
+    if (context.activity.nonBlockingWrites)
+      context.activity.errorBuffered(
+        tool,
+        action,
+        argsSummary(input),
+        parsed,
+        Date.now() - startedAt,
+      );
+    else
+      await context.activity.error(
+        tool,
+        action,
+        argsSummary(input),
+        parsed,
+        Date.now() - startedAt,
+      );
     return failure(tool, action, parsed, startedAt);
   }
 }

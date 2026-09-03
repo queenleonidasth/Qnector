@@ -27,12 +27,8 @@ if (Test-Path -LiteralPath $releaseDir) {
     Write-Warning "The existing release directory is in use; writing artifacts to $releaseDir"
   }
 }
-Push-Location (Join-Path $projectRoot "apps/desktop")
-try {
-  npx electron-builder --config electron-builder.yml --config.npmRebuild=false "--config.directories.output=$releaseDir"
-} finally {
-  Pop-Location
-}
+& (Join-Path $PSScriptRoot "invoke-electron-builder.ps1") -OutputDirectory $releaseDir -Target all
+if ($LASTEXITCODE -ne 0) { throw "Failed to package Qnector desktop artifacts" }
 
 $resourceRoot = Join-Path $releaseDir "win-unpacked\resources"
 $requiredPackagedResources = @(

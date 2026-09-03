@@ -6,6 +6,7 @@ import {
   realpath,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -136,7 +137,9 @@ export class MemoryStore {
   private workspaceId?: string;
   private state?: MemoryState;
   private stateExisted = false;
+  private stateMtimeMs: number | null | undefined;
   private checkpoints?: MemoryCheckpoint[];
+  private checkpointsMtimeMs: number | null | undefined;
   private stateWarning?: string;
   private mirrorMode: "off" | "memory-md";
   private readonly storageRoot: string;
@@ -174,7 +177,9 @@ export class MemoryStore {
     this.workspaceId = undefined;
     this.state = undefined;
     this.stateExisted = false;
+    this.stateMtimeMs = undefined;
     this.checkpoints = undefined;
+    this.checkpointsMtimeMs = undefined;
     this.stateWarning = undefined;
   }
 
@@ -184,8 +189,8 @@ export class MemoryStore {
 
   public async syncMirror(): Promise<void> {
     await this.serial(async () => {
-      const state = (await this.loadState(true)).state;
-      await this.writeMirror(state, await this.loadCheckpoints(true));
+      const state = (await this.loadState()).state;
+      await this.writeMirror(state, await this.loadCheckpoints());
     });
   }
 
@@ -193,8 +198,8 @@ export class MemoryStore {
     options: MemoryRecallOptions = {},
   ): Promise<MemoryRecall> {
     return this.serial(async () => {
-      const loaded = await this.loadState(true);
-      const checkpoints = await this.loadCheckpoints(true);
+      const loaded = await this.loadState();
+      const checkpoints = await this.loadCheckpoints();
       const checkpointLimit = clampLimit(
         options.checkpointLimit,
         this.maxCheckpoints,
@@ -236,10 +241,10 @@ export class MemoryStore {
     input: SaveCheckpointInput,
   ): Promise<MemoryRecall> {
     return this.serial(async () => {
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const active = sanitizeActive(input);
       const now = new Date().toISOString();
-      const existingCheckpoints = await this.loadCheckpoints(true);
+      const existingCheckpoints = await this.loadCheckpoints();
       const checkpoint: MemoryCheckpoint = {
         id: `checkpoint_${randomUUID()}`,
         createdAt: now,
@@ -271,7 +276,7 @@ export class MemoryStore {
 
   public async upsertNote(input: NoteInput): Promise<MemoryFact> {
     return this.serial(async () => {
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const key = sanitizeText(input.key).value.trim();
       if (!key) throw new Error("INVALID_INPUT: memory note key is required");
       const now = new Date().toISOString();
@@ -299,7 +304,7 @@ export class MemoryStore {
       const next = { ...state, facts, updatedAt: now };
       this.assertPayload(next);
       await this.writeState(next);
-      const checkpoints = await this.loadCheckpoints(true);
+      const checkpoints = await this.loadCheckpoints();
       await this.writeMirror(next, checkpoints);
       this.state = next;
       return fact;
@@ -310,7 +315,7 @@ export class MemoryStore {
     options: MemoryListOptions = {},
   ): Promise<MemoryListResult> {
     return this.serial(async () => {
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const query = options.query?.trim();
       const filtered = state.facts.filter((fact) => {
         if (options.category && fact.category !== options.category)
@@ -345,7 +350,7 @@ export class MemoryStore {
     key?: string;
   }): Promise<MemoryFact | null> {
     return this.serial(async () => {
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const normalizedKey = input.key
         ? normalizeMemoryKey(input.key)
         : undefined;
@@ -367,7 +372,7 @@ export class MemoryStore {
   }): Promise<boolean> {
     return this.serial(async () => {
       if (!input.id && !input.key) return false;
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const normalizedKey = input.key
         ? normalizeMemoryKey(input.key)
         : undefined;
@@ -382,7 +387,7 @@ export class MemoryStore {
       if (!deleted) return false;
       const next = { ...state, facts, updatedAt: new Date().toISOString() };
       await this.writeState(next);
-      await this.writeMirror(next, await this.loadCheckpoints(true));
+      await this.writeMirror(next, await this.loadCheckpoints());
       this.state = next;
       return true;
     });
@@ -395,7 +400,7 @@ export class MemoryStore {
     } = {},
   ): Promise<MemoryRecall> {
     return this.serial(async () => {
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const factsByKey = new Map<string, MemoryFact>();
       for (const fact of [...state.facts].reverse())
         factsByKey.set(normalizeMemoryKey(fact.key), fact);
@@ -413,7 +418,7 @@ export class MemoryStore {
           }
         : state.active;
       const next = { ...state, facts, active, updatedAt: now };
-      const checkpoints = (await this.loadCheckpoints(true)).slice(
+      const checkpoints = (await this.loadCheckpoints()).slice(
         -clampLimit(input.keepCheckpoints, this.maxCheckpoints),
       );
       this.assertPayload(next);
@@ -430,7 +435,7 @@ export class MemoryStore {
     scope: "active" | "checkpoints" | "facts" | "all",
   ): Promise<MemoryRecall> {
     return this.serial(async () => {
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const now = new Date().toISOString();
       const next: MemoryState = {
         ...state,
@@ -442,7 +447,7 @@ export class MemoryStore {
       const checkpoints =
         scope === "checkpoints" || scope === "all"
           ? []
-          : await this.loadCheckpoints(true);
+          : await this.loadCheckpoints();
       await this.writeState(next);
       await this.writeCheckpoints(checkpoints);
       if (scope === "all" && this.mirrorMode === "memory-md") {
@@ -462,7 +467,7 @@ export class MemoryStore {
     paths?: string[];
   }): Promise<void> {
     await this.serial(async () => {
-      const state = (await this.loadState(true)).state;
+      const state = (await this.loadState()).state;
       const now = new Date().toISOString();
       const next: MemoryState = {
         ...state,
@@ -481,15 +486,15 @@ export class MemoryStore {
       };
       this.assertPayload(next);
       await this.writeState(next);
-      await this.writeMirror(next, await this.loadCheckpoints(true));
+      await this.writeMirror(next, await this.loadCheckpoints());
       this.state = next;
     });
   }
 
   public async export(format: "json" | "markdown"): Promise<MemoryExport> {
     return this.serial(async () => {
-      const state = (await this.loadState(true)).state;
-      const checkpoints = await this.loadCheckpoints(true);
+      const state = (await this.loadState()).state;
+      const checkpoints = await this.loadCheckpoints();
       const safeState = sanitizeValue(state).value as MemoryState;
       const safeCheckpoints = sanitizeValue(checkpoints)
         .value as MemoryCheckpoint[];
@@ -546,8 +551,8 @@ export class MemoryStore {
   private async exportUnlocked(
     format: "json" | "markdown",
   ): Promise<MemoryExport> {
-    const state = (await this.loadState(true)).state;
-    const checkpoints = await this.loadCheckpoints(true);
+    const state = (await this.loadState()).state;
+    const checkpoints = await this.loadCheckpoints();
     const safeState = sanitizeValue(state).value as MemoryState;
     const safeCheckpoints = sanitizeValue(checkpoints)
       .value as MemoryCheckpoint[];
@@ -564,14 +569,20 @@ export class MemoryStore {
 
   private async loadState(force = false): Promise<LoadedState> {
     const workspaceId = await this.ensureWorkspaceId();
-    if (!force && this.state && this.state.workspaceId === workspaceId)
-      return {
-        state: this.state,
-        existed: this.stateExisted,
-        ...(this.stateWarning ? { warning: this.stateWarning } : {}),
-      };
     const file = this.statePath();
+    if (!force && this.state && this.state.workspaceId === workspaceId) {
+      const currentMtime = await stat(file)
+        .then((info) => info.mtimeMs)
+        .catch(() => null);
+      if (currentMtime === this.stateMtimeMs)
+        return {
+          state: this.state,
+          existed: this.stateExisted,
+          ...(this.stateWarning ? { warning: this.stateWarning } : {}),
+        };
+    }
     try {
+      const info = await stat(file);
       const parsed = memoryStateSchema.safeParse(
         JSON.parse(await readFile(file, "utf8")),
       );
@@ -579,9 +590,9 @@ export class MemoryStore {
         const sanitized = sanitizeValue(parsed.data);
         this.state = sanitized.value as MemoryState;
         this.stateExisted = true;
+        this.stateMtimeMs = info.mtimeMs;
         this.stateWarning = undefined;
-        if (sanitized.redacted)
-          await writeAtomic(file, `${JSON.stringify(this.state, null, 2)}\n`);
+        if (sanitized.redacted) await this.writeState(this.state);
         return { state: this.state, existed: true };
       }
       this.stateWarning =
@@ -598,6 +609,9 @@ export class MemoryStore {
     const state = emptyState(workspaceId, this.workspacePath);
     this.state = state;
     this.stateExisted = false;
+    this.stateMtimeMs = await stat(file)
+      .then((info) => info.mtimeMs)
+      .catch(() => null);
     return {
       state,
       existed: false,
@@ -606,9 +620,16 @@ export class MemoryStore {
   }
 
   private async loadCheckpoints(force = false): Promise<MemoryCheckpoint[]> {
-    if (!force && this.checkpoints) return [...this.checkpoints];
     const file = this.checkpointsPath();
+    if (!force && this.checkpoints) {
+      const currentMtime = await stat(file)
+        .then((info) => info.mtimeMs)
+        .catch(() => null);
+      if (currentMtime === this.checkpointsMtimeMs)
+        return [...this.checkpoints];
+    }
     try {
+      const info = await stat(file);
       const lines = (await readFile(file, "utf8"))
         .split(/\r?\n/)
         .filter(Boolean);
@@ -622,9 +643,11 @@ export class MemoryStore {
           return [sanitized.value as MemoryCheckpoint];
         })
         .slice(-this.maxCheckpoints);
+      this.checkpointsMtimeMs = info.mtimeMs;
       if (redacted) await this.writeCheckpoints(this.checkpoints);
     } catch {
       this.checkpoints = [];
+      this.checkpointsMtimeMs = null;
     }
     return [...this.checkpoints];
   }
@@ -709,8 +732,13 @@ export class MemoryStore {
   }
 
   private async writeState(state: MemoryState): Promise<void> {
-    await writeAtomic(this.statePath(), `${JSON.stringify(state, null, 2)}\n`);
+    const file = this.statePath();
+    await writeAtomic(file, `${JSON.stringify(state, null, 2)}\n`);
+    this.state = state;
     this.stateExisted = true;
+    this.stateMtimeMs = await stat(file)
+      .then((info) => info.mtimeMs)
+      .catch(() => Date.now());
     this.stateWarning = undefined;
   }
 
@@ -720,8 +748,12 @@ export class MemoryStore {
     const content = checkpoints.length
       ? `${checkpoints.map((entry) => JSON.stringify(entry)).join("\n")}\n`
       : "";
-    await writeAtomic(this.checkpointsPath(), content);
+    const file = this.checkpointsPath();
+    await writeAtomic(file, content);
     this.checkpoints = [...checkpoints];
+    this.checkpointsMtimeMs = await stat(file)
+      .then((info) => info.mtimeMs)
+      .catch(() => Date.now());
   }
 
   private async writeMirror(

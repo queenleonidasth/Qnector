@@ -262,6 +262,17 @@ describe("MemoryStore", () => {
       )?.value,
     ).toBe("b");
   });
+
+  it("invalidates the memory RAM cache when another store changes the file", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-cache-"));
+    const storage = path.join(root, "memory");
+    const first = new MemoryStore(root, { rootDirectory: storage });
+    const second = new MemoryStore(root, { rootDirectory: storage });
+    await first.upsertNote({ key: "shared", value: "before" });
+    expect((await first.getFact({ key: "shared" }))?.value).toBe("before");
+    await second.upsertNote({ key: "shared", value: "after" });
+    expect((await first.getFact({ key: "shared" }))?.value).toBe("after");
+  });
 });
 
 describe("ActivityLogger", () => {

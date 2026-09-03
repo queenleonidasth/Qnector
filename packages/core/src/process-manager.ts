@@ -81,6 +81,8 @@ export class ProcessManager {
   } {
     const shell = options.shell ?? this.defaultShell;
     if (shell === "powershell") {
+      const direct = smartDirectCommand(options.command);
+      if (direct) return direct;
       const executable = powershellExecutable();
       return {
         file: executable,
@@ -661,6 +663,64 @@ function canConnect(host: string, port: number): Promise<boolean> {
   });
 }
 
+const executableLookupCache = new Map<string, string | null>();
+let cachedPowerShellExecutable: string | undefined;
+
+function smartDirectCommand(
+  command: string,
+): { file: string; args: string[] } | null {
+  if (process.platform !== "win32") return null;
+  if (process.env.QNECTOR_SMART_DIRECT === "0") return null;
+  const trimmed = command.trim();
+  if (!trimmed || /[\r\n|><;&`$(){}\[\]*?]/.test(trimmed)) return null;
+  const tokens = tokenizeCommand(trimmed);
+  if (tokens.length === 0) return null;
+  const requested = tokens[0]!;
+  const base = path
+    .basename(requested)
+    .toLowerCase()
+    .replace(/\.exe$/i, "");
+  // Keep this intentionally conservative. Script shims such as npm.cmd/pnpm.cmd
+  // remain on PowerShell so shell-specific behavior cannot change unexpectedly.
+  if (
+    !new Set(["git", "node", "python", "python3", "py", "rg", "where"]).has(
+      base,
+    )
+  )
+    return null;
+  const executable = resolveNativeExecutable(requested);
+  if (!executable || !/\.(?:exe|com)$/i.test(executable)) return null;
+  return { file: executable, args: tokens.slice(1) };
+}
+
+function resolveNativeExecutable(command: string): string | null {
+  const key = command.toLowerCase();
+  if (executableLookupCache.has(key))
+    return executableLookupCache.get(key) ?? null;
+  let resolved: string | null = null;
+  try {
+    if (path.isAbsolute(command)) {
+      resolved = existsSync(command) ? command : null;
+    } else {
+      const lookup = spawnSync("where.exe", [command], {
+        encoding: "utf8",
+        windowsHide: true,
+      });
+      if (lookup.status === 0) {
+        resolved =
+          String(lookup.stdout ?? "")
+            .split(/\r?\n/)
+            .map((entry) => entry.trim())
+            .find((entry) => /\.(?:exe|com)$/i.test(entry)) ?? null;
+      }
+    }
+  } catch {
+    resolved = null;
+  }
+  executableLookupCache.set(key, resolved);
+  return resolved;
+}
+
 function tokenizeCommand(command: string): string[] {
   const tokens = command.match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+/g) ?? [];
   return tokens.map((token) => {
@@ -675,10 +735,15 @@ function tokenizeCommand(command: string): string[] {
 }
 
 function powershellExecutable(): string {
+  if (cachedPowerShellExecutable) return cachedPowerShellExecutable;
   const requested = process.env.QNECTOR_POWERSHELL_PATH;
-  if (requested && executableOnPath(requested)) return requested;
-  if (process.platform !== "win32") return requested ?? "pwsh";
-  return executableOnPath("pwsh.exe") ? "pwsh.exe" : "powershell.exe";
+  if (requested && executableOnPath(requested))
+    return (cachedPowerShellExecutable = requested);
+  if (process.platform !== "win32")
+    return (cachedPowerShellExecutable = requested ?? "pwsh");
+  return (cachedPowerShellExecutable = executableOnPath("pwsh.exe")
+    ? "pwsh.exe"
+    : "powershell.exe");
 }
 
 function executableOnPath(command: string): boolean {

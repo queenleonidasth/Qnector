@@ -21,7 +21,17 @@ export interface ConnectionSetupStatus {
   bridge: TransportSnapshot;
 }
 
+export interface DesktopBootstrapSnapshot {
+  status: ServerStatus & { publicUrl?: string; bridge: TransportSnapshot };
+  config: QnectorConfig;
+  activity: ActivityEntry[];
+  processes: ProcessSnapshot[];
+  update?: DesktopUpdateState;
+  runtimeReady: boolean;
+}
+
 export interface QnectorApi {
+  getBootstrap(): Promise<DesktopBootstrapSnapshot>;
   getStatus(): Promise<
     ServerStatus & { publicUrl?: string; bridge: TransportSnapshot }
   >;
@@ -86,6 +96,9 @@ export interface QnectorApi {
     omittedLines?: number;
   }>;
   openTerminal(path: string): Promise<void>;
+  onRuntimeReady(
+    listener: (snapshot: DesktopBootstrapSnapshot) => void,
+  ): () => void;
   onStatus(
     listener: (
       status: ServerStatus & { publicUrl?: string; bridge: TransportSnapshot },
