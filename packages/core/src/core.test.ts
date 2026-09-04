@@ -123,6 +123,44 @@ describe("MemoryStore", () => {
     ).toContain("workspaces");
   });
 
+  it("automatically checkpoints persisted workspace progress without a model memory call", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-auto-"));
+    const store = new MemoryStore(root, {
+      rootDirectory: path.join(root, "memory"),
+      workspaceMirror: "memory-md",
+    });
+
+    await store.recordChange({
+      source: "files",
+      summary: "Wrote src/a.ts",
+      paths: ["src/a.ts"],
+    });
+    let recalled = await store.recall();
+    expect(recalled.counts.checkpoints).toBe(1);
+    expect(recalled.checkpoints[0]?.label).toBe(
+      "Auto checkpoint - workspace progress",
+    );
+    expect(recalled.state.active?.currentTask).toContain("Wrote src/a.ts");
+
+    for (const name of ["b", "c", "d", "e"]) {
+      await store.recordChange({
+        source: "files",
+        summary: `Wrote src/${name}.ts`,
+        paths: [`src/${name}.ts`],
+      });
+    }
+    recalled = await store.recall();
+    expect(recalled.counts.checkpoints).toBe(2);
+    expect(recalled.state.active?.completedSteps).toEqual(
+      expect.arrayContaining(["files: Wrote src/e.ts (src/e.ts)"]),
+    );
+
+    await store.clear("checkpoints");
+    expect((await store.recall()).counts.checkpoints).toBe(0);
+    await store.ensureAutomaticCheckpoint();
+    expect((await store.recall()).counts.checkpoints).toBe(1);
+  });
+
   it("normalizes active steps and avoids duplicate checkpoints or fact keys", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-normalize-"));
     const store = new MemoryStore(root, {

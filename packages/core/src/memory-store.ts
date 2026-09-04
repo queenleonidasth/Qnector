@@ -27,6 +27,10 @@ import {
 
 const DEFAULT_MAX_CHECKPOINTS = 10;
 const DEFAULT_MAX_PAYLOAD_BYTES = 256_000;
+const AUTO_CHECKPOINT_MIN_CHANGES = 4;
+const AUTO_CHECKPOINT_MAX_AGE_MS = 10 * 60 * 1_000;
+const AUTO_CHECKPOINT_MAX_STEPS = 12;
+const AUTO_CHECKPOINT_LABEL = "Auto checkpoint - workspace progress";
 const MEMORY_QUERY_STOP_WORDS = new Set([
   "and",
   "are",
@@ -469,7 +473,7 @@ export class MemoryStore {
     await this.serial(async () => {
       const state = (await this.loadState()).state;
       const now = new Date().toISOString();
-      const next: MemoryState = {
+      let next: MemoryState = {
         ...state,
         updatedAt: now,
         recentChanges: [
@@ -484,10 +488,50 @@ export class MemoryStore {
           ...state.recentChanges,
         ].slice(0, 100),
       };
+      let checkpoints = await this.loadCheckpoints();
+      const automatic = buildAutomaticCheckpoint(next, checkpoints, input, now);
+      if (automatic) {
+        next = { ...next, active: automatic.active };
+        checkpoints = [...checkpoints, automatic].slice(-this.maxCheckpoints);
+      }
       this.assertPayload(next);
       await this.writeState(next);
-      await this.writeMirror(next, await this.loadCheckpoints());
+      if (automatic) await this.writeCheckpoints(checkpoints);
+      await this.writeMirror(next, checkpoints);
       this.state = next;
+      this.checkpoints = checkpoints;
+    });
+  }
+
+  public async ensureAutomaticCheckpoint(): Promise<MemoryRecall> {
+    return this.serial(async () => {
+      const state = (await this.loadState()).state;
+      let checkpoints = await this.loadCheckpoints();
+      if (checkpoints.length === 0 && state.recentChanges.length > 0) {
+        const latest = state.recentChanges[0]!;
+        const automatic = buildAutomaticCheckpoint(
+          state,
+          checkpoints,
+          {
+            source: latest.source,
+            summary: latest.summary,
+            paths: latest.paths,
+          },
+          new Date().toISOString(),
+          true,
+        );
+        if (automatic) {
+          const next = { ...state, active: automatic.active };
+          checkpoints = [automatic].slice(-this.maxCheckpoints);
+          this.assertPayload(next);
+          await this.writeState(next);
+          await this.writeCheckpoints(checkpoints);
+          await this.writeMirror(next, checkpoints);
+          this.state = next;
+          this.checkpoints = checkpoints;
+        }
+      }
+      return this.recallUnlocked();
     });
   }
 
@@ -828,6 +872,87 @@ function sanitizeActive(input: SaveCheckpointInput): MemoryActiveState {
     pendingSteps,
     criticalContext: safe.criticalContext.trim(),
   };
+}
+
+function buildAutomaticCheckpoint(
+  state: MemoryState,
+  checkpoints: MemoryCheckpoint[],
+  input: {
+    source: "files" | "git" | "manual";
+    summary: string;
+    paths?: string[];
+  },
+  now: string,
+  force = false,
+): MemoryCheckpoint | null {
+  const previous = checkpoints.at(-1);
+  const previousTime = previous ? Date.parse(previous.createdAt) : Number.NaN;
+  const previousSteps = new Set(
+    (previous?.active?.completedSteps ?? []).map(normalizeMemoryKey),
+  );
+  const changes = state.recentChanges
+    .filter((change) => {
+      if (!previous) return true;
+      const timestamp = Date.parse(change.timestamp);
+      if (Number.isFinite(previousTime) && timestamp < previousTime)
+        return false;
+      return !previousSteps.has(normalizeMemoryKey(changeStep(change)));
+    })
+    .slice(0, AUTO_CHECKPOINT_MAX_STEPS);
+  const elapsed = Number.isFinite(previousTime)
+    ? Math.max(0, Date.parse(now) - previousTime)
+    : Number.POSITIVE_INFINITY;
+  const gitMilestone =
+    input.source === "git" &&
+    /\bgit (commit|push|pull|merge|rebase|checkout|reset|stash)\b/i.test(
+      input.summary,
+    );
+  if (
+    !force &&
+    previous &&
+    !gitMilestone &&
+    changes.length < AUTO_CHECKPOINT_MIN_CHANGES &&
+    elapsed < AUTO_CHECKPOINT_MAX_AGE_MS
+  ) {
+    return null;
+  }
+
+  const previousWasAutomatic = previous?.label === AUTO_CHECKPOINT_LABEL;
+  const existing = state.active;
+  const preserveExistingTask = Boolean(existing && !previousWasAutomatic);
+  const completedSteps = dedupeTextValues([
+    ...(existing?.completedSteps ?? []),
+    ...[...changes].reverse().map(changeStep),
+  ]).slice(-AUTO_CHECKPOINT_MAX_STEPS);
+  const safeSummary = sanitizeText(input.summary).value.trim();
+  const active = sanitizeActive({
+    currentTask:
+      preserveExistingTask && existing?.currentTask.trim()
+        ? existing.currentTask
+        : `Continue workspace work after: ${safeSummary || "the latest successful change"}`,
+    completedSteps,
+    pendingSteps:
+      preserveExistingTask && existing?.pendingSteps.length
+        ? existing.pendingSteps
+        : [
+            "Review the latest workspace state and continue from the newest successful change.",
+          ],
+    criticalContext:
+      preserveExistingTask && existing?.criticalContext.trim()
+        ? existing.criticalContext
+        : `Automatic checkpoint generated from persisted Qnector workspace changes. Latest change: ${safeSummary || "workspace progress"}`,
+  });
+  return {
+    id: `checkpoint_${randomUUID()}`,
+    createdAt: now,
+    label: AUTO_CHECKPOINT_LABEL,
+    active,
+  };
+}
+
+function changeStep(change: MemoryState["recentChanges"][number]): string {
+  const paths = change.paths.slice(0, 2);
+  return `${change.source}: ${change.summary}${paths.length ? ` (${paths.join(", ")})` : ""}`;
 }
 
 function selectFacts(

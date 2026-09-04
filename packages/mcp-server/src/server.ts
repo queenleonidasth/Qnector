@@ -205,6 +205,7 @@ export class QnectorRuntime {
     this.workspace.replace(config);
     this.memory.setWorkspace(config.activeWorkspace);
     this.memory.setMirrorMode(config.memory?.workspaceMirror ?? "off");
+    await this.ensureAutomaticMemoryCheckpoint();
     if (config.memory?.workspaceMirror === "memory-md")
       await this.memory.syncMirror();
     this.processManager.setDefaultShell(config.shell.windows);
@@ -263,6 +264,7 @@ export class QnectorRuntime {
     this.state = "connecting";
     this.startedAt = new Date().toISOString();
     await this.activity.load();
+    await this.ensureAutomaticMemoryCheckpoint();
     const host = options.host ?? this.config.host;
     const port = options.port ?? this.config.localPort;
     this.config = { ...this.config, host, localPort: port };
@@ -289,6 +291,14 @@ export class QnectorRuntime {
     if (this.listening) await this.app.close();
     this.listening = false;
     this.state = "disconnected";
+  }
+
+  private async ensureAutomaticMemoryCheckpoint(): Promise<void> {
+    const compatible = this.memory as MemoryStore & {
+      ensureAutomaticCheckpoint?: () => Promise<unknown>;
+    };
+    if (typeof compatible.ensureAutomaticCheckpoint !== "function") return;
+    await compatible.ensureAutomaticCheckpoint().catch(() => undefined);
   }
 
   private registerRoutes(): void {
