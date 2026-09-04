@@ -470,6 +470,14 @@ export class MemoryStore {
     summary: string;
     paths?: string[];
   }): Promise<void> {
+    const sanitizedPaths = (input.paths ?? [])
+      .map((entry) => sanitizeText(entry).value.trim())
+      .filter(Boolean);
+    const relevantPaths = sanitizedPaths
+      .filter((entry) => isMemoryPathInWorkspace(entry, this.workspacePath))
+      .slice(0, 50);
+    if (sanitizedPaths.length > 0 && relevantPaths.length === 0) return;
+
     await this.serial(async () => {
       const state = (await this.loadState()).state;
       const now = new Date().toISOString();
@@ -481,9 +489,7 @@ export class MemoryStore {
             timestamp: now,
             source: input.source,
             summary: sanitizeText(input.summary).value,
-            paths: (input.paths ?? [])
-              .map((entry) => sanitizeText(entry).value)
-              .slice(0, 50),
+            paths: relevantPaths,
           },
           ...state.recentChanges,
         ].slice(0, 100),
@@ -505,31 +511,62 @@ export class MemoryStore {
 
   public async ensureAutomaticCheckpoint(): Promise<MemoryRecall> {
     return this.serial(async () => {
-      const state = (await this.loadState()).state;
+      const loadedState = (await this.loadState()).state;
+      const cleanChanges = loadedState.recentChanges.filter(
+        (change) =>
+          change.paths.length === 0 ||
+          change.paths.some((entry) =>
+            isMemoryPathInWorkspace(entry, this.workspacePath),
+          ),
+      );
+      const prunedForeignChanges =
+        cleanChanges.length !== loadedState.recentChanges.length;
+      const now = new Date().toISOString();
+      let state: MemoryState = prunedForeignChanges
+        ? { ...loadedState, recentChanges: cleanChanges, updatedAt: now }
+        : loadedState;
       let checkpoints = await this.loadCheckpoints();
-      if (checkpoints.length === 0 && state.recentChanges.length > 0) {
-        const latest = state.recentChanges[0]!;
+      let checkpointsChanged = false;
+      const latestCheckpoint = checkpoints.at(-1);
+      const refreshAutomatic =
+        prunedForeignChanges &&
+        latestCheckpoint?.label === AUTO_CHECKPOINT_LABEL;
+      const needsAutomatic =
+        cleanChanges.length > 0 &&
+        (checkpoints.length === 0 || refreshAutomatic);
+
+      if (needsAutomatic) {
+        const latest = cleanChanges[0]!;
+        const baseCheckpoints = refreshAutomatic
+          ? checkpoints.slice(0, -1)
+          : checkpoints;
         const automatic = buildAutomaticCheckpoint(
-          state,
-          checkpoints,
+          refreshAutomatic ? { ...state, active: null } : state,
+          baseCheckpoints,
           {
             source: latest.source,
             summary: latest.summary,
             paths: latest.paths,
           },
-          new Date().toISOString(),
+          now,
           true,
         );
         if (automatic) {
-          const next = { ...state, active: automatic.active };
-          checkpoints = [automatic].slice(-this.maxCheckpoints);
-          this.assertPayload(next);
-          await this.writeState(next);
-          await this.writeCheckpoints(checkpoints);
-          await this.writeMirror(next, checkpoints);
-          this.state = next;
-          this.checkpoints = checkpoints;
+          state = { ...state, active: automatic.active, updatedAt: now };
+          checkpoints = [...baseCheckpoints, automatic].slice(
+            -this.maxCheckpoints,
+          );
+          checkpointsChanged = true;
         }
+      }
+
+      if (prunedForeignChanges || checkpointsChanged) {
+        this.assertPayload(state);
+        await this.writeState(state);
+        if (checkpointsChanged) await this.writeCheckpoints(checkpoints);
+        await this.writeMirror(state, checkpoints);
+        this.state = state;
+        this.checkpoints = checkpoints;
       }
       return this.recallUnlocked();
     });
@@ -872,6 +909,19 @@ function sanitizeActive(input: SaveCheckpointInput): MemoryActiveState {
     pendingSteps,
     criticalContext: safe.criticalContext.trim(),
   };
+}
+
+function isMemoryPathInWorkspace(
+  value: string,
+  workspacePath: string,
+): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const root = normalizeWorkspacePath(workspacePath).replace(/[\\/]+$/, "");
+  const candidate = normalizeWorkspacePath(
+    path.isAbsolute(trimmed) ? trimmed : path.resolve(workspacePath, trimmed),
+  );
+  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
 }
 
 function buildAutomaticCheckpoint(

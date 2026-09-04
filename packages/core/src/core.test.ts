@@ -161,6 +161,72 @@ describe("MemoryStore", () => {
     expect((await store.recall()).counts.checkpoints).toBe(1);
   });
 
+  it("ignores foreign file changes and heals legacy foreign-path checkpoint pollution", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-scope-"));
+    const storage = path.join(root, "memory");
+    const store = new MemoryStore(root, {
+      rootDirectory: storage,
+      workspaceMirror: "memory-md",
+    });
+    const foreignPath = path.join(tmpdir(), "qnector-foreign-helper.ps1");
+
+    await store.recordChange({
+      source: "files",
+      summary: "Wrote foreign helper",
+      paths: [foreignPath],
+    });
+    let recalled = await store.recall();
+    expect(recalled.counts.recentChanges).toBe(0);
+    expect(recalled.counts.checkpoints).toBe(0);
+
+    const projectFile = path.join(root, "src", "inside.ts");
+    await store.recordChange({
+      source: "files",
+      summary: "Wrote project file",
+      paths: [projectFile],
+    });
+    recalled = await store.recall();
+    expect(recalled.counts.checkpoints).toBe(1);
+    const stateFile = path.join(storage, recalled.workspaceId, "state.json");
+    const checkpointsFile = path.join(
+      storage,
+      recalled.workspaceId,
+      "checkpoints.jsonl",
+    );
+    const pollutedState = JSON.parse(await readFile(stateFile, "utf8"));
+    pollutedState.recentChanges.unshift({
+      timestamp: new Date().toISOString(),
+      source: "files",
+      summary: "Wrote foreign helper",
+      paths: [foreignPath],
+    });
+    pollutedState.active.currentTask = `Continue workspace work after: Wrote ${foreignPath}`;
+    await writeFile(
+      stateFile,
+      `${JSON.stringify(pollutedState, null, 2)}\n`,
+      "utf8",
+    );
+    const checkpointLines = (await readFile(checkpointsFile, "utf8"))
+      .trim()
+      .split(/\r?\n/);
+    const pollutedCheckpoint = JSON.parse(checkpointLines.at(-1)!);
+    pollutedCheckpoint.active = pollutedState.active;
+    checkpointLines[checkpointLines.length - 1] =
+      JSON.stringify(pollutedCheckpoint);
+    await writeFile(checkpointsFile, `${checkpointLines.join("\n")}\n`, "utf8");
+
+    const fresh = new MemoryStore(root, {
+      rootDirectory: storage,
+      workspaceMirror: "memory-md",
+    });
+    const healed = await fresh.ensureAutomaticCheckpoint();
+    expect(healed.state.recentChanges).toHaveLength(1);
+    expect(healed.state.recentChanges[0]?.paths).toEqual([projectFile]);
+    expect(healed.state.active?.currentTask).toContain("Wrote project file");
+    expect(healed.state.active?.currentTask).not.toContain("foreign-helper");
+    expect(healed.counts.checkpoints).toBe(1);
+  });
+
   it("normalizes active steps and avoids duplicate checkpoints or fact keys", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-core-memory-normalize-"));
     const store = new MemoryStore(root, {
