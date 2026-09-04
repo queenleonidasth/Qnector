@@ -136,6 +136,7 @@ export class DesktopUpdater {
         processId: process.pid,
         sourcePath: this.downloadedPath,
         targetExecutable,
+        expectedVersion: this.state.latestVersion,
       });
       const powershell = await resolveWindowsPowerShell();
       updateArtifacts.bootstrapPath = await createUpdaterBootstrap({
@@ -491,6 +492,7 @@ async function createUpdateScript(input: {
   processId: number;
   sourcePath: string;
   targetExecutable: string;
+  expectedVersion?: string;
 }): Promise<{ scriptPath: string; readyPath: string; logPath: string }> {
   const scriptPath = path.join(
     app.getPath("temp"),

@@ -60,11 +60,31 @@ describe("Windows updater apply script", () => {
       mode: "installed",
       sourcePath: "C:\\Temp\\setup.exe",
       targetExecutable: "C:\\Program Files\\Qnector\\Qnector.exe",
+      expectedVersion: "0.4.7",
     });
 
-    expect(script).toContain("-ArgumentList '/S' -Wait -PassThru");
+    expect(script).toContain("$installScope = '/allusers'");
+    expect(script).toContain(
+      "-ArgumentList @('/S', $installScope) -Wait -PassThru",
+    );
     expect(script).toContain("Installer exited with code");
+    expect(script).toContain("$expectedVersion = '0.4.7'");
+    expect(script).toContain("Installed target version mismatch");
+    expect(script).toContain("Installed target version verified at $target");
     expect(script).toContain("Start-QnectorTarget");
+  });
+
+  it("keeps per-user installed updates in the current-user scope", () => {
+    const script = buildWindowsUpdateScript({
+      ...common,
+      mode: "installed",
+      sourcePath: "C:\\Temp\\setup.exe",
+      targetExecutable:
+        "C:\\Users\\QUEEN\\AppData\\Local\\Programs\\Qnector\\Qnector.exe",
+      expectedVersion: "0.4.7",
+    });
+
+    expect(script).toContain("$installScope = '/currentuser'");
   });
 });
 

@@ -5,6 +5,7 @@ export interface WindowsUpdateScriptInput {
   processId: number;
   sourcePath: string;
   targetExecutable: string;
+  expectedVersion?: string;
   logPath: string;
   readyPath: string;
 }
@@ -38,6 +39,10 @@ export function buildWindowsUpdateScript(
 ): string {
   const source = psQuote(input.sourcePath);
   const target = psQuote(input.targetExecutable);
+  const expectedVersion = psQuote(input.expectedVersion ?? "");
+  const installedScope = psQuote(
+    isProgramFilesTarget(input.targetExecutable) ? "/allusers" : "/currentuser",
+  );
   const log = psQuote(input.logPath);
   const ready = psQuote(input.readyPath);
 
@@ -46,6 +51,7 @@ export function buildWindowsUpdateScript(
     `$processIdToWaitFor = ${input.processId}`,
     `$source = ${source}`,
     `$target = ${target}`,
+    `$expectedVersion = ${expectedVersion}`,
     `$log = ${log}`,
     `$ready = ${ready}`,
     "function Write-UpdateLog([string]$message) {",
@@ -117,10 +123,17 @@ export function buildWindowsUpdateScript(
   } else {
     lines.push(
       "  Write-UpdateLog 'Launching NSIS installer'",
-      "  $installer = Start-Process -FilePath $source -ArgumentList '/S' -Wait -PassThru",
+      `  $installScope = ${installedScope}`,
+      '  Write-UpdateLog "Installer scope: $installScope"',
+      "  $installer = Start-Process -FilePath $source -ArgumentList @('/S', $installScope) -Wait -PassThru",
       '  if ($installer.ExitCode -ne 0) { throw "Installer exited with code $($installer.ExitCode)" }',
       "  Start-Sleep -Milliseconds 700",
       '  if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Installed executable is missing: $target" }',
+      "  if ($expectedVersion) {",
+      "    $installedVersion = (Get-Item -LiteralPath $target).VersionInfo.ProductVersion",
+      '    if ($installedVersion -ne $expectedVersion -and -not $installedVersion.StartsWith("$expectedVersion.")) { throw "Installed target version mismatch: expected $expectedVersion, got $installedVersion at $target" }',
+      '    Write-UpdateLog "Installed target version verified at $target: $installedVersion"',
+      "  }",
       "  Start-QnectorTarget",
     );
   }
@@ -151,4 +164,28 @@ export function buildWindowsUpdateScript(
 
 function psQuote(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
+}
+
+function isProgramFilesTarget(targetExecutable: string): boolean {
+  const normalizedTarget = normalizeWindowsPath(targetExecutable);
+  const environmentRoots = [
+    process.env.ProgramFiles,
+    process.env["ProgramFiles(x86)"],
+  ].filter((value): value is string => Boolean(value?.trim()));
+
+  if (/^[a-z]:\\program files(?: \(x86\))?\\/i.test(normalizedTarget)) {
+    return true;
+  }
+
+  return environmentRoots.some((root) => {
+    const normalizedRoot = normalizeWindowsPath(root).replace(/\\+$/, "");
+    return (
+      normalizedTarget === normalizedRoot ||
+      normalizedTarget.startsWith(`${normalizedRoot}\\`)
+    );
+  });
+}
+
+function normalizeWindowsPath(value: string): string {
+  return value.replaceAll("/", "\\").toLowerCase();
 }
