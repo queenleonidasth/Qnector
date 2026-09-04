@@ -62,6 +62,20 @@ describe("Qnector config first-run migration", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("drops a stale configured PowerShell executable so Windows fallback can recover", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-shell-config-"));
+    try {
+      const file = path.join(root, "config.json");
+      const legacy = defaultConfig(root);
+      legacy.shell.powershellPath = path.join(root, "missing-pwsh.exe");
+      await writeFile(file, JSON.stringify(legacy), "utf8");
+      const loaded = await loadConfig({ file, persist: false });
+      expect(loaded.shell.powershellPath).toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("MemoryStore", () => {

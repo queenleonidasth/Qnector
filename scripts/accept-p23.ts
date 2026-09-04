@@ -154,6 +154,7 @@ try {
   );
   checks.doctor = ptyDoctor;
 
+  await runtime.stop();
   console.log(JSON.stringify({ ok: true, p23: checks }, null, 2));
 } finally {
   await rm(root, { recursive: true, force: true });

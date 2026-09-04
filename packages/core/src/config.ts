@@ -1,11 +1,13 @@
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { configSchema } from "@qnector/shared";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
 
-export const QNECTOR_VERSION = "0.4.4";
+export const QNECTOR_VERSION = "0.4.6";
 
 export function configDirectory(): string {
   if (process.platform === "win32") {
@@ -33,7 +35,6 @@ export function activityLogPath(): string {
 function defaultShell(): QnectorConfig["shell"] {
   return {
     windows: "powershell",
-    powershellPath: "pwsh.exe",
     defaultTimeoutMs: 120_000,
   };
 }
@@ -95,6 +96,7 @@ export async function loadConfig(
       const loaded = parsed.data as QnectorConfig;
       return {
         ...loaded,
+        shell: normalizeShell(loaded.shell),
         ui: {
           ...loaded.ui,
           setupCompleted: loaded.ui.setupCompleted ?? true,
@@ -107,6 +109,28 @@ export async function loadConfig(
   const config = defaultConfig(options.workspace ?? process.cwd());
   if (options.persist ?? true) await saveConfig(config, file);
   return config;
+}
+
+function normalizeShell(shell: QnectorConfig["shell"]): QnectorConfig["shell"] {
+  const requested = shell.powershellPath?.trim();
+  if (!requested || executableAvailable(requested)) return { ...shell };
+  const { powershellPath: _invalid, ...rest } = shell;
+  return rest;
+}
+
+function executableAvailable(command: string): boolean {
+  try {
+    if (path.isAbsolute(command)) return existsSync(command);
+    const lookup = process.platform === "win32" ? "where.exe" : "which";
+    return (
+      spawnSync(lookup, [command], {
+        windowsHide: true,
+        stdio: "ignore",
+      }).status === 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function withWorkspace(

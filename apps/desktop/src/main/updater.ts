@@ -37,6 +37,15 @@ const RELEASES_URL = "https://github.com/queenleonidasth/Qnector/releases";
 const CHECK_TIMEOUT_MS = 15_000;
 const DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
 
+export interface DesktopUpdaterOptions {
+  releaseApi?: string;
+  releasesUrl?: string;
+  currentVersion?: string;
+  mode?: DesktopUpdateMode;
+  userDataPath?: string;
+  fetchImpl?: typeof fetch;
+}
+
 export class DesktopUpdater {
   private state: DesktopUpdateState;
   private release?: GitHubReleaseInfo;
@@ -45,14 +54,26 @@ export class DesktopUpdater {
   private checkPromise?: Promise<DesktopUpdateState>;
   private downloadPromise?: Promise<DesktopUpdateState>;
 
+  private readonly releaseApi: string;
+  private readonly releasesUrl: string;
+  private readonly currentVersion: string;
+  private readonly userDataPath: string;
+  private readonly fetchImpl: typeof fetch;
+
   public constructor(
     private readonly publish: (state: DesktopUpdateState) => void,
+    options: DesktopUpdaterOptions = {},
   ) {
-    const mode = detectUpdateMode();
+    const mode = options.mode ?? detectUpdateMode();
+    this.releaseApi = options.releaseApi ?? RELEASE_API;
+    this.releasesUrl = options.releasesUrl ?? RELEASES_URL;
+    this.currentVersion = options.currentVersion ?? app.getVersion();
+    this.userDataPath = options.userDataPath ?? app.getPath("userData");
+    this.fetchImpl = options.fetchImpl ?? fetch;
     this.state = {
       phase: "idle",
       mode,
-      currentVersion: app.getVersion(),
+      currentVersion: this.currentVersion,
       canDownload: false,
       canInstall: false,
       message:
@@ -174,7 +195,7 @@ export class DesktopUpdater {
   }
 
   public getReleaseUrl(): string {
-    return this.state.releaseUrl || RELEASES_URL;
+    return this.state.releaseUrl || this.releasesUrl;
   }
 
   private async performCheck(): Promise<DesktopUpdateState> {
@@ -187,10 +208,10 @@ export class DesktopUpdater {
     });
 
     try {
-      const response = await fetch(RELEASE_API, {
+      const response = await this.fetchImpl(this.releaseApi, {
         headers: {
           Accept: "application/vnd.github+json",
-          "User-Agent": `Qnector/${app.getVersion()}`,
+          "User-Agent": `Qnector/${this.currentVersion}`,
           "X-GitHub-Api-Version": "2022-11-28",
         },
         signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
@@ -202,7 +223,7 @@ export class DesktopUpdater {
         throw new Error("GitHub returned an invalid release payload");
 
       const latestVersion = normalizeVersion(release.tag_name);
-      const currentVersion = normalizeVersion(app.getVersion());
+      const currentVersion = normalizeVersion(this.currentVersion);
       this.release = release;
       this.asset = selectWindowsAsset(release.assets, this.state.mode);
       this.downloadedPath = undefined;
@@ -211,7 +232,7 @@ export class DesktopUpdater {
         this.setState({
           phase: "up-to-date",
           mode: this.state.mode,
-          currentVersion: app.getVersion(),
+          currentVersion: this.currentVersion,
           latestVersion,
           releaseName: release.name || release.tag_name,
           releaseUrl: release.html_url,
@@ -219,7 +240,7 @@ export class DesktopUpdater {
           notes: release.body || undefined,
           canDownload: false,
           canInstall: false,
-          message: `Qnector ${app.getVersion()} is up to date.`,
+          message: `Qnector ${this.currentVersion} is up to date.`,
         });
         return this.getState();
       }
@@ -232,7 +253,7 @@ export class DesktopUpdater {
       this.setState({
         phase: "available",
         mode: this.state.mode,
-        currentVersion: app.getVersion(),
+        currentVersion: this.currentVersion,
         latestVersion,
         releaseName: release.name || release.tag_name,
         releaseUrl: release.html_url,
@@ -262,7 +283,7 @@ export class DesktopUpdater {
     const asset = this.asset;
     const expectedSha256 = parseSha256Digest(asset.digest);
     const updateDir = path.join(
-      app.getPath("userData"),
+      this.userDataPath,
       "updates",
       this.state.latestVersion || "latest",
     );
@@ -313,10 +334,10 @@ export class DesktopUpdater {
       });
 
       const headers: Record<string, string> = {
-        "User-Agent": `Qnector/${app.getVersion()}`,
+        "User-Agent": `Qnector/${this.currentVersion}`,
       };
       if (resumeBytes > 0) headers.Range = `bytes=${resumeBytes}-`;
-      const response = await fetch(asset.browser_download_url, {
+      const response = await this.fetchImpl(asset.browser_download_url, {
         headers,
         redirect: "follow",
         signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),

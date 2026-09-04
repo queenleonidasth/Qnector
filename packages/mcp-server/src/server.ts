@@ -126,7 +126,6 @@ export class QnectorRuntime {
       transport: { mode: "local-only" },
       shell: {
         windows: "powershell",
-        powershellPath: "pwsh.exe",
         defaultTimeoutMs: 120_000,
       },
       ui: { minimizeToTray: true, startMinimized: false, theme: "system" },

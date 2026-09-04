@@ -1660,3 +1660,16 @@ The active Qnector source now includes a deterministic Memory quality upgrade wi
 7. Desktop default/minimum window size is locked to `451×978`, measured from the owner's known-good current window at 96 DPI, to prevent drawer/menu layout from entering the previously problematic compressed state.
 
 Validation after this upgrade: full TypeScript/lint/Prettier/build QC passes, all automated tests pass, P11–P18 real acceptance passes, and an Electron Windows sizing harness confirms a requested `300×500` resize is clamped to `451×978`.
+
+---
+
+# 17. P24/P25/P26/P28 RELIABILITY + PERFORMANCE UPGRADE — IMPLEMENTED 4 SEPTEMBER 2026
+
+Target release: `v0.4.6`.
+
+1. **P24 Auto Reconnect + Transport Watchdog** — non-local transports are wrapped by `ResilientTransportAdapter`. Unexpected bridge exits and transient startup failures reconnect with bounded backoff (`1s → 2s → 5s → 10s → 30s`), while explicit Disconnect cancels retries. Permanent configuration failures such as missing API keys, missing executables, or permission errors remain actionable errors instead of reconnect loops.
+2. **P25 Persistent PowerShell + Smart Command Router** — synchronous PowerShell `process.run` calls reuse a persistent worker on Windows, reset automatically after timeout/protocol failure, and fall back to isolated one-shot PowerShell for unsafe/unsupported cases. Common native executables and npm/pnpm/corepack command shims bypass PowerShell startup. Latest local performance acceptance measured warm PowerShell at single-digit milliseconds after the cold host startup.
+3. **P26 Updater/Release Pipeline v2** — `DesktopUpdater` has injectable release/fetch/user-data dependencies for integration testing. A real local HTTP E2E test covers `check → Range resume → exact byte count → SHA-256 verify → promote .part to final`. GitHub publishing now uses resilient `curl.exe` uploads with retry/timeout behavior and exact remote asset size/state verification. `pnpm release:verify` verifies both Windows assets without modifying a release.
+4. **P28 Transport Integration Tests** — direct OpenAI tunnel tests cover cold profile validation, validation-cache reuse, stale-cache invalidation and full recovery; resilient transport tests cover crash reconnect, escalating backoff, explicit disconnect, and permanent-error suppression.
+
+Release-affecting validation must keep `test`, `typecheck`, `lint`, `format:check`, `build`, capability acceptance, performance acceptance, Windows packaging, and `release:verify` green.

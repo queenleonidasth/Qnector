@@ -358,7 +358,7 @@ try {
 
   console.log(JSON.stringify({ ok: true, checks }, null, 2));
 } finally {
-  await runtime.browserRuntime.close().catch(() => undefined);
+  await runtime.stop().catch(() => undefined);
   await new Promise<void>((resolve) => server.close(() => resolve()));
   delete process.env.QNECTOR_BROWSER_PROFILE_ROOT;
   await rm(root, { recursive: true, force: true }).catch(() => undefined);

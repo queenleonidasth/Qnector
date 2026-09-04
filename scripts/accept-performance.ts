@@ -7,6 +7,7 @@ import {
   ActivityLogger,
   MemoryStore,
   ProcessManager,
+  shutdownPowerShellWorkers,
   WindowsUiAutomationService,
 } from "../packages/core/src/index.js";
 
@@ -37,7 +38,12 @@ try {
     });
     if (shellResult.exitCode !== 0 || smartResult.exitCode !== 0)
       throw new Error("process benchmark command failed");
-    if (shellResult.stdout !== smartResult.stdout)
+    const normalizeNewlines = (value: string) =>
+      value.replace(/\r\n/g, "\n").trimEnd();
+    if (
+      normalizeNewlines(shellResult.stdout) !==
+      normalizeNewlines(smartResult.stdout)
+    )
       throw new Error("smart direct changed git command output");
 
     const fallbackResult = await smartManager.run({
@@ -48,12 +54,18 @@ try {
     });
     if (!fallbackResult.stdout.includes("shell-fallback-ok"))
       throw new Error("PowerShell syntax did not fall back to PowerShell");
+    if (process.platform === "win32" && fallbackResult.durationMs >= 1_000)
+      throw new Error(
+        `persistent PowerShell warm command regressed to ${fallbackResult.durationMs} ms`,
+      );
 
     checks.process = {
-      powershellMs: shellResult.durationMs,
+      powershellColdMs: shellResult.durationMs,
+      powershellWarmMs: fallbackResult.durationMs,
       smartDirectMs: smartResult.durationMs,
       sameOutput: true,
       shellFallback: true,
+      persistentPowerShell: process.platform === "win32",
     };
   } finally {
     if (previousSmartDirect === undefined)
@@ -167,6 +179,7 @@ try {
 
   console.log(JSON.stringify({ ok: true, checks }, null, 2));
 } finally {
+  await shutdownPowerShellWorkers();
   await rm(tempRoot, { recursive: true, force: true });
 }
 

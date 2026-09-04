@@ -5,6 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { createConnection } from "node:net";
 import type { ProcessSnapshot } from "@qnector/shared";
+import {
+  canUsePersistentPowerShell,
+  runPersistentPowerShell,
+  shutdownPowerShellWorkers,
+} from "./powershell-worker.js";
 
 export type ProcessShell = "powershell" | "cmd" | "direct";
 
@@ -120,11 +125,39 @@ export class ProcessManager {
 
   public async run(options: RunOptions): Promise<RunResult> {
     const started = Date.now();
-    const child = this.spawnProcess(options);
     const maxChars = Math.max(
       1,
       Math.min(options.maxChars ?? 100_000, 1_000_000),
     );
+    const shell = options.shell ?? this.defaultShell;
+    const direct =
+      shell === "powershell" ? smartDirectCommand(options.command) : null;
+    if (
+      shell === "powershell" &&
+      !direct &&
+      canUsePersistentPowerShell(options.command, options.env)
+    ) {
+      try {
+        const worker = await runPersistentPowerShell(powershellExecutable(), {
+          command: options.command,
+          cwd: options.cwd,
+          timeoutMs: options.timeoutMs,
+        });
+        return finalizeRunResult({
+          exitCode: worker.exitCode,
+          signal: worker.signal,
+          stdout: worker.stdout,
+          stderr: worker.stderr,
+          durationMs: worker.durationMs,
+          maxChars,
+          outputMode: options.outputMode ?? "smart",
+        });
+      } catch {
+        // The worker is an optimization only. Protocol/startup failures fall
+        // back to the isolated one-shot path so execution reliability wins.
+      }
+    }
+    const child = this.spawnProcess(options);
     const stdoutCollector = new OutputCollector();
     const stderrCollector = new OutputCollector();
     const outputHash = createHash("sha256");
@@ -534,6 +567,7 @@ export class ProcessManager {
         .filter((id) => this.processes.get(id)?.snapshot.state === "running")
         .map((id) => this.stop(id)),
     );
+    await shutdownPowerShellWorkers();
   }
 }
 
@@ -630,6 +664,51 @@ function reduceOutput(
   };
 }
 
+function finalizeRunResult(input: {
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  maxChars: number;
+  outputMode: "raw" | "smart";
+}): RunResult {
+  const stdout = reduceOutput(
+    input.stdout,
+    input.maxChars,
+    input.outputMode,
+    input.stdout.length,
+  );
+  const stderr = reduceOutput(
+    input.stderr,
+    input.maxChars,
+    input.outputMode,
+    input.stderr.length,
+  );
+  const hash = createHash("sha256");
+  if (input.stdout) {
+    hash.update("stdout\u0000");
+    hash.update(input.stdout);
+  }
+  if (input.stderr) {
+    hash.update("stderr\u0000");
+    hash.update(input.stderr);
+  }
+  return {
+    exitCode: input.exitCode,
+    signal: input.signal,
+    stdout: stdout.text,
+    stderr: stderr.text,
+    durationMs: input.durationMs,
+    truncated: stdout.truncated || stderr.truncated,
+    omittedChars: stdout.omittedChars + stderr.omittedChars,
+    omittedLines: stdout.omittedLines + stderr.omittedLines,
+    originalSize: { stdout: input.stdout.length, stderr: input.stderr.length },
+    sha256: hash.digest("hex"),
+    reductionMode: input.outputMode,
+  };
+}
+
 function waitForChildClose(
   child: ChildProcess,
   timeoutMs: number,
@@ -680,21 +759,55 @@ function smartDirectCommand(
     .basename(requested)
     .toLowerCase()
     .replace(/\.exe$/i, "");
-  // Keep this intentionally conservative. Script shims such as npm.cmd/pnpm.cmd
-  // remain on PowerShell so shell-specific behavior cannot change unexpectedly.
-  if (
-    !new Set(["git", "node", "python", "python3", "py", "rg", "where"]).has(
-      base,
-    )
-  )
-    return null;
-  const executable = resolveNativeExecutable(requested);
-  if (!executable || !/\.(?:exe|com)$/i.test(executable)) return null;
+  const directExecutables = new Set([
+    "git",
+    "node",
+    "python",
+    "python3",
+    "py",
+    "rg",
+    "where",
+    "dotnet",
+    "curl",
+    "winget",
+    "tasklist",
+    "taskkill",
+    "ipconfig",
+    "ping",
+    "nslookup",
+    "netstat",
+    "whoami",
+    "hostname",
+    "ssh",
+    "scp",
+    "tar",
+  ]);
+  const commandShims = new Set([
+    "npm",
+    "npx",
+    "pnpm",
+    "corepack",
+    "tsc",
+    "vite",
+    "vitest",
+    "eslint",
+    "prettier",
+  ]);
+  if (!directExecutables.has(base) && !commandShims.has(base)) return null;
+  const executable = resolveNativeExecutable(requested, commandShims.has(base));
+  if (!executable) return null;
+  if (/\.(?:cmd|bat)$/i.test(executable)) {
+    return { file: "cmd.exe", args: ["/d", "/s", "/c", trimmed] };
+  }
+  if (!/\.(?:exe|com)$/i.test(executable)) return null;
   return { file: executable, args: tokens.slice(1) };
 }
 
-function resolveNativeExecutable(command: string): string | null {
-  const key = command.toLowerCase();
+function resolveNativeExecutable(
+  command: string,
+  allowCommandShim = false,
+): string | null {
+  const key = `${command.toLowerCase()}\u0000${allowCommandShim ? "shim" : "native"}`;
   if (executableLookupCache.has(key))
     return executableLookupCache.get(key) ?? null;
   let resolved: string | null = null;
@@ -711,7 +824,11 @@ function resolveNativeExecutable(command: string): string | null {
           String(lookup.stdout ?? "")
             .split(/\r?\n/)
             .map((entry) => entry.trim())
-            .find((entry) => /\.(?:exe|com)$/i.test(entry)) ?? null;
+            .find((entry) =>
+              allowCommandShim
+                ? /\.(?:exe|com|cmd|bat)$/i.test(entry)
+                : /\.(?:exe|com)$/i.test(entry),
+            ) ?? null;
       }
     }
   } catch {

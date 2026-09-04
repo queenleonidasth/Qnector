@@ -29,6 +29,7 @@ import {
   NgrokAdapter,
   OpenAiTunnelAdapter,
   RelayClient,
+  ResilientTransportAdapter,
 } from "@qnector/transports";
 import { localMcpUrl } from "@qnector/shared";
 import type {
@@ -556,52 +557,64 @@ async function setWorkspace(
 
 function makeTransport(config: QnectorConfig): TransportAdapter {
   const localUrl = localMcpUrl(config.host, config.localPort);
+  const resilient = (adapter: TransportAdapter): TransportAdapter =>
+    new ResilientTransportAdapter(adapter);
   switch (config.transport.mode) {
     case "cloudflare-quick":
-      return new CloudflareQuickAdapter(
-        localUrl,
-        resolveCloudflaredExecutable(config.transport.cloudflaredPath),
+      return resilient(
+        new CloudflareQuickAdapter(
+          localUrl,
+          resolveCloudflaredExecutable(config.transport.cloudflaredPath),
+        ),
       );
     case "cloudflare-named":
       if (!config.transport.namedHostname)
         throw new Error(
           "namedHostname is required for cloudflare-named transport",
         );
-      return new CloudflareNamedAdapter(localUrl, {
-        executable: config.transport.cloudflaredPath,
-        hostname: config.transport.namedHostname,
-        token: config.transport.namedTunnelToken,
-      });
+      return resilient(
+        new CloudflareNamedAdapter(localUrl, {
+          executable: config.transport.cloudflaredPath,
+          hostname: config.transport.namedHostname,
+          token: config.transport.namedTunnelToken,
+        }),
+      );
     case "ngrok":
-      return new NgrokAdapter(localUrl, {
-        executable: config.transport.ngrokPath,
-        domain: config.transport.ngrokDomain,
-        authtoken: config.transport.ngrokAuthtoken,
-      });
+      return resilient(
+        new NgrokAdapter(localUrl, {
+          executable: config.transport.ngrokPath,
+          domain: config.transport.ngrokDomain,
+          authtoken: config.transport.ngrokAuthtoken,
+        }),
+      );
     case "openai-tunnel":
-      return new OpenAiTunnelAdapter(localUrl, {
-        executable: resolveOpenAiTunnelClientExecutable(
-          config.transport.openaiTunnelClientPath,
-        ),
-        profile: config.transport.openaiProfile,
-        tunnelId: config.transport.openaiTunnelId,
-        runtimeApiKey: config.transport.openaiRuntimeApiKey,
-        validationCacheFile: path.join(
-          configDirectory(),
-          "cache",
-          "openai-tunnel-validation.json",
-        ),
-      });
+      return resilient(
+        new OpenAiTunnelAdapter(localUrl, {
+          executable: resolveOpenAiTunnelClientExecutable(
+            config.transport.openaiTunnelClientPath,
+          ),
+          profile: config.transport.openaiProfile,
+          tunnelId: config.transport.openaiTunnelId,
+          runtimeApiKey: config.transport.openaiRuntimeApiKey,
+          validationCacheFile: path.join(
+            configDirectory(),
+            "cache",
+            "openai-tunnel-validation.json",
+          ),
+        }),
+      );
     case "relay": {
       const relayBase = config.transport.relayUrl ?? "";
       const relayUrl = relayBase.endsWith(`/agent/${config.deviceId}`)
         ? relayBase
         : `${relayBase.replace(/\/$/, "")}/agent/${config.deviceId}`;
-      return new RelayClient(config.host, config.localPort, {
-        relayUrl,
-        deviceId: config.deviceId,
-        version: QNECTOR_VERSION,
-      });
+      return resilient(
+        new RelayClient(config.host, config.localPort, {
+          relayUrl,
+          deviceId: config.deviceId,
+          version: QNECTOR_VERSION,
+        }),
+      );
     }
     case "local-only":
     default:

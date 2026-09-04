@@ -1,6 +1,6 @@
 {
   "name": "qnector",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "description": "Personal full-access desktop bridge between ChatGPT MCP and a local Windows computer",
   "type": "module",
@@ -32,7 +32,8 @@
     "accept:browser": "tsx scripts/accept-browser-automation.ts",
     "test:plus": "tsx scripts/test-plus-compatibility.ts",
     "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
-    "release:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1"
+    "release:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
+    "release:verify": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1 -VerifyOnly"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
@@ -53,6 +54,7 @@
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "8.68.0",
     "@typescript-eslint/parser": "8.68.0",
+    "basedpyright": "1.39.10",
     "electron": "44.0.0",
     "electron-builder": "^26.15.3",
     "eslint": "^10.9.1",

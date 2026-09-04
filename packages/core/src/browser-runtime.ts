@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -249,6 +249,7 @@ function resolveBrowser(
       "Application",
       "chrome.exe",
     ),
+    ...playwrightChromiumExecutables(),
   ];
   const edge = [
     path.join(
@@ -296,6 +297,38 @@ function resolveBrowser(
       `BROWSER_EXECUTABLE_NOT_FOUND: could not locate ${requested === "auto" ? "Chrome or Edge" : requested}`,
     );
   return found;
+}
+
+function playwrightChromiumExecutables(): string[] {
+  if (process.platform !== "win32") return [];
+  const roots = [
+    process.env.PLAYWRIGHT_BROWSERS_PATH,
+    process.env.LOCALAPPDATA
+      ? path.join(process.env.LOCALAPPDATA, "ms-playwright")
+      : undefined,
+  ].filter((value): value is string => Boolean(value?.trim()));
+  const candidates: string[] = [];
+  for (const root of roots) {
+    try {
+      const versions = readdirSync(root, { withFileTypes: true })
+        .filter(
+          (entry) => entry.isDirectory() && /^chromium-\d+$/i.test(entry.name),
+        )
+        .map((entry) => entry.name)
+        .sort((left, right) =>
+          right.localeCompare(left, undefined, { numeric: true }),
+        );
+      for (const version of versions) {
+        candidates.push(
+          path.join(root, version, "chrome-win64", "chrome.exe"),
+          path.join(root, version, "chrome-win", "chrome.exe"),
+        );
+      }
+    } catch {
+      // Playwright is optional. Standard Chrome/Edge candidates remain available.
+    }
+  }
+  return [...new Set(candidates)];
 }
 
 async function waitForDevTools(port: number, timeoutMs: number): Promise<void> {

@@ -5,7 +5,11 @@ import path from "node:path";
 import AdmZip from "adm-zip";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import * as XLSX from "xlsx";
-import { ActivityLogger, defaultConfig } from "../packages/core/src/index.js";
+import {
+  ActivityLogger,
+  defaultConfig,
+  shutdownPowerShellWorkers,
+} from "../packages/core/src/index.js";
 import { QnectorRuntime } from "../packages/mcp-server/src/server.js";
 import type { ToolResult } from "../packages/shared/src/types.js";
 
@@ -376,8 +380,10 @@ try {
     ),
   };
 
+  await Promise.all([projectRuntime.stop(), tempRuntime.stop()]);
   console.log(JSON.stringify({ ok: true, checks }, null, 2));
 } finally {
+  await shutdownPowerShellWorkers();
   await rm(root, { recursive: true, force: true });
 }
 

@@ -56,6 +56,9 @@ importers:
       "@typescript-eslint/parser":
         specifier: 8.68.0
         version: 8.68.0(eslint@10.9.1(jiti@2.7.0))(typescript@5.9.3)
+      basedpyright:
+        specifier: 1.39.10
+        version: 1.39.10
       electron:
         specifier: 44.0.0
         version: 44.0.0
@@ -1558,6 +1561,14 @@ packages:
       {
         integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==,
       }
+
+  basedpyright@1.39.10:
+    resolution:
+      {
+        integrity: sha512-9NTfbegeSey8Trhaf+Tr8++Uo/UFCtsUMzpvXA/seDfSTN3kOwfmPJ4lf/tjxPjVlr/fsHo34W9/qW+ZF+b6kg==,
+      }
+    engines: { node: ">=14.0.0" }
+    hasBin: true
 
   bluebird@3.7.2:
     resolution:
@@ -4922,6 +4933,10 @@ snapshots:
   balanced-match@4.0.4: {}
 
   base64-js@1.5.1: {}
+
+  basedpyright@1.39.10:
+    optionalDependencies:
+      fsevents: 2.3.3
 
   bluebird@3.7.2: {}
 

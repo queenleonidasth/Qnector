@@ -16,6 +16,9 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
       runtimeApiKey?: string;
       publicUrl?: string;
       validationCacheFile?: string;
+      spawnImpl?: typeof spawn;
+      warmStabilityMs?: number;
+      coldStabilityMs?: number;
     },
   ) {
     super(localUrl);
@@ -43,7 +46,12 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
     try {
       this.child = this.spawnRun(profile);
       this.watchExit(this.child);
-      await waitForStableChild(this.child, warmValidated ? 220 : 1_500);
+      await waitForStableChild(
+        this.child,
+        warmValidated
+          ? (this.options.warmStabilityMs ?? 220)
+          : (this.options.coldStabilityMs ?? 1_500),
+      );
     } catch (error) {
       if (!warmValidated) throw error;
       // A stale profile cache must never trade reliability for speed. If the
@@ -54,7 +62,10 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
       await this.validateProfile(profile);
       this.child = this.spawnRun(profile);
       this.watchExit(this.child);
-      await waitForStableChild(this.child, 1_500);
+      await waitForStableChild(
+        this.child,
+        this.options.coldStabilityMs ?? 1_500,
+      );
     }
 
     if (!warmValidated)
@@ -94,6 +105,7 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
         ],
         this.options.runtimeApiKey,
         "OPENAI_TUNNEL_INIT_FAILED",
+        this.options.spawnImpl,
       );
     }
     if (this.options.runtimeApiKey) {
@@ -102,21 +114,26 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
         ["doctor", "--profile", profile, "--explain"],
         this.options.runtimeApiKey,
         "OPENAI_TUNNEL_DOCTOR_FAILED",
+        this.options.spawnImpl,
       );
     }
   }
 
   private spawnRun(profile: string): ChildProcess {
-    return spawn(this.options.executable, ["run", "--profile", profile], {
-      windowsHide: true,
-      env: {
-        ...process.env,
-        ...(this.options.runtimeApiKey
-          ? { CONTROL_PLANE_API_KEY: this.options.runtimeApiKey }
-          : {}),
+    return (this.options.spawnImpl ?? spawn)(
+      this.options.executable,
+      ["run", "--profile", profile],
+      {
+        windowsHide: true,
+        env: {
+          ...process.env,
+          ...(this.options.runtimeApiKey
+            ? { CONTROL_PLANE_API_KEY: this.options.runtimeApiKey }
+            : {}),
+        },
+        stdio: "ignore",
       },
-      stdio: "ignore",
-    });
+    );
   }
 
   private async validationFingerprint(profile: string): Promise<string> {
@@ -203,9 +220,10 @@ function runClientCommand(
   args: string[],
   runtimeApiKey: string,
   errorCode: string,
+  spawnImpl: typeof spawn = spawn,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, {
+    const child = spawnImpl(executable, args, {
       windowsHide: true,
       env: { ...process.env, CONTROL_PLANE_API_KEY: runtimeApiKey },
       stdio: ["ignore", "ignore", "pipe"],
