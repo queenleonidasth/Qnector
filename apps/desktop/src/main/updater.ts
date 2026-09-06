@@ -36,6 +36,8 @@ const RELEASE_API =
   "https://api.github.com/repos/queenleonidasth/Qnector/releases/latest";
 const RELEASES_URL = "https://github.com/queenleonidasth/Qnector/releases";
 const CHECK_TIMEOUT_MS = 15_000;
+const CHECK_MAX_ATTEMPTS = 3;
+const CHECK_RETRY_DELAYS_MS = [0, 500, 1_500] as const;
 const DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
 const DOWNLOAD_MAX_ATTEMPTS = 5;
 const DOWNLOAD_RETRY_DELAYS_MS = [0, 750, 1_500, 3_000, 6_000] as const;
@@ -212,16 +214,47 @@ export class DesktopUpdater {
     });
 
     try {
-      const response = await this.fetchImpl(this.releaseApi, {
-        headers: {
-          Accept: "application/vnd.github+json",
-          "User-Agent": `Qnector/${this.currentVersion}`,
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
-      });
-      if (!response.ok)
-        throw new Error(`GitHub returned HTTP ${response.status}`);
+      let response: Response | undefined;
+      let lastCheckError: unknown;
+      for (let attempt = 1; attempt <= CHECK_MAX_ATTEMPTS; attempt += 1) {
+        if (attempt > 1) {
+          const delayMs = CHECK_RETRY_DELAYS_MS[attempt - 1] ?? 1_500;
+          this.setState({
+            ...this.state,
+            phase: "checking",
+            canDownload: false,
+            canInstall: false,
+            message: `Retrying update check (${attempt}/${CHECK_MAX_ATTEMPTS})…`,
+          });
+          await delay(delayMs);
+        }
+        try {
+          const candidate = await this.fetchImpl(this.releaseApi, {
+            headers: {
+              Accept: "application/vnd.github+json",
+              "User-Agent": `Qnector/${this.currentVersion}`,
+              "X-GitHub-Api-Version": "2022-11-28",
+            },
+            signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+          });
+          if (!candidate.ok) {
+            const error = new Error(`GitHub returned HTTP ${candidate.status}`);
+            if (!isRetryableHttpStatus(candidate.status)) throw error;
+            throw new RetryableDownloadError(error.message);
+          }
+          response = candidate;
+          break;
+        } catch (error) {
+          lastCheckError = error;
+          if (!isRetryableDownloadError(error) || attempt >= CHECK_MAX_ATTEMPTS)
+            throw error;
+        }
+      }
+      if (!response)
+        throw (
+          lastCheckError ??
+          new Error("GitHub update check failed without detail")
+        );
       const release = (await response.json()) as GitHubReleaseInfo;
       if (!release?.tag_name || !Array.isArray(release.assets))
         throw new Error("GitHub returned an invalid release payload");

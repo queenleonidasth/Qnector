@@ -138,11 +138,19 @@ describe.skipIf(process.platform !== "win32")(
       const digest = createHash("sha256").update(asset).digest("hex");
       const releaseApi = "https://example.invalid/release";
       const assetUrl = "https://example.invalid/asset";
+      let checkAttempts = 0;
       let assetAttempts = 0;
 
       const fetchImpl = (async (input: string | URL | Request) => {
         const url = String(input);
         if (url === releaseApi) {
+          checkAttempts += 1;
+          if (checkAttempts === 1) {
+            const cause = Object.assign(new Error("Connect Timeout Error"), {
+              code: "UND_ERR_CONNECT_TIMEOUT",
+            });
+            throw Object.assign(new TypeError("fetch failed"), { cause });
+          }
           return new Response(
             JSON.stringify({
               tag_name: "v0.4.6",
@@ -188,6 +196,7 @@ describe.skipIf(process.platform !== "win32")(
       });
 
       expect((await updater.check()).phase).toBe("available");
+      expect(checkAttempts).toBe(2);
       const downloaded = await updater.download();
       expect(downloaded.phase).toBe("downloaded");
       expect(downloaded.canInstall).toBe(true);
