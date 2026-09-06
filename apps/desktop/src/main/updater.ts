@@ -1,4 +1,4 @@
-import { app } from "electron";
+import { app, net } from "electron";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { constants, createReadStream } from "node:fs";
@@ -74,7 +74,8 @@ export class DesktopUpdater {
     this.releasesUrl = options.releasesUrl ?? RELEASES_URL;
     this.currentVersion = options.currentVersion ?? app.getVersion();
     this.userDataPath = options.userDataPath ?? app.getPath("userData");
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl =
+      options.fetchImpl ?? (net.fetch as unknown as typeof fetch);
     this.state = {
       phase: "idle",
       mode,

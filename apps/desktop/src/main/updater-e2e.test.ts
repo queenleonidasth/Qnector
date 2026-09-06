@@ -6,6 +6,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
+  net: { fetch },
   app: {
     getVersion: () => "0.4.5",
     getPath: () => os.tmpdir(),
