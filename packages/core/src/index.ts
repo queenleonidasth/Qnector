@@ -5,6 +5,7 @@ export * from "./process-manager.js";
 export * from "./powershell-worker.js";
 export * from "./secret-sanitizer.js";
 export * from "./memory-store.js";
+export * from "./memory-v2-store.js";
 export * from "./platform-services.js";
 export * from "./code-intelligence.js";
 export * from "./file-search.js";

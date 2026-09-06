@@ -37,9 +37,28 @@ export const memoryDefinition: ToolDefinition = {
           "compact",
           "clear",
           "export",
+          "task_start",
+          "task_resume",
+          "task_list",
+          "task_get",
+          "task_update",
+          "task_complete",
+          "task_bind_session",
+          "v2_snapshot",
         ],
       },
+      taskId: { type: "string" },
+      title: { type: "string" },
       currentTask: { type: "string" },
+      taskStatus: {
+        type: "string",
+        enum: ["active", "idle", "completed", "blocked"],
+      },
+      sessionId: { type: "string" },
+      memoryScope: { type: "string", enum: ["workspace", "task"] },
+      importance: { type: "integer", minimum: 0, maximum: 100 },
+      eventLimit: { type: "integer", minimum: 1, maximum: 200 },
+      taskLimit: { type: "integer", minimum: 1, maximum: 100 },
       completedSteps: { type: "array", items: { type: "string" } },
       pendingSteps: { type: "array", items: { type: "string" } },
       criticalContext: { type: "string" },
@@ -96,12 +115,171 @@ export async function executeMemory(
           ? { query: stringInput(object, "query") }
           : {}),
       });
+      const v2 = context.memoryV2?.snapshot({
+        ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
+        eventLimit: numberInput(object, "eventLimit", 40),
+        taskLimit: numberInput(object, "taskLimit", 24),
+      });
       return {
         summary: result.available
           ? `Recalled memory for ${result.workspacePath}`
           : "No saved memory for the active workspace",
-        data: result,
+        data: { ...result, ...(v2 ? { v2 } : {}) },
         truncated: result.truncated,
+      };
+    }
+
+    if (action === "task_start") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const title = stringInput(object, "title", true)!;
+      const task = context.memoryV2.createTask({
+        title,
+        ...(stringInput(object, "currentTask")
+          ? { currentTask: stringInput(object, "currentTask") }
+          : {}),
+        ...(stringInput(object, "criticalContext")
+          ? { criticalContext: stringInput(object, "criticalContext") }
+          : {}),
+        ...(context.memoryTaskId || stringInput(object, "taskId")
+          ? { taskId: context.memoryTaskId ?? stringInput(object, "taskId") }
+          : {}),
+      });
+      const sessionId = stringInput(object, "sessionId");
+      if (sessionId) context.memoryV2.bindSession(sessionId, task.id);
+      return {
+        summary: `Started Memory v2 task '${task.title}'`,
+        data: {
+          task,
+          taskId: task.id,
+          instruction:
+            "Pass this taskId as memoryTaskId on every related Qnector tool call in this chat/session so progress stays isolated from other concurrent tasks.",
+        },
+      };
+    }
+
+    if (action === "task_resume") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const resumed = context.memoryV2.resumeTask(stringInput(object, "query"));
+      if (resumed.task && stringInput(object, "sessionId"))
+        context.memoryV2.bindSession(
+          stringInput(object, "sessionId")!,
+          resumed.task.id,
+        );
+      return {
+        summary: resumed.task
+          ? `Resumed Memory v2 task '${resumed.task.title}'`
+          : "No resumable Memory v2 task was found",
+        data: {
+          ...resumed,
+          instruction: resumed.task
+            ? "Pass the returned taskId as memoryTaskId on every related Qnector tool call in this chat/session."
+            : "Start a new task with memory.task_start before making project changes.",
+        },
+      };
+    }
+
+    if (action === "task_list") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const tasks = context.memoryV2.listTasks(
+        numberInput(object, "taskLimit", 24),
+      );
+      return {
+        summary: `Listed ${tasks.length} Memory v2 task(s)`,
+        data: { tasks, workspaceId: context.memoryV2.currentWorkspaceId },
+      };
+    }
+
+    if (action === "task_get") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const taskId =
+        context.memoryTaskId ?? stringInput(object, "taskId", true)!;
+      const task = context.memoryV2.getTask(taskId);
+      return {
+        summary: task
+          ? `Read Memory v2 task '${task.title}'`
+          : "Memory v2 task not found",
+        data: { found: Boolean(task), task, taskId },
+      };
+    }
+
+    if (action === "task_update") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const taskId =
+        context.memoryTaskId ?? stringInput(object, "taskId", true)!;
+      const status = stringInput(object, "taskStatus");
+      if (
+        status &&
+        !["active", "idle", "completed", "blocked"].includes(status)
+      )
+        throw new Error(`INVALID_INPUT: unknown task status '${status}'`);
+      const task = context.memoryV2.updateTask({
+        taskId,
+        ...(stringInput(object, "title")
+          ? { title: stringInput(object, "title") }
+          : {}),
+        ...(status
+          ? { status: status as "active" | "idle" | "completed" | "blocked" }
+          : {}),
+        ...(stringInput(object, "currentTask")
+          ? { currentTask: stringInput(object, "currentTask") }
+          : {}),
+        ...(object.completedSteps === undefined
+          ? {}
+          : { completedSteps: stringArray(object, "completedSteps") }),
+        ...(object.pendingSteps === undefined
+          ? {}
+          : { pendingSteps: stringArray(object, "pendingSteps") }),
+        ...(stringInput(object, "criticalContext") !== undefined
+          ? { criticalContext: stringInput(object, "criticalContext") }
+          : {}),
+      });
+      return {
+        summary: `Updated Memory v2 task '${task.title}'`,
+        data: { task, taskId },
+      };
+    }
+
+    if (action === "task_complete") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const taskId =
+        context.memoryTaskId ?? stringInput(object, "taskId", true)!;
+      const task = context.memoryV2.completeTask(taskId);
+      return {
+        summary: `Completed Memory v2 task '${task.title}'`,
+        data: { task, taskId },
+      };
+    }
+
+    if (action === "task_bind_session") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const taskId =
+        context.memoryTaskId ?? stringInput(object, "taskId", true)!;
+      const sessionId = stringInput(object, "sessionId", true)!;
+      context.memoryV2.bindSession(sessionId, taskId);
+      return {
+        summary: `Bound session to Memory v2 task '${taskId}'`,
+        data: { sessionId, taskId },
+      };
+    }
+
+    if (action === "v2_snapshot") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const snapshot = context.memoryV2.snapshot({
+        ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
+        eventLimit: numberInput(object, "eventLimit", 40),
+        taskLimit: numberInput(object, "taskLimit", 24),
+      });
+      return {
+        summary: `Prepared Memory v2 snapshot with ${snapshot.counts.tasks} task(s)`,
+        data: snapshot,
       };
     }
 
@@ -109,15 +287,27 @@ export async function executeMemory(
       return workingSetAction(context, memory, stringInput(object, "query"));
 
     if (action === "save_checkpoint") {
-      const result = await memory.saveCheckpoint({
+      const active = {
         currentTask: stringInput(object, "currentTask", true)!,
         completedSteps: stringArray(object, "completedSteps"),
         pendingSteps: stringArray(object, "pendingSteps"),
         criticalContext: stringInput(object, "criticalContext", true)!,
+      };
+      const result = await memory.saveCheckpoint({
+        ...active,
         ...(stringInput(object, "label")
           ? { label: stringInput(object, "label") }
           : {}),
       });
+      if (context.memoryV2) {
+        const taskId = context.memoryTaskId ?? context.memoryV2.defaultTaskId;
+        if (context.memoryV2.getTask(taskId))
+          context.memoryV2.saveTaskCheckpoint(
+            taskId,
+            active,
+            stringInput(object, "label"),
+          );
+      }
       return {
         summary: "Saved the active Qnector checkpoint",
         data: result,
@@ -128,14 +318,28 @@ export async function executeMemory(
       const category = stringInput(object, "category");
       if (category && !categories.includes(category as MemoryCategory))
         throw new Error(`INVALID_INPUT: unknown memory category '${category}'`);
+      const key = stringInput(object, "key", true)!;
+      const value = stringInput(object, "value", true)!;
+      const tags = object.tags === undefined ? [] : stringArray(object, "tags");
       const fact = await memory.upsertNote({
-        key: stringInput(object, "key", true)!,
-        value: stringInput(object, "value", true)!,
+        key,
+        value,
         ...(category ? { category: category as MemoryCategory } : {}),
-        ...(object.tags === undefined
-          ? {}
-          : { tags: stringArray(object, "tags") }),
+        ...(object.tags === undefined ? {} : { tags }),
       });
+      if (context.memoryV2) {
+        const memoryScope = stringInput(object, "memoryScope") ?? "workspace";
+        context.memoryV2.upsertMemory({
+          ...(memoryScope === "task" && context.memoryTaskId
+            ? { taskId: context.memoryTaskId, scope: "task" as const }
+            : { scope: "workspace" as const }),
+          category: (category as MemoryCategory | undefined) ?? "note",
+          key,
+          value,
+          tags,
+          importance: numberInput(object, "importance", 50),
+        });
+      }
       const snapshot = await memoryMetadata(memory);
       return {
         summary: `Saved memory fact '${fact.key}'`,
@@ -210,6 +414,7 @@ export async function executeMemory(
       const result = await memory.clear(
         scope as "active" | "checkpoints" | "facts" | "all",
       );
+      if (scope === "all") context.memoryV2?.clearWorkspace();
       return {
         summary: `Cleared ${scope} memory for the active workspace`,
         data: result,
@@ -366,6 +571,11 @@ async function workingSetAction(
       recentErrors,
       managedProcesses: context.processManager.list().slice(-30),
       workflowRuns,
+      memoryV2: context.memoryV2?.snapshot({
+        ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
+        eventLimit: 30,
+        taskLimit: 20,
+      }),
     },
   };
 }

@@ -39,9 +39,13 @@ what changed. Use background processes for commands that do not exit quickly.
 
 Qnector does not automate the ChatGPT browser, retrieve ChatGPT cookies, or press product confirmations. ChatGPT may show its own confirmation for a write or destructive action.
 
-## Continue work in a new chat
+## Continue work in a new chat / multiple chats
 
-At the end of a task, ask the model to call `memory.save_checkpoint` with the current task, completed steps, pending steps and critical context. In the next chat, ask it to call `workspace.summary` or `memory.recall`. Qnector cannot force ChatGPT to call a tool automatically when a new chat opens.
+Qnector Memory v2 treats a project workspace and an individual task as different scopes. At the beginning of a new chat, follow the Memory bootstrap instruction: call `memory.task_resume` with a short description of the work you want to continue, or `memory.task_start` for a new independent job. The memory action returns a `taskId`; pass that value as `memoryTaskId` on every related Qnector tool call in that chat.
+
+If two ChatGPT chats work in the same workspace at the same time, they should use different Memory task IDs unless they are intentionally collaborating on the exact same task. Qnector records meaningful tool events into the selected task, updates the Memory drawer live, creates bounded automatic checkpoints, and warns when unfinished tasks touch the same files. Workspace-level rules/decisions remain shared across tasks.
+
+MCP does not provide Qnector with a dependable ChatGPT conversation ID, so Qnector cannot infer chat boundaries perfectly from the transport alone. `memoryTaskId` is the explicit application-level continuity handle that prevents unrelated sessions from mixing their progress.
 
 ## Optional local browser diagnostics
 

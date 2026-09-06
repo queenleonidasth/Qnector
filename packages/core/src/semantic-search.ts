@@ -211,6 +211,11 @@ async function fingerprintFiles(files: string[]): Promise<string> {
   return hash.digest("hex").slice(0, 24);
 }
 
+export function localSemanticSimilarity(query: string, text: string): number {
+  if (!query.trim() || !text.trim()) return 0;
+  return cosine(vectorize(query), vectorize(text));
+}
+
 function vectorize(text: string): Float64Array {
   const vector = new Float64Array(DIMENSIONS);
   const tokens = tokenize(text);

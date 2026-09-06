@@ -40,6 +40,7 @@ const api: QnectorApi = {
   onRuntimeReady: (listener) => subscribe("runtime:ready", listener),
   onStatus: (listener) => subscribe("bridge:state", listener),
   onActivity: (listener) => subscribe("activity:new", listener),
+  onMemory: (listener) => subscribe("memory:update", listener),
   onProcess: (listener) => subscribe("process:update", listener),
   onUpdate: (listener) => subscribe("updater:state", listener),
 };

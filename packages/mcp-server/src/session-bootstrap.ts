@@ -1,11 +1,16 @@
 import type { MemoryRecall } from "@qnector/core";
-import type { ActivityEntry, MemoryFact } from "@qnector/shared";
+import type {
+  ActivityEntry,
+  MemoryFact,
+  MemoryV2Snapshot,
+} from "@qnector/shared";
 
 const MAX_BOOTSTRAP_BYTES = 6_000;
 
 export function buildSessionBootstrapInstructions(
   memory: MemoryRecall,
   recentActivity: ActivityEntry[] = [],
+  memoryV2?: MemoryV2Snapshot,
 ): string {
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
@@ -14,6 +19,30 @@ export function buildSessionBootstrapInstructions(
     `Workspace: ${clip(memory.workspacePath, 500)}`,
     `Memory updated: ${memory.updatedAt}`,
   ];
+
+  if (memoryV2) {
+    const activeTasks = memoryV2.tasks.filter(
+      (task) => task.status === "active" || task.status === "blocked",
+    );
+    lines.push(
+      "",
+      `Memory v2: ${activeTasks.length} active task(s), ${memoryV2.counts.tasks} total task(s).`,
+      "Concurrent-session rule: keep unrelated work in separate taskIds. Before changing the project, resume the matching task with memory.task_resume or start one with memory.task_start, then pass that taskId as memoryTaskId on every related Qnector tool call in this chat.",
+    );
+    if (activeTasks.length > 0) {
+      lines.push("Active Memory v2 tasks:");
+      for (const task of activeTasks.slice(0, 5)) {
+        lines.push(
+          `- ${task.id} [${task.status}] ${clip(task.title, 140)} — ${clip(task.currentTask, 260)}`,
+        );
+      }
+    }
+    if (memoryV2.conflicts.length > 0) {
+      lines.push(
+        `Task conflict warning: ${memoryV2.conflicts.length} shared file conflict(s) detected. Re-read conflicting files before writing.`,
+      );
+    }
+  }
 
   const checkpoint = memory.checkpoints[0];
   if (checkpoint) {

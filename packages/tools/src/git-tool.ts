@@ -116,6 +116,7 @@ export async function executeGit(
           source: "git",
           summary: `git ${action} completed`,
           paths: [
+            cwd,
             ...(paths.length ? paths : []),
             ...(pathValue ? [pathValue] : []),
           ],

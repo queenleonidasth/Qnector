@@ -112,6 +112,7 @@ describe("Qnector MCP runtime", () => {
       expect(listedText).toContain(expected);
     }
     expect(listedText).toContain("capture the current display");
+    expect(listedText).toContain("memoryTaskId");
 
     const advertisedTools =
       (
@@ -142,7 +143,27 @@ describe("Qnector MCP runtime", () => {
       expect(advertised?.inputSchema?.properties?.action?.enum).toEqual(
         expectedActions,
       );
+      expect(
+        (
+          advertised?.inputSchema?.properties as
+            Record<string, unknown> | undefined
+        )?.memoryTaskId,
+      ).toBeTruthy();
     }
+    const processTool = advertisedTools.find((tool) => tool.name === "process");
+    expect(
+      (
+        processTool?.inputSchema?.properties as
+          Record<string, unknown> | undefined
+      )?.taskId,
+    ).toBeTruthy();
+    const memoryTool = advertisedTools.find((tool) => tool.name === "memory");
+    expect(
+      (
+        memoryTool?.inputSchema?.properties as
+          Record<string, unknown> | undefined
+      )?.taskId,
+    ).toBeTruthy();
 
     const compactCall = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",
@@ -167,6 +188,64 @@ describe("Qnector MCP runtime", () => {
     expect(JSON.stringify(compactResult?.content)).not.toContain(
       "activeWorkspace",
     );
+
+    const memoryTaskStart = await request(`http://127.0.0.1:${port}/mcp`, {
+      jsonrpc: "2.0",
+      id: 201,
+      method: "tools/call",
+      params: {
+        name: "memory",
+        arguments: {
+          action: "task_start",
+          title: "Memory v2 MCP isolation",
+          currentTask: "Verify task-scoped tool events",
+        },
+      },
+    });
+    const memoryTaskStructured = (
+      memoryTaskStart.body as {
+        result?: {
+          structuredContent?: { data?: { data?: { taskId?: string } } };
+        };
+      }
+    ).result?.structuredContent;
+    const memoryTaskId = memoryTaskStructured?.data?.data?.taskId;
+    expect(memoryTaskId).toMatch(/^task_/);
+
+    const taskFile = path.join(root, "memory-v2-e2e.txt");
+    const taskWrite = await request(`http://127.0.0.1:${port}/mcp`, {
+      jsonrpc: "2.0",
+      id: 202,
+      method: "tools/call",
+      params: {
+        name: "files",
+        arguments: {
+          action: "write",
+          path: taskFile,
+          content: "memory-v2",
+          memoryTaskId,
+        },
+      },
+    });
+    expect(taskWrite.response.ok).toBe(true);
+
+    const memorySnapshot = await request(`http://127.0.0.1:${port}/mcp`, {
+      jsonrpc: "2.0",
+      id: 203,
+      method: "tools/call",
+      params: {
+        name: "memory",
+        arguments: {
+          action: "v2_snapshot",
+          taskId: memoryTaskId,
+          memoryTaskId,
+        },
+      },
+    });
+    const snapshotText = JSON.stringify(memorySnapshot.body);
+    expect(snapshotText).toContain("Memory v2 MCP isolation");
+    expect(snapshotText).toContain(memoryTaskId!);
+    expect(snapshotText).toContain("memory-v2-e2e.txt");
 
     const parallelCall = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",

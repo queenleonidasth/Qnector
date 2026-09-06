@@ -3931,3 +3931,89 @@ body {
 .unified-drawer-card .hotkey-badge kbd {
   font-size: 11px;
 }
+
+/* Memory v2 live task view */
+.memory-v2-box {
+  gap: 8px;
+}
+.memory-v2-meta {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+.memory-v2-task-list {
+  display: grid;
+  gap: 6px;
+}
+.memory-v2-task {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: color-mix(in srgb, var(--surface-raised) 82%, transparent);
+}
+.memory-v2-task-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.memory-v2-task-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memory-v2-task-head code {
+  margin-left: auto;
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-subtle);
+  font-size: 8px;
+}
+.memory-v2-status {
+  text-transform: uppercase;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+}
+.memory-v2-status.active {
+  font-weight: 700;
+}
+.memory-v2-status.blocked {
+  text-decoration: underline;
+}
+.memory-v2-task-stats {
+  margin-top: 4px;
+  color: var(--text-subtle);
+  font-size: 9px;
+}
+.memory-v2-conflicts {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 9px;
+}
+.memory-v2-events {
+  display: grid;
+  gap: 3px;
+  max-height: 150px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.memory-v2-event {
+  display: grid;
+  grid-template-columns: 52px minmax(90px, auto) 1fr;
+  gap: 6px;
+  align-items: start;
+  font-size: 9px;
+  line-height: 1.35;
+}
+.memory-v2-event code {
+  color: var(--text-muted);
+}
+.memory-v2-event-error {
+  font-weight: 700;
+}

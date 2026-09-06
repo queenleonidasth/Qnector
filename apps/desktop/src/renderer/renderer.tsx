@@ -1,7 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
-import type { QnectorConfig, TransportMode } from "@qnector/shared";
+import type {
+  MemoryV2Snapshot,
+  QnectorConfig,
+  TransportMode,
+} from "@qnector/shared";
 import type { DesktopUpdateState } from "../updater-types.js";
 import type {
   ActivityEntry,
@@ -154,6 +158,7 @@ interface MemoryRecallView {
   };
   checkpoints: Array<{ id: string; createdAt: string; label?: string }>;
   counts: { facts: number; checkpoints: number; recentChanges: number };
+  v2?: MemoryV2Snapshot;
   warning?: string;
 }
 
@@ -438,6 +443,9 @@ function App(): React.ReactElement {
   const [isClosingDrawer, setIsClosingDrawer] = useState(false);
   const drawerCloseFallbackRef = useRef<number | null>(null);
   const drawerSwitchTimeoutRef = useRef<number | null>(null);
+  const activeDrawerRef = useRef<DrawerName | null>(null);
+  activeDrawerRef.current = activeDrawer;
+  const memoryRefreshTimerRef = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
@@ -665,6 +673,15 @@ function App(): React.ReactElement {
       setBridge(next.bridge);
       if (next.bridge.state !== "error") setError(undefined);
     });
+    const offMemory = window.qnector.onMemory(() => {
+      if (activeDrawerRef.current !== "memory") return;
+      if (memoryRefreshTimerRef.current !== null)
+        window.clearTimeout(memoryRefreshTimerRef.current);
+      memoryRefreshTimerRef.current = window.setTimeout(() => {
+        memoryRefreshTimerRef.current = null;
+        void refreshMemory();
+      }, 120);
+    });
     const offProcess = window.qnector.onProcess((entry) =>
       setProcesses((items) => [
         entry,
@@ -677,8 +694,11 @@ function App(): React.ReactElement {
       mounted = false;
       offRuntimeReady();
       offStatus();
+      offMemory();
       offProcess();
       offUpdate();
+      if (memoryRefreshTimerRef.current !== null)
+        window.clearTimeout(memoryRefreshTimerRef.current);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
@@ -1739,6 +1759,80 @@ function App(): React.ReactElement {
                     )}
 
                     <div className="memory-summary-container">
+                      {memory?.v2 && (
+                        <div className="memory-summary-box memory-v2-box">
+                          <div className="memory-box-header">
+                            <span>⚡ LIVE TASK MEMORY v2</span>
+                            <span className="memory-v2-meta">
+                              {memory.v2.counts.activeTasks} active ·{" "}
+                              {memory.v2.counts.tasks} tasks ·{" "}
+                              {memory.v2.counts.events} events
+                            </span>
+                          </div>
+                          <div className="memory-v2-task-list">
+                            {memory.v2.tasks.slice(0, 8).map((task) => (
+                              <div className="memory-v2-task" key={task.id}>
+                                <div className="memory-v2-task-head">
+                                  <span
+                                    className={`memory-v2-status ${task.status}`}
+                                  >
+                                    {task.status}
+                                  </span>
+                                  <strong>{task.title}</strong>
+                                  <code>{task.id}</code>
+                                </div>
+                                <div className="memory-box-subtext">
+                                  {task.currentTask}
+                                </div>
+                                <div className="memory-v2-task-stats">
+                                  {task.completedSteps.length} done ·{" "}
+                                  {task.pendingSteps.length} pending ·{" "}
+                                  {task.touchedPaths.length} files ·{" "}
+                                  {task.sessionCount} session bindings
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {memory.v2.conflicts.length > 0 && (
+                            <div className="memory-v2-conflicts">
+                              <strong>
+                                ⚠ {memory.v2.conflicts.length} concurrent file
+                                conflict(s)
+                              </strong>
+                              {memory.v2.conflicts
+                                .slice(0, 4)
+                                .map((conflict) => (
+                                  <div key={conflict.id}>
+                                    {conflict.taskTitles.join(" ↔ ")} ·{" "}
+                                    {conflict.path}
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                          {memory.v2.events.length > 0 && (
+                            <div className="memory-v2-events">
+                              {memory.v2.events.slice(0, 8).map((event) => (
+                                <div className="memory-v2-event" key={event.id}>
+                                  <span>{formatTime(event.timestamp)}</span>
+                                  <code>
+                                    {event.source}.{event.action}
+                                  </code>
+                                  <span
+                                    className={
+                                      event.status === "error"
+                                        ? "memory-v2-event-error"
+                                        : ""
+                                    }
+                                  >
+                                    {event.summary}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="memory-summary-box highlight">
                         <div className="memory-box-header">
                           <span>🎯 CURRENT ACTIVE GOAL</span>

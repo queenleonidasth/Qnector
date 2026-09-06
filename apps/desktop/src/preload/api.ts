@@ -8,6 +8,7 @@ import type {
   TransportSnapshot,
   ActivityExportOptions,
   ToolResult,
+  MemoryV2LiveEvent,
 } from "@qnector/shared";
 
 export interface ConnectionSetupStatus {
@@ -105,6 +106,7 @@ export interface QnectorApi {
     ) => void,
   ): () => void;
   onActivity(listener: (entry: ActivityEntry) => void): () => void;
+  onMemory(listener: (event: MemoryV2LiveEvent) => void): () => void;
   onProcess(listener: (process: ProcessSnapshot) => void): () => void;
   onUpdate(listener: (state: DesktopUpdateState) => void): () => void;
 }
@@ -118,6 +120,7 @@ declare global {
 export type {
   ActivityEntry,
   ActivityExportOptions,
+  MemoryV2LiveEvent,
   ProcessSnapshot,
   ServerStatus,
   ToolResult,

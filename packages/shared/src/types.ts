@@ -116,6 +116,82 @@ export interface MemoryCheckpoint {
   active: MemoryActiveState | null;
 }
 
+export type MemoryTaskStatus = "active" | "idle" | "completed" | "blocked";
+
+export interface MemoryTask {
+  id: string;
+  workspaceId: string;
+  title: string;
+  status: MemoryTaskStatus;
+  currentTask: string;
+  completedSteps: string[];
+  pendingSteps: string[];
+  criticalContext: string;
+  createdAt: string;
+  updatedAt: string;
+  lastEventAt?: string;
+  sessionCount: number;
+  touchedPaths: string[];
+}
+
+export interface MemoryV2Event {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  timestamp: string;
+  source: string;
+  action: string;
+  status: "success" | "error";
+  summary: string;
+  paths: string[];
+}
+
+export interface MemoryV2Conflict {
+  id: string;
+  path: string;
+  taskIds: [string, string];
+  taskTitles: [string, string];
+  severity: "warning";
+}
+
+export interface MemoryV2Snapshot {
+  version: 2;
+  workspaceId: string;
+  workspacePath: string;
+  updatedAt: string;
+  revision: number;
+  tasks: MemoryTask[];
+  events: MemoryV2Event[];
+  memories: MemoryFact[];
+  conflicts: MemoryV2Conflict[];
+  counts: {
+    tasks: number;
+    activeTasks: number;
+    events: number;
+    memories: number;
+    conflicts: number;
+  };
+}
+
+export interface MemoryV2LiveEvent {
+  type:
+    | "task.created"
+    | "task.updated"
+    | "session.bound"
+    | "event.recorded"
+    | "checkpoint.created"
+    | "memory.updated"
+    | "migration.completed"
+    | "workspace.cleared";
+  workspaceId: string;
+  workspacePath: string;
+  timestamp: string;
+  revision: number;
+  taskId?: string;
+  entityId?: string;
+  summary?: string;
+}
+
 export interface ProcessSnapshot {
   id: string;
   pid?: number;

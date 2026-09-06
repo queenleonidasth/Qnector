@@ -90,11 +90,17 @@ Long-running commands can still use `process.start` + cursor-based `output`, but
 
 ## Memory
 
-Memory remains local to Qnector under `%APPDATA%\Qnector\memory`, keyed by active workspace. `memory.save_checkpoint` stores active task/completed/pending/critical context; facts/notes and deterministic compaction/export are available through the other memory actions. `memory.working_set` deterministically summarizes recent file reads/writes, commands, errors, managed processes and workflow runs from persisted Qnector activity plus workspace memory. `workspace.summary` includes a bounded memory block for the active workspace.
+Qnector keeps the original compatibility memory under `%APPDATA%\Qnector\memory` and `.qnector/MEMORY.md`, and now adds **Memory v2** in `%APPDATA%\Qnector\memory-v2.sqlite`. Memory v2 uses SQLite WAL as the source of truth for task-aware live continuity while the v1 files remain readable/migration-safe mirrors.
 
-Qnector also performs **Automatic First-Use Memory Bootstrap** during the MCP session-opening handshake: legacy/compatibility `initialize` and modern 2026-07-28 `server/discover`. The handshake result's server `instructions` contains a bounded continuity summary (workspace, latest checkpoint, current task, completed/pending steps, critical context, core facts, recent changes and the newest non-memory activity from the automatic working set). This avoids requiring the AI to remember to call `memory.recall` before continuing work. The bootstrap is not duplicated in normal tool results. MCP does not expose a ChatGPT chat ID, so if a client reuses one MCP connection/handshake across multiple chat conversations Qnector cannot distinguish those chats as separate boundaries.
+Memory v2 separates **workspace knowledge** from **task state**. Use `memory.task_start` to create a task or `memory.task_resume` to find the most relevant unfinished task; both return a Memory `taskId`. Pass that value as `memoryTaskId` on every related non-memory Qnector tool call (`files`, `process`, `git`, `browser`, `computer`, etc.). This application-level handle keeps concurrent ChatGPT chats working on different jobs in the same workspace from overwriting one active state. `process.taskId` remains a separate process-manager field and is not the same as `memoryTaskId`.
 
-Secret sanitization is best-effort; memory is not a secret store.
+Memory v2 actions are `task_start`, `task_resume`, `task_list`, `task_get`, `task_update`, `task_complete`, `task_bind_session`, and `v2_snapshot`. Successful meaningful tool events are appended to the owning task in real time, task progress is projected from those events, and bounded automatic checkpoints are created after meaningful progress or Git milestones. Shared file touches across unfinished tasks are surfaced as task conflicts. Workspace/task recall uses a hybrid lexical + existing local hashed-vector similarity score and does not require an external model or API.
+
+`memory.recall` remains backward compatible and includes a `v2` snapshot. `memory.working_set` also includes task-aware Memory v2 context. `memory.note`/`set` continue to write compatibility facts and additionally persist workspace-scoped Memory v2 knowledge; set `memoryScope: "task"` with `memoryTaskId` for task-local knowledge. `memory.clear` with `scope: "all"` clears both v1 and v2 workspace memory.
+
+Qnector performs **Automatic First-Use Memory Bootstrap** during the MCP session-opening handshake. In addition to legacy continuity, the instructions list active Memory v2 tasks, warn about file conflicts, and tell the client to resume/start the matching task and propagate its `taskId` as `memoryTaskId`. MCP itself does not expose a reliable ChatGPT conversation ID, so explicit application-level task handles are the isolation boundary rather than a protocol session ID.
+
+The desktop Memory drawer subscribes to `memory:update` IPC events and refreshes its live task/event/conflict view with a short debounce instead of requiring the drawer to be reopened. Secret sanitization is best-effort; memory is not a secret store.
 
 ## Windows UI Automation
 

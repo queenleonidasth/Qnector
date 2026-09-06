@@ -4,6 +4,7 @@ import type {
   CodeIntelligenceService,
   FileSearchService,
   MemoryStore,
+  MemoryV2Store,
   PlatformServices,
   UiAutomationService,
   FileWatchService,
@@ -43,6 +44,8 @@ export interface ToolContext {
   workflowManager?: WorkflowManager;
   ptyManager?: PtyManager;
   memory?: MemoryStore;
+  memoryV2?: MemoryV2Store;
+  memoryTaskId?: string;
   platform?: PlatformServices;
   activity: ActivityLogger;
   getConfig(): QnectorConfig;
@@ -232,6 +235,7 @@ export async function runWithActivity<T>(
         outputSize: JSON.stringify(result).length,
         summary,
       });
+    recordMemoryV2Event(context, tool, action, input, "success", summary);
     const response = success(
       tool,
       action,
@@ -274,8 +278,125 @@ export async function runWithActivity<T>(
         parsed,
         Date.now() - startedAt,
       );
+    recordMemoryV2Event(
+      context,
+      tool,
+      action,
+      input,
+      "error",
+      `${parsed.code}: ${parsed.message}`,
+    );
     return failure(tool, action, parsed, startedAt);
   }
+}
+
+function recordMemoryV2Event(
+  context: ToolContext,
+  tool: string,
+  action: string,
+  input: unknown,
+  status: "success" | "error",
+  summary: string,
+): void {
+  if (!context.memoryV2 || tool === "memory") return;
+  const object = isRecord(input) ? input : {};
+  if (!isMeaningfulMemoryEvent(tool, action, object, context.memoryTaskId))
+    return;
+  const paths = collectMemoryPaths(object);
+  const workspaceEvidence = collectWorkspaceEvidence(
+    context,
+    tool,
+    object,
+    paths,
+  );
+  try {
+    context.memoryV2.recordToolEvent({
+      ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
+      source: tool,
+      action,
+      status,
+      summary,
+      paths,
+      workspaceEvidence,
+    });
+  } catch {
+    // Memory v2 continuity metadata must never change a tool result.
+  }
+}
+
+function collectMemoryPaths(input: Record<string, unknown>): string[] {
+  const result: string[] = [];
+  for (const key of ["path", "destination", "file", "target", "cwd"] as const) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim()) result.push(value);
+  }
+  if (Array.isArray(input.paths)) {
+    for (const value of input.paths)
+      if (typeof value === "string" && value.trim()) result.push(value);
+  }
+  return [...new Set(result)].slice(0, 50);
+}
+
+function collectWorkspaceEvidence(
+  context: ToolContext,
+  tool: string,
+  input: Record<string, unknown>,
+  paths: string[],
+): string[] {
+  if (paths.length > 0) return paths;
+  const cwd = input.cwd;
+  if (typeof cwd === "string" && cwd.trim()) return [cwd];
+  if (tool === "git" || tool === "process")
+    return [context.getConfig().activeWorkspace];
+  return [];
+}
+
+function isMeaningfulMemoryEvent(
+  tool: string,
+  action: string,
+  input: Record<string, unknown>,
+  memoryTaskId?: string,
+): boolean {
+  if (tool === "files")
+    return [
+      "write",
+      "append",
+      "replace",
+      "multi_edit",
+      "apply_patch",
+      "mkdir",
+      "move",
+      "copy",
+      "delete",
+    ].includes(action);
+
+  if (tool === "git") {
+    if (["status", "diff", "log", "show", "rev_parse"].includes(action))
+      return false;
+    if (action === "branch")
+      return input.create === true || input.delete === true;
+    return true;
+  }
+
+  if (tool === "process")
+    return [
+      "run",
+      "start",
+      "stop",
+      "kill_tree",
+      "pty_start",
+      "pty_write",
+      "pty_close",
+      "task_start",
+      "task_cancel",
+      "workflow_save",
+      "workflow_start",
+      "workflow_cancel",
+      "workflow_resume",
+    ].includes(action);
+
+  if (tool === "browser" || tool === "computer") return Boolean(memoryTaskId);
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

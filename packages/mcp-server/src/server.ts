@@ -24,6 +24,7 @@ import {
   ProcessManager,
   WorkspaceState,
   MemoryStore,
+  MemoryV2Store,
   NodePlatformServices,
   TypeScriptCodeIntelligence,
   WindowsFileSearchService,
@@ -105,6 +106,7 @@ export class QnectorRuntime {
   public readonly activity: ActivityLogger;
   public readonly workspace: WorkspaceState;
   public readonly memory: MemoryStore;
+  public readonly memoryV2: MemoryV2Store;
   public readonly platform: PlatformServices;
   private readonly configFile?: string;
   private config: QnectorConfig;
@@ -183,6 +185,11 @@ export class QnectorRuntime {
         maxCheckpoints: this.config.memory?.maxCheckpoints,
         maxPayloadBytes: this.config.memory?.maxPayloadBytes,
       });
+    this.memoryV2 = new MemoryV2Store(this.config.activeWorkspace, {
+      ...(this.configFile
+        ? { file: path.join(path.dirname(this.configFile), "memory-v2.sqlite") }
+        : {}),
+    });
     this.platform =
       options.platform ??
       options.platformServices ??
@@ -204,8 +211,10 @@ export class QnectorRuntime {
     this.config = config;
     this.workspace.replace(config);
     this.memory.setWorkspace(config.activeWorkspace);
+    this.memoryV2.setWorkspace(config.activeWorkspace);
     this.memory.setMirrorMode(config.memory?.workspaceMirror ?? "off");
     await this.ensureAutomaticMemoryCheckpoint();
+    await this.migrateMemoryV2();
     if (config.memory?.workspaceMirror === "memory-md")
       await this.memory.syncMirror();
     this.processManager.setDefaultShell(config.shell.windows);
@@ -230,6 +239,7 @@ export class QnectorRuntime {
       workflowManager: this.workflowManager,
       ptyManager: this.ptyManager,
       memory: this.memory,
+      memoryV2: this.memoryV2,
       platform: this.platform,
       activity: this.activity,
       getConfig: () => this.config,
@@ -265,6 +275,7 @@ export class QnectorRuntime {
     this.startedAt = new Date().toISOString();
     await this.activity.load();
     await this.ensureAutomaticMemoryCheckpoint();
+    await this.migrateMemoryV2();
     const host = options.host ?? this.config.host;
     const port = options.port ?? this.config.localPort;
     this.config = { ...this.config, host, localPort: port };
@@ -289,6 +300,7 @@ export class QnectorRuntime {
     await this.processManager.stopAll();
     await this.activity.flush();
     if (this.listening) await this.app.close();
+    this.memoryV2.close();
     this.listening = false;
     this.state = "disconnected";
   }
@@ -299,6 +311,23 @@ export class QnectorRuntime {
     };
     if (typeof compatible.ensureAutomaticCheckpoint !== "function") return;
     await compatible.ensureAutomaticCheckpoint().catch(() => undefined);
+  }
+
+  private async migrateMemoryV2(): Promise<void> {
+    try {
+      const legacy = await this.memory.recall({
+        checkpointLimit: 1,
+        factLimit: 500,
+        changeLimit: 100,
+      });
+      this.memoryV2.migrateLegacy({
+        active: legacy.state.active,
+        facts: legacy.state.facts,
+        recentChanges: legacy.state.recentChanges,
+      });
+    } catch {
+      // Memory v2 migration is additive and must never block Qnector startup.
+    }
   }
 
   private registerRoutes(): void {
@@ -456,7 +485,11 @@ export class QnectorRuntime {
         factLimit: 100,
         changeLimit: 6,
       });
-      return buildSessionBootstrapInstructions(memory, this.activity.list());
+      return buildSessionBootstrapInstructions(
+        memory,
+        this.activity.list(),
+        this.memoryV2.snapshot({ eventLimit: 8, taskLimit: 8 }),
+      );
     } catch (error) {
       return buildSessionBootstrapError(
         this.config.activeWorkspace,

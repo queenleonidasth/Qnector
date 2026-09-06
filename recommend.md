@@ -1673,3 +1673,23 @@ Target release: `v0.4.6`.
 4. **P28 Transport Integration Tests** — direct OpenAI tunnel tests cover cold profile validation, validation-cache reuse, stale-cache invalidation and full recovery; resilient transport tests cover crash reconnect, escalating backoff, explicit disconnect, and permanent-error suppression.
 
 Release-affecting validation must keep `test`, `typecheck`, `lint`, `format:check`, `build`, capability acceptance, performance acceptance, Windows packaging, and `release:verify` green.
+
+---
+
+# 18. MEMORY V2 TASK-AWARE LIVE CONTINUITY — IMPLEMENTED 6 SEPTEMBER 2026
+
+Target release: `v0.4.7`.
+
+Memory v2 upgrades Qnector from one `state.active` per workspace to task-aware concurrent continuity while preserving Memory v1 compatibility:
+
+1. **SQLite WAL event/task store** — `%APPDATA%\Qnector\memory-v2.sqlite` stores workspaces, tasks, task/session bindings, events, task checkpoints, shared/task memories, and touched-file ownership. The v1 JSON/JSONL + `.qnector/MEMORY.md` path remains intact for migration/rollback compatibility.
+2. **Application-level task handles** — `memory.task_start/resume/list/get/update/complete/bind_session/v2_snapshot` manage task state. Returned Memory `taskId` values are propagated to all other tools as `memoryTaskId`, avoiding collision with the existing `process.taskId` field.
+3. **Concurrent chat isolation** — independent chats in the same workspace can use different `memoryTaskId` values, so progress/events/checkpoints do not overwrite one global active task. MCP bootstrap lists active tasks and instructs a new chat to resume or start the matching task before project changes.
+4. **Real-time event projection** — meaningful file mutations, Git operations and process/workflow actions are persisted immediately; browser/computer events are task-scoped when an explicit `memoryTaskId` is present. Read-only diagnostics are filtered to avoid memory noise.
+5. **Automatic task checkpoints** — task progress is projected from successful events and automatically checkpointed after bounded meaningful progress, age thresholds, or Git milestones rather than creating a checkpoint for every tool call.
+6. **Hybrid local recall** — task resume ranking combines deterministic lexical relevance with the existing model-free `local-hashed-vector-v1` semantic similarity engine. No paid embedding/API dependency is added.
+7. **Conflict detection** — unfinished tasks that touch the same file are surfaced as concurrent file conflicts so clients can re-read current revisions before writing.
+8. **Live desktop Memory UI** — Memory v2 emits `memory:update` events through Electron IPC; the Memory drawer refreshes with a short debounce and shows active tasks, recent task events and file conflicts without reopening the drawer.
+9. **Legacy migration and workspace isolation** — v1 active state/facts/recent changes migrate once per workspace. Foreign workspace file/Git activity is excluded, and full Memory wipe clears both v1 and v2 workspace state.
+
+Release-affecting validation for Memory v2 must include typecheck/lint/Prettier/full tests/build/MCP smoke, Windows package startup, SQLite creation/migration, and a live task isolation check against the installed Setup build.

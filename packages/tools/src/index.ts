@@ -46,7 +46,7 @@ export class ToolRegistry {
   public list(): ToolDefinition[] {
     return toolDefinitions.map((definition) => ({
       ...definition,
-      inputSchema: { ...definition.inputSchema },
+      inputSchema: withTaskIdSchema(definition.inputSchema),
       annotations: { ...definition.annotations },
     }));
   }
@@ -56,8 +56,10 @@ export class ToolRegistry {
     context: ToolContext,
     input: unknown,
   ): Promise<ToolResult> {
+    const memoryTaskId = memoryTaskIdFromInput(input);
+    const scopedContext = memoryTaskId ? { ...context, memoryTaskId } : context;
     if (name === "system" && isParallelRequest(input)) {
-      return this.callParallel(context, input);
+      return this.callParallel(scopedContext, input);
     }
     const handler = this.handlers.get(name);
     if (!handler) {
@@ -74,7 +76,7 @@ export class ToolRegistry {
         meta: { durationMs: 0, truncated: false, nextCursor: null },
       };
     }
-    return handler(context, input);
+    return handler(scopedContext, input);
   }
 
   private async callParallel(
@@ -207,3 +209,32 @@ export * from "./git-tool.js";
 export * from "./memory-tool.js";
 export * from "./browser-tool.js";
 export * from "./computer-tool.js";
+
+function memoryTaskIdFromInput(input: unknown): string | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return undefined;
+  const value = (input as { memoryTaskId?: unknown }).memoryTaskId;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function withTaskIdSchema(
+  schema: Record<string, unknown>,
+): Record<string, unknown> {
+  const properties =
+    schema.properties &&
+    typeof schema.properties === "object" &&
+    !Array.isArray(schema.properties)
+      ? (schema.properties as Record<string, unknown>)
+      : {};
+  return {
+    ...schema,
+    properties: {
+      ...properties,
+      memoryTaskId: {
+        type: "string",
+        description:
+          "Qnector Memory v2 task handle. Start/resume a task with the memory tool, then pass the returned taskId here as memoryTaskId on every related Qnector tool call so concurrent chat sessions do not mix progress.",
+      },
+    },
+  };
+}

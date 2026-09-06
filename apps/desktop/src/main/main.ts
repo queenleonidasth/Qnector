@@ -75,12 +75,18 @@ type ConfigPatch = {
 export async function bootstrap(): Promise<void> {
   qnectorPerformance.mark("desktop-bootstrap-start");
   const startupProbe = process.env.QNECTOR_STARTUP_PROBE === "1";
+  const acceptanceMultiInstance =
+    process.env.QNECTOR_ACCEPT_MULTI_INSTANCE === "1";
   if (process.platform === "win32") app.setAppUserModelId(WINDOWS_APP_ID);
-  if (!startupProbe && !app.requestSingleInstanceLock()) {
+  if (
+    !startupProbe &&
+    !acceptanceMultiInstance &&
+    !app.requestSingleInstanceLock()
+  ) {
     app.quit();
     return;
   }
-  if (!startupProbe)
+  if (!startupProbe && !acceptanceMultiInstance)
     app.on("second-instance", () => {
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -144,6 +150,7 @@ async function initializeRuntime(
   instance.activity.subscribe((event) =>
     broadcast("activity:new", event.entry),
   );
+  instance.memoryV2.subscribe((event) => broadcast("memory:update", event));
   instance.processManager.subscribeAll((snapshot) =>
     broadcast("process:update", snapshot),
   );
