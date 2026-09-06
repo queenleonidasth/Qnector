@@ -114,7 +114,9 @@ describe("Windows updater bootstrap", () => {
     expect(WINDOWS_UPDATER_BOOTSTRAP_DETACHED).toBe(false);
     expect(script).toContain("Start-Process -FilePath $powershell");
     expect(script).toContain("-EncodedCommand");
-    expect(script).toContain("-Wait -PassThru");
+    expect(script).toContain("-PassThru");
+    expect(script).toContain("Wait-Process -Id $helper.Id");
+    expect(script).not.toContain("-Wait -PassThru");
     expect(script).toContain("Bootstrap starting apply helper");
     expect(script).toContain("Apply helper exited with code");
     const encoded = /\$encodedCommand = '([^']+)'/.exec(script)?.[1];
@@ -173,6 +175,71 @@ describe("Windows updater bootstrap", () => {
       );
       expect(existsSync(bootstrapPath)).toBe(false);
     } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("waits only for the apply helper PID, not a relaunched descendant process", () => {
+    if (process.platform !== "win32") return;
+    const root = mkdtempSync(path.join(os.tmpdir(), "qnector-bootstrap-tree-"));
+    let descendantPid = 0;
+    try {
+      const applyScriptPath = path.join(root, "apply.ps1");
+      const bootstrapPath = path.join(root, "bootstrap.ps1");
+      const childPidPath = path.join(root, "child.pid");
+      const logPath = path.join(root, "bootstrap.log");
+      const childPidLiteral = childPidPath.replaceAll("'", "''");
+      writeFileSync(
+        applyScriptPath,
+        [
+          "\uFEFF$child = Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-Command','Start-Sleep -Seconds 8') -WindowStyle Hidden -PassThru",
+          `Set-Content -LiteralPath '${childPidLiteral}' -Value $child.Id -Encoding ASCII -Force`,
+          "exit 0",
+          "",
+        ].join("\r\n"),
+        "utf8",
+      );
+      const bootstrap = buildWindowsUpdaterBootstrapScript({
+        powershellPath:
+          "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        applyScriptPath,
+        logPath,
+      });
+      writeFileSync(bootstrapPath, `\uFEFF${bootstrap}`, "utf8");
+
+      const startedAt = Date.now();
+      const result = spawnSync(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          bootstrapPath,
+        ],
+        { encoding: "utf8", windowsHide: true, timeout: 6_000 },
+      );
+      const elapsedMs = Date.now() - startedAt;
+      expect(
+        result.status,
+        `${result.stderr}\n${result.stdout}`.trim() ||
+          "Bootstrap incorrectly waited for the descendant process",
+      ).toBe(0);
+      expect(elapsedMs).toBeLessThan(6_000);
+      descendantPid = Number(readFileSync(childPidPath, "utf8").trim());
+      expect(descendantPid).toBeGreaterThan(0);
+      expect(readFileSync(logPath, "utf8")).toContain(
+        "Apply helper exited with code 0",
+      );
+    } finally {
+      if (descendantPid > 0) {
+        spawnSync("taskkill.exe", ["/PID", String(descendantPid), "/T", "/F"], {
+          windowsHide: true,
+          stdio: "ignore",
+        });
+      }
       rmSync(root, { recursive: true, force: true });
     }
   });
