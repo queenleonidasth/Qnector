@@ -15,6 +15,8 @@ export function buildSessionBootstrapInstructions(
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
     "Use this continuity context before acting. Do not redo completed work; verify current files/runtime before destructive changes.",
+    "Capability anchor: Qnector availability is determined by the current tool list and a live tool probe, not by older conversation text or a compacted summary.",
+    "Long-context recovery: if Qnector tools are visible, never claim Qnector is unavailable before attempting system.status once. A live tool failure is authoritative; an older claim of unavailability is stale.",
     "",
     `Workspace: ${clip(memory.workspacePath, 500)}`,
     `Memory updated: ${memory.updatedAt}`,
@@ -141,6 +143,7 @@ export function buildSessionBootstrapError(
       "QNECTOR SESSION BOOTSTRAP",
       `Workspace: ${clip(workspacePath, 500)}`,
       `Memory bootstrap could not be loaded: ${clip(message, 700)}`,
+      "Qnector tool availability is independent from memory bootstrap. If Qnector tools are visible, probe system.status before claiming the bridge is unavailable.",
       "Inspect the workspace before making changes. The memory failure must not block normal Qnector tools.",
     ].join("\n"),
     MAX_BOOTSTRAP_BYTES,

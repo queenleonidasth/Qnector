@@ -179,7 +179,10 @@ describe("Qnector MCP runtime", () => {
         };
       }
     ).result;
-    expect(compactResult?.content?.[0]?.text).toBe("Qnector local status");
+    expect(compactResult?.content?.[0]?.text).toContain("Qnector local status");
+    expect(compactResult?.content?.[0]?.text).toContain(
+      "QNECTOR LIVE; recovery probe: system.status",
+    );
     expect(compactResult?.structuredContent).toMatchObject({
       ok: true,
       tool: "system",
@@ -228,6 +231,9 @@ describe("Qnector MCP runtime", () => {
       },
     });
     expect(taskWrite.response.ok).toBe(true);
+    expect(JSON.stringify(taskWrite.body)).toContain(
+      "QNECTOR LIVE; recovery probe: system.status",
+    );
 
     const memorySnapshot = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",
@@ -322,6 +328,16 @@ describe("Qnector MCP runtime", () => {
       const modernTools = await client.listTools();
       expect(modernTools.tools).toHaveLength(8);
       expect(modernTools.tools.map((tool) => tool.name)).toContain("browser");
+      expect(
+        modernTools.tools.every((tool) =>
+          tool.description?.includes("LONG-CONTEXT RECOVERY"),
+        ),
+      ).toBe(true);
+      expect(
+        modernTools.tools.every((tool) =>
+          tool.description?.includes("system action=status"),
+        ),
+      ).toBe(true);
     } finally {
       await client.close();
     }

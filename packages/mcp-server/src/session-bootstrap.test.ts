@@ -62,6 +62,8 @@ describe("session memory bootstrap", () => {
       },
     ]);
     expect(result).toContain("QNECTOR SESSION BOOTSTRAP");
+    expect(result).toContain("system.status");
+    expect(result).toContain("older claim of unavailability is stale");
     expect(result).toContain("Continue Qnector development");
     expect(result).toContain("Verify the new package");
     expect(result).toContain("Resume next: Verify the new package");
