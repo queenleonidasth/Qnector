@@ -7,6 +7,7 @@ import {
   appendFile,
   mkdir,
   open,
+  readFile,
   rename,
   rm,
   stat,
@@ -132,6 +133,8 @@ export class DesktopUpdater {
       | {
           scriptPath: string;
           bootstrapPath?: string;
+          bootstrapLogPath?: string;
+          installLogPath?: string;
           readyPath: string;
           logPath: string;
         }
@@ -144,11 +147,56 @@ export class DesktopUpdater {
         targetExecutable,
         expectedVersion: this.state.latestVersion,
       });
+      updateArtifacts.installLogPath = path.join(
+        path.dirname(this.downloadedPath),
+        "install-launch.log",
+      );
+      await rm(updateArtifacts.installLogPath, { force: true }).catch(
+        () => undefined,
+      );
+      await appendInstallLaunchLog(
+        updateArtifacts.installLogPath,
+        "apply-script-created",
+        {
+          scriptPath: updateArtifacts.scriptPath,
+          targetExecutable,
+          sourcePath: this.downloadedPath,
+        },
+      );
       const powershell = await resolveWindowsPowerShell();
+      await assertPowerShellScriptParses(
+        powershell,
+        updateArtifacts.scriptPath,
+      );
+      await appendInstallLaunchLog(
+        updateArtifacts.installLogPath,
+        "apply-script-preflight-ok",
+        { powershell },
+      );
+      updateArtifacts.bootstrapLogPath = path.join(
+        path.dirname(this.downloadedPath),
+        "bootstrap-update.log",
+      );
+      await rm(updateArtifacts.bootstrapLogPath, { force: true }).catch(
+        () => undefined,
+      );
       updateArtifacts.bootstrapPath = await createUpdaterBootstrap({
         powershellPath: powershell,
         applyScriptPath: updateArtifacts.scriptPath,
+        logPath: updateArtifacts.bootstrapLogPath,
       });
+      await assertPowerShellScriptParses(
+        powershell,
+        updateArtifacts.bootstrapPath,
+      );
+      await appendInstallLaunchLog(
+        updateArtifacts.installLogPath,
+        "bootstrap-preflight-ok",
+        {
+          bootstrapPath: updateArtifacts.bootstrapPath,
+          bootstrapLogPath: updateArtifacts.bootstrapLogPath,
+        },
+      );
       const child = spawn(
         powershell,
         [
@@ -161,19 +209,28 @@ export class DesktopUpdater {
           updateArtifacts.bootstrapPath,
         ],
         {
-          // On this Windows/Electron portable runtime, Node's detached process
-          // flag creates powershell.exe but it exits without executing -File.
-          // The bootstrap itself uses Windows Start-Process to launch the real
-          // independent apply helper instead.
+          // Node stays non-detached. The bootstrap launches and waits for the
+          // independent apply helper, which handshakes before Electron quits.
           detached: WINDOWS_UPDATER_BOOTSTRAP_DETACHED,
           stdio: "ignore",
           windowsHide: true,
         },
       );
       await waitForSpawn(child);
-      await waitForHelperReady(updateArtifacts.readyPath, 5_000);
-      await rm(updateArtifacts.bootstrapPath, { force: true }).catch(
-        () => undefined,
+      await appendInstallLaunchLog(
+        updateArtifacts.installLogPath,
+        "bootstrap-spawned",
+        { pid: child.pid ?? null },
+      );
+      await waitForHelperReady(
+        updateArtifacts.readyPath,
+        12_000,
+        updateArtifacts.bootstrapLogPath,
+      );
+      await appendInstallLaunchLog(
+        updateArtifacts.installLogPath,
+        "helper-ready",
+        { readyPath: updateArtifacts.readyPath },
       );
       child.unref();
       this.setState({
@@ -191,10 +248,21 @@ export class DesktopUpdater {
       setTimeout(() => app.quit(), 200);
       return this.getState();
     } catch (error) {
+      if (updateArtifacts?.installLogPath) {
+        await appendInstallLaunchLog(
+          updateArtifacts.installLogPath,
+          "install-start-failed",
+          { error: errorMessage(error) },
+        );
+      }
       return this.fail(
         `Could not start updater: ${errorMessage(error)}${
+          updateArtifacts?.bootstrapLogPath
+            ? ` Bootstrap log: ${updateArtifacts.bootstrapLogPath}`
+            : ""
+        }${
           updateArtifacts?.logPath
-            ? ` Update log: ${updateArtifacts.logPath}`
+            ? ` Apply log: ${updateArtifacts.logPath}`
             : ""
         }`,
       );
@@ -577,6 +645,19 @@ async function appendDownloadLog(
   await appendFile(file, `${line}\n`, "utf8").catch(() => undefined);
 }
 
+async function appendInstallLaunchLog(
+  file: string,
+  phase: string,
+  details: Record<string, unknown> = {},
+): Promise<void> {
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    phase,
+    ...details,
+  });
+  await appendFile(file, `${line}\n`, "utf8").catch(() => undefined);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -653,6 +734,7 @@ async function createUpdateScript(input: {
 async function createUpdaterBootstrap(input: {
   powershellPath: string;
   applyScriptPath: string;
+  logPath: string;
 }): Promise<string> {
   const bootstrapPath = path.join(
     app.getPath("temp"),
@@ -661,6 +743,69 @@ async function createUpdaterBootstrap(input: {
   const script = buildWindowsUpdaterBootstrapScript(input);
   await writeFile(bootstrapPath, `\uFEFF${script}`, "utf8");
   return bootstrapPath;
+}
+
+async function assertPowerShellScriptParses(
+  powershellPath: string,
+  scriptPath: string,
+): Promise<void> {
+  const quotedScript = scriptPath.replaceAll("'", "''");
+  const parseCommand = [
+    "$tokens = $null",
+    "$errors = $null",
+    `[System.Management.Automation.Language.Parser]::ParseFile('${quotedScript}', [ref]$tokens, [ref]$errors) | Out-Null`,
+    "if ($errors.Count -gt 0) {",
+    '  $errors | ForEach-Object { Write-Error ("line {0}:{1} {2}" -f $_.Extent.StartLineNumber, $_.Extent.StartColumnNumber, $_.Message) }',
+    "  exit 1",
+    "}",
+    "exit 0",
+  ].join("; ");
+  const encoded = Buffer.from(parseCommand, "utf16le").toString("base64");
+  const child = spawn(
+    powershellPath,
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-EncodedCommand",
+      encoded,
+    ],
+    { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.setEncoding("utf8");
+  child.stderr?.setEncoding("utf8");
+  child.stdout?.on("data", (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stderr?.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(
+        new Error(`PowerShell syntax preflight timed out for ${scriptPath}`),
+      );
+    }, 7_500);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      resolve(code ?? 1);
+    });
+  });
+  if (exitCode !== 0) {
+    const detail = `${stderr}\n${stdout}`.trim().slice(0, 2_000);
+    throw new Error(
+      `Generated updater PowerShell failed syntax preflight${detail ? `: ${detail}` : ""}`,
+    );
+  }
 }
 
 async function resolveWindowsPowerShell(): Promise<string> {
@@ -713,6 +858,7 @@ function waitForSpawn(child: ReturnType<typeof spawn>): Promise<void> {
 async function waitForHelperReady(
   readyPath: string,
   timeoutMs: number,
+  bootstrapLogPath?: string,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -720,12 +866,18 @@ async function waitForHelperReady(
       await access(readyPath, constants.F_OK);
       return;
     } catch {
-      // The bootstrap is expected to exit before the independent helper does,
-      // so readiness is the authoritative signal rather than bootstrap exit.
-      await new Promise((resolve) => setTimeout(resolve, 75));
+      // The bootstrap waits on the independent helper. Readiness is the
+      // authoritative signal that the apply script parsed and started.
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
-  throw new Error("Update helper did not confirm readiness within 5 seconds.");
+  const bootstrapLog = bootstrapLogPath
+    ? await readFile(bootstrapLogPath, "utf8").catch(() => "")
+    : "";
+  const tail = bootstrapLog.trim().slice(-2_000);
+  throw new Error(
+    `Update helper did not confirm readiness within ${Math.round(timeoutMs / 1_000)} seconds${tail ? `. Bootstrap log: ${tail}` : ""}.`,
+  );
 }
 
 function errorMessage(error: unknown): string {

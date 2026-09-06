@@ -15,6 +15,7 @@ export const WINDOWS_UPDATER_BOOTSTRAP_DETACHED = false;
 export interface WindowsUpdaterBootstrapInput {
   powershellPath: string;
   applyScriptPath: string;
+  logPath: string;
 }
 
 export function buildWindowsUpdaterBootstrapScript(
@@ -23,13 +24,29 @@ export function buildWindowsUpdaterBootstrapScript(
   const powershell = psQuote(input.powershellPath);
   const command = `& ${psQuote(input.applyScriptPath)}`;
   const encodedCommand = Buffer.from(command, "utf16le").toString("base64");
+  const logPath = psQuote(input.logPath);
   const lines = [
     "$ErrorActionPreference = 'Stop'",
     `$powershell = ${powershell}`,
     `$encodedCommand = ${psQuote(encodedCommand)}`,
-    "$arguments = @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',$encodedCommand)",
-    "Start-Process -FilePath $powershell -ArgumentList $arguments -WindowStyle Hidden | Out-Null",
-    "exit 0",
+    `$bootstrapLog = ${logPath}`,
+    "function Write-BootstrapLog([string]$message) {",
+    "  try {",
+    "    $timestamp = Get-Date -Format 'o'",
+    '    Add-Content -LiteralPath $bootstrapLog -Value "[$timestamp] $message" -Encoding UTF8 -ErrorAction SilentlyContinue',
+    "  } catch {}",
+    "}",
+    "try {",
+    "  Write-BootstrapLog 'Bootstrap starting apply helper'",
+    "  $arguments = @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',$encodedCommand)",
+    "  $helper = Start-Process -FilePath $powershell -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru",
+    '  Write-BootstrapLog "Apply helper exited with code $($helper.ExitCode)"',
+    "  if ($helper.ExitCode -eq 0) { Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue }",
+    "  exit $helper.ExitCode",
+    "} catch {",
+    '  Write-BootstrapLog "BOOTSTRAP FAILED: $($_.Exception.Message)"',
+    "  exit 1",
+    "}",
   ];
   return `${lines.join("\r\n")}\r\n`;
 }
@@ -132,7 +149,7 @@ export function buildWindowsUpdateScript(
       "  if ($expectedVersion) {",
       "    $installedVersion = (Get-Item -LiteralPath $target).VersionInfo.ProductVersion",
       '    if ($installedVersion -ne $expectedVersion -and -not $installedVersion.StartsWith("$expectedVersion.")) { throw "Installed target version mismatch: expected $expectedVersion, got $installedVersion at $target" }',
-      '    Write-UpdateLog "Installed target version verified at $target: $installedVersion"',
+      '    Write-UpdateLog "Installed target version verified at ${target}: $installedVersion"',
       "  }",
       "  Start-QnectorTarget",
     );

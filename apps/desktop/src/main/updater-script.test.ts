@@ -1,3 +1,14 @@
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildWindowsUpdateScript,
@@ -52,6 +63,7 @@ describe("Windows updater apply script", () => {
     expect(script).toContain(
       "Recovery launch of the existing Qnector executable succeeded",
     );
+    expectPowerShellParses(script);
   });
 
   it("waits for the NSIS installer and checks its exit code for installed builds", () => {
@@ -70,7 +82,8 @@ describe("Windows updater apply script", () => {
     expect(script).toContain("Installer exited with code");
     expect(script).toContain("$expectedVersion = '0.4.7'");
     expect(script).toContain("Installed target version mismatch");
-    expect(script).toContain("Installed target version verified at $target");
+    expect(script).toContain("Installed target version verified at ${target}:");
+    expectPowerShellParses(script);
     expect(script).toContain("Start-QnectorTarget");
   });
 
@@ -95,15 +108,103 @@ describe("Windows updater bootstrap", () => {
       powershellPath:
         "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
       applyScriptPath,
+      logPath: "C:\\Temp\\bootstrap-update.log",
     });
 
     expect(WINDOWS_UPDATER_BOOTSTRAP_DETACHED).toBe(false);
     expect(script).toContain("Start-Process -FilePath $powershell");
     expect(script).toContain("-EncodedCommand");
+    expect(script).toContain("-Wait -PassThru");
+    expect(script).toContain("Bootstrap starting apply helper");
+    expect(script).toContain("Apply helper exited with code");
     const encoded = /\$encodedCommand = '([^']+)'/.exec(script)?.[1];
     expect(encoded).toBeTruthy();
     expect(Buffer.from(encoded!, "base64").toString("utf16le")).toBe(
       "& 'C:\\Users\\Queen''s PC\\apply update.ps1'",
     );
+    expectPowerShellParses(script);
+  });
+
+  it("executes the bootstrap and observes the independent apply helper exit", () => {
+    if (process.platform !== "win32") return;
+    const root = mkdtempSync(path.join(os.tmpdir(), "qnector-bootstrap-e2e-"));
+    try {
+      const nested = path.join(root, "Queen's updater test");
+      mkdirSync(nested, { recursive: true });
+      const applyScriptPath = path.join(nested, "apply update.ps1");
+      const bootstrapPath = path.join(root, "bootstrap.ps1");
+      const markerPath = path.join(root, "helper.marker");
+      const logPath = path.join(root, "bootstrap.log");
+      const markerLiteral = markerPath.replaceAll("'", "''");
+      writeFileSync(
+        applyScriptPath,
+        `\uFEFFSet-Content -LiteralPath '${markerLiteral}' -Value 'ok' -Encoding ASCII -Force\r\nexit 0\r\n`,
+        "utf8",
+      );
+      const bootstrap = buildWindowsUpdaterBootstrapScript({
+        powershellPath:
+          "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        applyScriptPath,
+        logPath,
+      });
+      writeFileSync(bootstrapPath, `\uFEFF${bootstrap}`, "utf8");
+
+      const result = spawnSync(
+        "powershell.exe",
+        [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          bootstrapPath,
+        ],
+        { encoding: "utf8", windowsHide: true, timeout: 10_000 },
+      );
+      expect(
+        result.status,
+        `${result.stderr}\n${result.stdout}`.trim() ||
+          "Bootstrap execution failed",
+      ).toBe(0);
+      expect(existsSync(markerPath)).toBe(true);
+      expect(readFileSync(logPath, "utf8")).toContain(
+        "Apply helper exited with code 0",
+      );
+      expect(existsSync(bootstrapPath)).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
+
+function expectPowerShellParses(script: string): void {
+  if (process.platform !== "win32") return;
+  const scriptBase64 = Buffer.from(script, "utf8").toString("base64");
+  const command = [
+    `$text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${scriptBase64}'))`,
+    "$tokens = $null",
+    "$errors = $null",
+    "[System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors) | Out-Null",
+    "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }",
+    "exit 0",
+  ].join("; ");
+  const encodedCommand = Buffer.from(command, "utf16le").toString("base64");
+  const result = spawnSync(
+    "powershell.exe",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-EncodedCommand",
+      encodedCommand,
+    ],
+    { encoding: "utf8", windowsHide: true },
+  );
+  expect(
+    result.status,
+    `${result.stderr}\n${result.stdout}`.trim() || "PowerShell parser failed",
+  ).toBe(0);
+}

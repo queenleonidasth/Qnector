@@ -15,6 +15,10 @@ $typescriptLib = Join-Path $projectRoot "node_modules\typescript\lib"
 foreach ($lib in @("lib.d.ts", "lib.es2022.d.ts", "lib.dom.d.ts")) {
   if (-not (Test-Path -LiteralPath (Join-Path $typescriptLib $lib))) { throw "TypeScript standard library $lib is missing" }
 }
+# Release gate: updater helper scripts are generated dynamically, so validate them
+# with the real Windows PowerShell parser and updater E2E tests before packaging.
+npx pnpm@10.15.0 vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts
+if ($LASTEXITCODE -ne 0) { throw "Updater release gate failed; refusing to package a self-update that was not validated" }
 npx pnpm@10.15.0 build:clean
 $releaseDir = Join-Path $projectRoot "apps\desktop\release"
 if (Test-Path -LiteralPath $releaseDir) {
