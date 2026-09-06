@@ -115,10 +115,10 @@ describe("Windows updater bootstrap", () => {
     expect(script).toContain("Start-Process -FilePath $powershell");
     expect(script).toContain("-EncodedCommand");
     expect(script).toContain("-PassThru");
-    expect(script).toContain("Wait-Process -Id $helper.Id");
+    expect(script).not.toContain("Wait-Process -Id $helper.Id");
     expect(script).not.toContain("-Wait -PassThru");
     expect(script).toContain("Bootstrap starting apply helper");
-    expect(script).toContain("Apply helper exited with code");
+    expect(script).toContain("Apply helper started PID");
     const encoded = /\$encodedCommand = '([^']+)'/.exec(script)?.[1];
     expect(encoded).toBeTruthy();
     expect(Buffer.from(encoded!, "base64").toString("utf16le")).toBe(
@@ -169,11 +169,10 @@ describe("Windows updater bootstrap", () => {
         `${result.stderr}\n${result.stdout}`.trim() ||
           "Bootstrap execution failed",
       ).toBe(0);
-      expect(existsSync(markerPath)).toBe(true);
+      expect(waitForFileSync(markerPath, 5_000)).toBe(true);
       expect(readFileSync(logPath, "utf8")).toContain(
-        "Apply helper exited with code 0",
+        "Apply helper started PID",
       );
-      expect(existsSync(bootstrapPath)).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -228,10 +227,11 @@ describe("Windows updater bootstrap", () => {
           "Bootstrap incorrectly waited for the descendant process",
       ).toBe(0);
       expect(elapsedMs).toBeLessThan(6_000);
+      expect(waitForFileSync(childPidPath, 5_000)).toBe(true);
       descendantPid = Number(readFileSync(childPidPath, "utf8").trim());
       expect(descendantPid).toBeGreaterThan(0);
       expect(readFileSync(logPath, "utf8")).toContain(
-        "Apply helper exited with code 0",
+        "Apply helper started PID",
       );
     } finally {
       if (descendantPid > 0) {
@@ -244,6 +244,16 @@ describe("Windows updater bootstrap", () => {
     }
   });
 });
+
+function waitForFileSync(file: string, timeoutMs: number): boolean {
+  const deadline = Date.now() + timeoutMs;
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  while (Date.now() < deadline) {
+    if (existsSync(file)) return true;
+    Atomics.wait(sleeper, 0, 0, 50);
+  }
+  return existsSync(file);
+}
 
 function expectPowerShellParses(script: string): void {
   if (process.platform !== "win32") return;

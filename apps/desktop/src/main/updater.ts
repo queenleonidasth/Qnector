@@ -232,6 +232,11 @@ export class DesktopUpdater {
         "helper-ready",
         { readyPath: updateArtifacts.readyPath },
       );
+      if (updateArtifacts.bootstrapPath) {
+        await rm(updateArtifacts.bootstrapPath, { force: true }).catch(
+          () => undefined,
+        );
+      }
       child.unref();
       this.setState({
         ...this.state,
