@@ -127,5 +127,78 @@ describe.skipIf(process.platform !== "win32")(
       expect(states).toContain("downloading");
       expect(states.at(-1)).toBe("downloaded");
     });
+
+    it("retries an embedded fetch connect timeout automatically and records a diagnostic log", async () => {
+      const userData = await mkdtemp(
+        path.join(os.tmpdir(), "qnector-updater-retry-"),
+      );
+      cleanup.push(userData);
+      const assetName = "Qnector-0.4.6-win-x64-portable.exe";
+      const asset = Buffer.from("retry-payload\n".repeat(2048), "utf8");
+      const digest = createHash("sha256").update(asset).digest("hex");
+      const releaseApi = "https://example.invalid/release";
+      const assetUrl = "https://example.invalid/asset";
+      let assetAttempts = 0;
+
+      const fetchImpl = (async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url === releaseApi) {
+          return new Response(
+            JSON.stringify({
+              tag_name: "v0.4.6",
+              name: "Qnector v0.4.6",
+              html_url: "https://example.invalid/release-page",
+              published_at: new Date().toISOString(),
+              body: "retry release",
+              assets: [
+                {
+                  name: assetName,
+                  browser_download_url: assetUrl,
+                  size: asset.length,
+                  digest: `sha256:${digest}`,
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (url === assetUrl) {
+          assetAttempts += 1;
+          if (assetAttempts === 1) {
+            const cause = Object.assign(new Error("Connect Timeout Error"), {
+              code: "UND_ERR_CONNECT_TIMEOUT",
+            });
+            throw Object.assign(new TypeError("fetch failed"), { cause });
+          }
+          return new Response(asset, {
+            status: 200,
+            headers: { "content-length": String(asset.length) },
+          });
+        }
+        return new Response(null, { status: 404 });
+      }) as typeof fetch;
+
+      const updater = new DesktopUpdater(() => undefined, {
+        releaseApi,
+        releasesUrl: "https://example.invalid/releases",
+        currentVersion: "0.4.5",
+        mode: "portable",
+        userDataPath: userData,
+        fetchImpl,
+      });
+
+      expect((await updater.check()).phase).toBe("available");
+      const downloaded = await updater.download();
+      expect(downloaded.phase).toBe("downloaded");
+      expect(downloaded.canInstall).toBe(true);
+      expect(downloaded.message).toContain("after 2 attempts");
+      expect(assetAttempts).toBe(2);
+
+      const updateDir = path.join(userData, "updates", "0.4.6");
+      expect(await readFile(path.join(updateDir, assetName))).toEqual(asset);
+      const log = await readFile(path.join(updateDir, "download.log"), "utf8");
+      expect(log).toContain("UND_ERR_CONNECT_TIMEOUT");
+      expect(log).toContain('"attempt":1');
+    });
   },
 );

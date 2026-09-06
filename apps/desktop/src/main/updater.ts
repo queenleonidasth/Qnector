@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants, createReadStream } from "node:fs";
 import {
   access,
+  appendFile,
   mkdir,
   open,
   rename,
@@ -36,6 +37,8 @@ const RELEASE_API =
 const RELEASES_URL = "https://github.com/queenleonidasth/Qnector/releases";
 const CHECK_TIMEOUT_MS = 15_000;
 const DOWNLOAD_TIMEOUT_MS = 15 * 60_000;
+const DOWNLOAD_MAX_ATTEMPTS = 5;
+const DOWNLOAD_RETRY_DELAYS_MS = [0, 750, 1_500, 3_000, 6_000] as const;
 
 export interface DesktopUpdaterOptions {
   releaseApi?: string;
@@ -290,6 +293,7 @@ export class DesktopUpdater {
     );
     const destination = path.join(updateDir, asset.name);
     const partial = `${destination}.part`;
+    const downloadLog = path.join(updateDir, "download.log");
     await mkdir(updateDir, { recursive: true });
 
     try {
@@ -311,120 +315,156 @@ export class DesktopUpdater {
         return this.getState();
       }
       await rm(destination, { force: true }).catch(() => undefined);
+      await rm(downloadLog, { force: true }).catch(() => undefined);
 
-      let resumeBytes = await stat(partial)
-        .then((info) => info.size)
-        .catch(() => 0);
-      if (resumeBytes < 0 || (asset.size > 0 && resumeBytes >= asset.size)) {
-        await rm(partial, { force: true }).catch(() => undefined);
-        resumeBytes = 0;
-      }
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt += 1) {
+        if (attempt > 1) {
+          const delayMs = DOWNLOAD_RETRY_DELAYS_MS[attempt - 1] ?? 6_000;
+          this.setState({
+            ...this.state,
+            phase: "downloading",
+            canDownload: false,
+            canInstall: false,
+            message: `Retrying ${asset.name} (${attempt}/${DOWNLOAD_MAX_ATTEMPTS})…`,
+          });
+          await delay(delayMs);
+        }
 
-      this.setState({
-        ...this.state,
-        phase: "downloading",
-        progress: asset.size > 0 ? Math.min(resumeBytes / asset.size, 1) : 0,
-        bytesDownloaded: resumeBytes,
-        totalBytes: asset.size,
-        canDownload: false,
-        canInstall: false,
-        message:
-          resumeBytes > 0
-            ? `Resuming ${asset.name}…`
-            : `Downloading ${asset.name}…`,
-      });
+        let resumeBytes = await stat(partial)
+          .then((info) => info.size)
+          .catch(() => 0);
+        if (resumeBytes < 0 || (asset.size > 0 && resumeBytes >= asset.size)) {
+          await rm(partial, { force: true }).catch(() => undefined);
+          resumeBytes = 0;
+        }
 
-      const headers: Record<string, string> = {
-        "User-Agent": `Qnector/${this.currentVersion}`,
-      };
-      if (resumeBytes > 0) headers.Range = `bytes=${resumeBytes}-`;
-      const response = await this.fetchImpl(asset.browser_download_url, {
-        headers,
-        redirect: "follow",
-        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-      });
-      if (!response.ok || !response.body)
-        throw new Error(`Download returned HTTP ${response.status}`);
-
-      // GitHub/CDN should answer a Range request with 206. If a proxy ignores
-      // Range and sends 200, restart safely from byte zero rather than appending
-      // a duplicate full payload to the partial file.
-      const resumed = resumeBytes > 0 && response.status === 206;
-      if (resumeBytes > 0 && !resumed) {
-        resumeBytes = 0;
-        await rm(partial, { force: true }).catch(() => undefined);
-      }
-      const file = await open(partial, resumed ? "a" : "w");
-      let downloaded = resumeBytes;
-      let lastPublish = 0;
-      try {
-        const reader = response.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (!value?.byteLength) continue;
-          await file.write(value);
-          downloaded += value.byteLength;
-          const now = Date.now();
-          if (now - lastPublish >= 150 || downloaded >= asset.size) {
-            lastPublish = now;
-            this.setState({
-              ...this.state,
-              phase: "downloading",
-              progress:
-                asset.size > 0 ? Math.min(downloaded / asset.size, 1) : 0,
-              bytesDownloaded: downloaded,
-              totalBytes: asset.size,
-              canDownload: false,
-              canInstall: false,
-              message: resumed
+        this.setState({
+          ...this.state,
+          phase: "downloading",
+          progress: asset.size > 0 ? Math.min(resumeBytes / asset.size, 1) : 0,
+          bytesDownloaded: resumeBytes,
+          totalBytes: asset.size,
+          canDownload: false,
+          canInstall: false,
+          message:
+            attempt > 1
+              ? `Retrying ${asset.name} (${attempt}/${DOWNLOAD_MAX_ATTEMPTS})…`
+              : resumeBytes > 0
                 ? `Resuming ${asset.name}…`
                 : `Downloading ${asset.name}…`,
-            });
+        });
+
+        try {
+          const headers: Record<string, string> = {
+            "User-Agent": `Qnector/${this.currentVersion}`,
+          };
+          if (resumeBytes > 0) headers.Range = `bytes=${resumeBytes}-`;
+          const response = await this.fetchImpl(asset.browser_download_url, {
+            headers,
+            redirect: "follow",
+            signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+          });
+          if (!response.ok || !response.body) {
+            const error = new Error(
+              `Download returned HTTP ${response.status}`,
+            );
+            if (!isRetryableHttpStatus(response.status)) throw error;
+            throw new RetryableDownloadError(error.message);
           }
+
+          // GitHub/CDN should answer a Range request with 206. If a proxy ignores
+          // Range and sends 200, restart safely from byte zero rather than appending
+          // a duplicate full payload to the partial file.
+          const resumed = resumeBytes > 0 && response.status === 206;
+          if (resumeBytes > 0 && !resumed) {
+            resumeBytes = 0;
+            await rm(partial, { force: true }).catch(() => undefined);
+          }
+          const file = await open(partial, resumed ? "a" : "w");
+          let downloaded = resumeBytes;
+          let lastPublish = 0;
+          try {
+            const reader = response.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (!value?.byteLength) continue;
+              await file.write(value);
+              downloaded += value.byteLength;
+              const now = Date.now();
+              if (now - lastPublish >= 150 || downloaded >= asset.size) {
+                lastPublish = now;
+                this.setState({
+                  ...this.state,
+                  phase: "downloading",
+                  progress:
+                    asset.size > 0 ? Math.min(downloaded / asset.size, 1) : 0,
+                  bytesDownloaded: downloaded,
+                  totalBytes: asset.size,
+                  canDownload: false,
+                  canInstall: false,
+                  message: resumed
+                    ? `Resuming ${asset.name}…`
+                    : `Downloading ${asset.name}…`,
+                });
+              }
+            }
+          } finally {
+            await file.close();
+          }
+
+          if (asset.size > 0 && downloaded !== asset.size) {
+            if (downloaded > asset.size)
+              await rm(partial, { force: true }).catch(() => undefined);
+            throw new RetryableDownloadError(
+              `Downloaded ${downloaded} bytes, expected ${asset.size} bytes`,
+            );
+          }
+          const actualSha256 = await hashFile(partial);
+          if (expectedSha256 && actualSha256 !== expectedSha256) {
+            await rm(partial, { force: true }).catch(() => undefined);
+            throw new RetryableDownloadError(
+              "SHA-256 digest from GitHub does not match the download",
+            );
+          }
+
+          await rm(destination, { force: true }).catch(() => undefined);
+          await rename(partial, destination);
+          this.downloadedPath = destination;
+          this.setState({
+            ...this.state,
+            phase: "downloaded",
+            progress: 1,
+            bytesDownloaded: downloaded,
+            totalBytes: asset.size,
+            canDownload: false,
+            canInstall: true,
+            message: expectedSha256
+              ? resumed
+                ? "Update resumed and SHA-256 verified. Ready to restart."
+                : attempt > 1
+                  ? `Update downloaded after ${attempt} attempts and SHA-256 verified. Ready to restart.`
+                  : "Update downloaded and SHA-256 verified. Ready to restart."
+              : "Update downloaded from GitHub. Ready to restart.",
+          });
+          return this.getState();
+        } catch (error) {
+          lastError = error;
+          await appendDownloadLog(downloadLog, attempt, error);
+          const retryable = isRetryableDownloadError(error);
+          if (!retryable || attempt >= DOWNLOAD_MAX_ATTEMPTS) throw error;
+          // A partial file is intentionally preserved. The next attempt re-stats it
+          // and asks GitHub for the remaining range, so mid-stream failures resume
+          // automatically without requiring another click.
         }
-      } finally {
-        await file.close();
       }
-
-      if (asset.size > 0 && downloaded !== asset.size) {
-        if (downloaded > asset.size)
-          await rm(partial, { force: true }).catch(() => undefined);
-        throw new Error(
-          `Downloaded ${downloaded} bytes, expected ${asset.size} bytes`,
-        );
-      }
-      const actualSha256 = await hashFile(partial);
-      if (expectedSha256 && actualSha256 !== expectedSha256) {
-        await rm(partial, { force: true }).catch(() => undefined);
-        throw new Error(
-          "SHA-256 digest from GitHub does not match the download",
-        );
-      }
-
-      await rm(destination, { force: true }).catch(() => undefined);
-      await rename(partial, destination);
-      this.downloadedPath = destination;
-      this.setState({
-        ...this.state,
-        phase: "downloaded",
-        progress: 1,
-        bytesDownloaded: downloaded,
-        totalBytes: asset.size,
-        canDownload: false,
-        canInstall: true,
-        message: expectedSha256
-          ? resumed
-            ? "Update resumed and SHA-256 verified. Ready to restart."
-            : "Update downloaded and SHA-256 verified. Ready to restart."
-          : "Update downloaded from GitHub. Ready to restart.",
-      });
-      return this.getState();
+      throw lastError ?? new Error("Download failed without an error detail");
     } catch (error) {
-      // Keep a valid-sized partial download so a network interruption can resume
-      // next time. Corrupt/oversized data is explicitly removed above.
       this.downloadedPath = undefined;
-      return this.fail(`Update download failed: ${errorMessage(error)}`);
+      return this.fail(
+        `Update download failed after retry: ${errorMessage(error)}. Log: ${downloadLog}`,
+      );
     }
   }
 
@@ -443,6 +483,68 @@ export class DesktopUpdater {
     this.state = next;
     this.publish(this.getState());
   }
+}
+
+class RetryableDownloadError extends Error {}
+
+function isRetryableHttpStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function isRetryableDownloadError(error: unknown): boolean {
+  if (error instanceof RetryableDownloadError) return true;
+  if (!(error instanceof Error)) return true;
+  const code =
+    (error as Error & { cause?: { code?: unknown }; code?: unknown }).cause
+      ?.code ?? (error as Error & { code?: unknown }).code;
+  if (
+    typeof code === "string" &&
+    [
+      "UND_ERR_CONNECT_TIMEOUT",
+      "UND_ERR_HEADERS_TIMEOUT",
+      "UND_ERR_BODY_TIMEOUT",
+      "ECONNRESET",
+      "ECONNREFUSED",
+      "ETIMEDOUT",
+      "EAI_AGAIN",
+      "ENETUNREACH",
+      "EHOSTUNREACH",
+    ].includes(code)
+  )
+    return true;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("fetch failed") ||
+    message.includes("timeout") ||
+    message.includes("network") ||
+    message.includes("terminated") ||
+    message.includes("socket")
+  );
+}
+
+async function appendDownloadLog(
+  file: string,
+  attempt: number,
+  error: unknown,
+): Promise<void> {
+  const cause =
+    error instanceof Error && error.cause && typeof error.cause === "object"
+      ? (error.cause as { code?: unknown; message?: unknown })
+      : undefined;
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    attempt,
+    message: errorMessage(error),
+    ...(typeof cause?.code === "string" ? { code: cause.code } : {}),
+    ...(typeof cause?.message === "string"
+      ? { cause: cause.message.slice(0, 1_000) }
+      : {}),
+  });
+  await appendFile(file, `${line}\n`, "utf8").catch(() => undefined);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function verifiedCachedAsset(
