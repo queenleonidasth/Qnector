@@ -69,7 +69,7 @@ const emptyForm = (): SkillForm => ({
   instructions:
     "# Skill instructions\n\nDescribe the workflow, rules, and done gate here.",
   license: "MIT",
-  compatibility: "Qnector 0.4.10+",
+  compatibility: "Qnector 0.4.11+",
   allowedTools: ["system", "workspace", "files", "process"],
 });
 
