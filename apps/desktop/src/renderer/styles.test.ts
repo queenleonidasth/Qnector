@@ -47,7 +47,7 @@ describe("desktop UI overflow guards", () => {
   it("keeps the animated activity queue scrollable through older calls", async () => {
     const css = await styles();
     expect(css).toMatch(
-      /\.activity-stream \{[\s\S]*?overflow-y:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;[\s\S]*?transparent 0,[\s\S]*?transparent 100%/,
+      /\.activity-stream \{[\s\S]*?overflow-y:\s*scroll;[\s\S]*?scrollbar-gutter:\s*auto;[\s\S]*?transparent 0,[\s\S]*?transparent 100%/,
     );
     expect(css).toMatch(
       /\.activity-track \{[\s\S]*?position:\s*relative;[\s\S]*?min-height:\s*100%;/,
@@ -115,6 +115,19 @@ describe("desktop UI overflow guards", () => {
     );
   });
 
+  it("locks the viewport so tool-call overflow cannot create a root scrollbar", async () => {
+    const css = await styles();
+    expect(css).toMatch(
+      /html,\s*body,\s*#root \{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden !important;/,
+    );
+    expect(css).toMatch(
+      /\.app-container \{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/,
+    );
+    expect(css).not.toContain("height: 100vh;");
+    expect(css).toMatch(
+      /\.activity-stream \{[\s\S]*?overflow-y:\s*scroll;[\s\S]*?scrollbar-gutter:\s*auto;[\s\S]*?transparent 0,[\s\S]*?transparent 100%/,
+    );
+  });
   it("keeps typography and dock metrics stable during activity re-renders", async () => {
     const css = await styles();
     expect(css).not.toContain("fonts.googleapis.com");
