@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ToolResult } from "../preload/api.js";
 import "./skill-manager.css";
 
@@ -715,110 +716,116 @@ export function SkillManager(): React.ReactElement {
         </button>
       </div>
 
-      {triggerOpen && (
-        <div
-          className="skills-modal-backdrop"
-          onClick={() => setTriggerOpen(false)}
-        >
-          <section
-            className="skills-modal"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
+      {triggerOpen &&
+        createPortal(
+          <div
+            className="skills-modal-backdrop"
+            onClick={() => setTriggerOpen(false)}
           >
-            <div className="skills-modal-head">
-              <div>
-                <strong>Test Trigger</strong>
-                <small>See which active skills Qnector would match.</small>
-              </div>
-              <button type="button" onClick={() => setTriggerOpen(false)}>
-                ×
-              </button>
-            </div>
-            <label className="skill-field">
-              <span>Prompt or task</span>
-              <textarea
-                rows={4}
-                value={triggerQuery}
-                onChange={(e) => setTriggerQuery(e.target.value)}
-                placeholder="ช่วยออกแบบหน้า settings ให้ใช้ง่ายขึ้น"
-              />
-            </label>
-            <button
-              className="skills-primary skills-test-button"
-              type="button"
-              onClick={() => void testTrigger()}
-              disabled={busy || !triggerQuery.trim()}
+            <section
+              className="skills-modal"
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
             >
-              {busy ? "Testing…" : "Run Matcher"}
-            </button>
-            <div className="trigger-results">
-              {triggerMatches.map((skill, index) => (
-                <button
-                  type="button"
-                  key={skill.name}
-                  onClick={() => {
-                    setTriggerOpen(false);
-                    void openSkill(skill.name);
-                  }}
-                >
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{skill.name}</strong>
-                    <small>
-                      {index === 0 ? "Best match" : skill.description}
-                    </small>
-                  </div>
-                  <em>›</em>
+              <div className="skills-modal-head">
+                <div>
+                  <strong>Test Trigger</strong>
+                  <small>See which active skills Qnector would match.</small>
+                </div>
+                <button type="button" onClick={() => setTriggerOpen(false)}>
+                  ×
                 </button>
-              ))}
-              {triggerMatches.length === 0 && (
-                <p>Run the matcher to see ranked results.</p>
-              )}
-            </div>
-          </section>
-        </div>
-      )}
-
-      {duplicateOpen && (
-        <div
-          className="skills-modal-backdrop"
-          onClick={() => setDuplicateOpen(false)}
-        >
-          <section
-            className="skills-modal duplicate-modal"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="skills-modal-head">
-              <div>
-                <strong>Duplicate Existing</strong>
-                <small>Creates a User copy named &lt;skill&gt;-copy.</small>
               </div>
-              <button type="button" onClick={() => setDuplicateOpen(false)}>
-                ×
+              <label className="skill-field">
+                <span>Prompt or task</span>
+                <textarea
+                  rows={4}
+                  value={triggerQuery}
+                  onChange={(e) => setTriggerQuery(e.target.value)}
+                  placeholder="ช่วยออกแบบหน้า settings ให้ใช้ง่ายขึ้น"
+                />
+              </label>
+              <button
+                className="skills-primary skills-test-button"
+                type="button"
+                onClick={() => void testTrigger()}
+                disabled={busy || !triggerQuery.trim()}
+              >
+                {busy ? "Testing…" : "Run Matcher"}
               </button>
-            </div>
-            <div className="duplicate-list">
-              {(status?.skills ?? []).map((skill) => (
-                <button
-                  type="button"
-                  key={skill.name}
-                  onClick={() => void duplicateSkill(skill, "user")}
-                >
-                  <span className="skill-row-icon">{initials(skill.name)}</span>
-                  <div>
-                    <strong>{skill.name}</strong>
-                    <small>{skill.source}</small>
-                  </div>
-                  <em>＋</em>
+              <div className="trigger-results">
+                {triggerMatches.map((skill, index) => (
+                  <button
+                    type="button"
+                    key={skill.name}
+                    onClick={() => {
+                      setTriggerOpen(false);
+                      void openSkill(skill.name);
+                    }}
+                  >
+                    <span>{index + 1}</span>
+                    <div>
+                      <strong>{skill.name}</strong>
+                      <small>
+                        {index === 0 ? "Best match" : skill.description}
+                      </small>
+                    </div>
+                    <em>›</em>
+                  </button>
+                ))}
+                {triggerMatches.length === 0 && (
+                  <p>Run the matcher to see ranked results.</p>
+                )}
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )}
+
+      {duplicateOpen &&
+        createPortal(
+          <div
+            className="skills-modal-backdrop"
+            onClick={() => setDuplicateOpen(false)}
+          >
+            <section
+              className="skills-modal duplicate-modal"
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="skills-modal-head">
+                <div>
+                  <strong>Duplicate Existing</strong>
+                  <small>Creates a User copy named &lt;skill&gt;-copy.</small>
+                </div>
+                <button type="button" onClick={() => setDuplicateOpen(false)}>
+                  ×
                 </button>
-              ))}
-            </div>
-          </section>
-        </div>
-      )}
+              </div>
+              <div className="duplicate-list">
+                {(status?.skills ?? []).map((skill) => (
+                  <button
+                    type="button"
+                    key={skill.name}
+                    onClick={() => void duplicateSkill(skill, "user")}
+                  >
+                    <span className="skill-row-icon">
+                      {initials(skill.name)}
+                    </span>
+                    <div>
+                      <strong>{skill.name}</strong>
+                      <small>{skill.source}</small>
+                    </div>
+                    <em>＋</em>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -6,10 +6,12 @@ const skillUrl = new URL("./skill-manager.tsx", import.meta.url);
 const cssUrl = new URL("./skill-manager.css", import.meta.url);
 
 describe("desktop Skill Manager", () => {
-  it("replaces Runtime in primary navigation while keeping diagnostics accessible", async () => {
+  it("replaces Runtime in both primary navigation surfaces while keeping diagnostics accessible", async () => {
     const source = await readFile(rendererUrl, "utf8");
     expect(source).toContain('{ key: "skills", label: "Skills" }');
     expect(source).not.toContain('{ key: "runtime", label: "Runtime" }');
+    expect(source).toContain('onClick={() => toggleDrawer("skills")}');
+    expect(source).toContain("<span>Skills</span>");
     expect(source).toContain("Runtime & Diagnostics");
     expect(source).toContain("<SkillManager />");
   });
@@ -22,6 +24,8 @@ describe("desktop Skill Manager", () => {
     expect(source).toContain("Import Folder");
     expect(source).toContain("Duplicate Existing");
     expect(source).toContain("Test Trigger");
+    expect(source).toContain("createPortal(");
+    expect(source).toContain("document.body");
   });
 
   it("keeps Skill Manager text readable and its list scrollable", async () => {

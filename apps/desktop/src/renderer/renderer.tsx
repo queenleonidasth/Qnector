@@ -52,6 +52,8 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
 
 type DrawerName = "workspace" | "memory" | "skills" | "runtime" | "settings";
 type DrawerTransition = "left" | "right" | null;
+type UpdateUxPhase =
+  "idle" | "checking" | "downloading" | "preparing-restart" | "restarting";
 
 type PrimaryDrawerName = Exclude<DrawerName, "runtime">;
 
@@ -472,6 +474,7 @@ function App(): React.ReactElement {
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupError, setSetupError] = useState<string>();
   const [updateState, setUpdateState] = useState<DesktopUpdateState>();
+  const [updateUxPhase, setUpdateUxPhase] = useState<UpdateUxPhase>("idle");
 
   // Live Activity owns its own subscription/render state to avoid rerendering App.
 
@@ -840,26 +843,44 @@ function App(): React.ReactElement {
   };
 
   const checkForUpdates = async (): Promise<void> => {
+    const startedAt = performance.now();
+    setUpdateUxPhase("checking");
     try {
-      setUpdateState(await window.qnector.checkForUpdates());
+      const next = await window.qnector.checkForUpdates();
+      await waitForMinimumUiTime(startedAt, 1000);
+      setUpdateState(next);
     } catch (reason) {
+      await waitForMinimumUiTime(startedAt, 1000);
       setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setUpdateUxPhase("idle");
     }
   };
 
   const downloadUpdate = async (): Promise<void> => {
+    setUpdateUxPhase("downloading");
     try {
       setUpdateState(await window.qnector.downloadUpdate());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setUpdateUxPhase("idle");
     }
   };
 
   const installUpdate = async (): Promise<void> => {
+    setUpdateUxPhase("preparing-restart");
     try {
-      setUpdateState(await window.qnector.installUpdate());
+      await sleep(650);
+      setUpdateUxPhase("restarting");
+      await sleep(500);
+      const next = await window.qnector.installUpdate();
+      setUpdateState(next);
+      await sleep(800);
+      setUpdateUxPhase("idle");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+      setUpdateUxPhase("idle");
     }
   };
 
@@ -1057,6 +1078,7 @@ function App(): React.ReactElement {
     updateState?.phase === "downloaded" ||
     updateState?.phase === "installing";
   const updateBusy =
+    updateUxPhase !== "idle" ||
     updateState?.phase === "checking" ||
     updateState?.phase === "downloading" ||
     updateState?.phase === "installing";
@@ -1066,31 +1088,51 @@ function App(): React.ReactElement {
     updateState.latestVersion !== updateState.currentVersion,
   );
   const updatePhaseLabel =
-    updateState?.phase === "checking"
-      ? "Checking"
-      : updateState?.phase === "available"
-        ? "Update available"
-        : updateState?.phase === "downloading"
-          ? "Downloading"
-          : updateState?.phase === "downloaded"
-            ? "Ready to install"
-            : updateState?.phase === "installing"
-              ? "Installing"
-              : updateState?.phase === "up-to-date"
-                ? "Up to date"
-                : updateState?.phase === "error"
-                  ? "Needs attention"
-                  : "Ready";
+    updateUxPhase === "preparing-restart"
+      ? "Preparing restart"
+      : updateUxPhase === "restarting"
+        ? "Restarting Qnector"
+        : updateUxPhase === "checking"
+          ? "Checking"
+          : updateUxPhase === "downloading"
+            ? "Downloading"
+            : updateState?.phase === "checking"
+              ? "Checking"
+              : updateState?.phase === "available"
+                ? "Update available"
+                : updateState?.phase === "downloading"
+                  ? "Downloading"
+                  : updateState?.phase === "downloaded"
+                    ? "Ready to install"
+                    : updateState?.phase === "installing"
+                      ? "Installing"
+                      : updateState?.phase === "up-to-date"
+                        ? "Up to date"
+                        : updateState?.phase === "error"
+                          ? "Needs attention"
+                          : "Ready";
   const updatePhaseIcon =
-    updateState?.phase === "error"
-      ? "!"
-      : updateState?.phase === "up-to-date"
-        ? "✓"
-        : updateState?.phase === "downloaded"
-          ? "↓"
-          : updateState?.phase === "installing"
-            ? "↻"
-            : "↑";
+    updateUxPhase !== "idle"
+      ? "↻"
+      : updateState?.phase === "error"
+        ? "!"
+        : updateState?.phase === "up-to-date"
+          ? "✓"
+          : updateState?.phase === "downloaded"
+            ? "↓"
+            : updateState?.phase === "installing"
+              ? "↻"
+              : "↑";
+  const updateUxMessage =
+    updateUxPhase === "checking"
+      ? "Checking GitHub Releases for the latest Qnector build…"
+      : updateUxPhase === "downloading"
+        ? "Downloading and verifying the update package…"
+        : updateUxPhase === "preparing-restart"
+          ? "Update is ready. Preparing a safe restart…"
+          : updateUxPhase === "restarting"
+            ? "Restarting Qnector now. The window will close and reopen automatically."
+            : undefined;
 
   return (
     <div className="app-container">
@@ -1108,6 +1150,24 @@ function App(): React.ReactElement {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {(updateUxPhase === "preparing-restart" ||
+        updateUxPhase === "restarting") && (
+        <div
+          className="update-restart-overlay"
+          role="status"
+          aria-live="assertive"
+        >
+          <div className="update-restart-card">
+            <span className="update-restart-spinner" aria-hidden="true" />
+            <strong>{updatePhaseLabel}</strong>
+            <p>{updateUxMessage}</p>
+            <div className="update-restart-track">
+              <span />
+            </div>
+          </div>
         </div>
       )}
 
@@ -1326,11 +1386,11 @@ function App(): React.ReactElement {
           <span>Memory</span>
         </button>
         <button
-          className={`dock-pill-btn ${activeDrawer === "runtime" ? "active" : ""}`}
-          onClick={() => toggleDrawer("runtime")}
+          className={`dock-pill-btn ${activeDrawer === "skills" ? "active" : ""}`}
+          onClick={() => toggleDrawer("skills")}
         >
-          <span>◈</span>
-          <span>Runtime</span>
+          <span>◇</span>
+          <span>Skills</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "settings" ? "active" : ""}`}
@@ -2315,7 +2375,7 @@ function App(): React.ReactElement {
                     </button>
 
                     <div
-                      className={`update-settings-card ${updateState?.phase ?? "idle"}`}
+                      className={`update-settings-card ${updateState?.phase ?? "idle"} ${updateUxPhase !== "idle" ? "ux-busy" : ""}`}
                     >
                       <div className="update-card-header">
                         <span className="update-card-icon">
@@ -2376,21 +2436,30 @@ function App(): React.ReactElement {
                           disabled={updateBusy}
                           onClick={runPrimaryUpdateAction}
                         >
-                          {updateState?.phase === "checking"
-                            ? "Checking…"
-                            : updateState?.phase === "downloading"
-                              ? `Downloading ${updateProgressPercent}%`
-                              : updateState?.phase === "installing"
-                                ? "Updating…"
-                                : updateState?.canInstall
-                                  ? "Restart & Update"
-                                  : updateState?.canDownload
-                                    ? `Download v${updateState.latestVersion ?? "new"}`
-                                    : updateState?.phase === "up-to-date"
-                                      ? "Check Again"
-                                      : updateState?.phase === "error"
-                                        ? "Retry"
-                                        : "Check for Updates"}
+                          {updateUxPhase === "checking"
+                            ? "↻ Checking…"
+                            : updateUxPhase === "downloading"
+                              ? `↻ Downloading ${updateProgressPercent}%`
+                              : updateUxPhase === "preparing-restart"
+                                ? "↻ Preparing restart…"
+                                : updateUxPhase === "restarting"
+                                  ? "↻ Restarting Qnector…"
+                                  : updateState?.phase === "checking"
+                                    ? "↻ Checking…"
+                                    : updateState?.phase === "downloading"
+                                      ? `Downloading ${updateProgressPercent}%`
+                                      : updateState?.phase === "installing"
+                                        ? "Updating…"
+                                        : updateState?.canInstall
+                                          ? "Restart & Update"
+                                          : updateState?.canDownload
+                                            ? `Download v${updateState.latestVersion ?? "new"}`
+                                            : updateState?.phase ===
+                                                "up-to-date"
+                                              ? "Check Again"
+                                              : updateState?.phase === "error"
+                                                ? "Retry"
+                                                : "Check for Updates"}
                         </button>
                         {updateState?.releaseUrl && (
                           <button
@@ -2410,7 +2479,7 @@ function App(): React.ReactElement {
                           updateState?.phase === "downloading"
                             ? "downloading"
                             : ""
-                        }`}
+                        } ${updateUxPhase !== "idle" ? "ux-busy" : ""}`}
                       >
                         <span className="update-status-panel-icon">
                           {updatePhaseIcon}
@@ -2439,7 +2508,8 @@ function App(): React.ReactElement {
                             <>
                               <strong>{updatePhaseLabel}</strong>
                               <p>
-                                {updateState?.message ??
+                                {updateUxMessage ??
+                                  updateState?.message ??
                                   "Qnector checks GitHub Releases for new versions."}
                               </p>
                             </>
@@ -2644,6 +2714,18 @@ function App(): React.ReactElement {
       )}
     </div>
   );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForMinimumUiTime(
+  startedAt: number,
+  minimumMs: number,
+): Promise<void> {
+  const remaining = minimumMs - (performance.now() - startedAt);
+  if (remaining > 0) await sleep(remaining);
 }
 
 function formatTime(timestamp: string): string {
