@@ -58,6 +58,8 @@ describe("Royal motion effects on the classic Qnector theme", () => {
       "royalStatusPulse",
       "royalGoldButtonFlow",
       "royalActivityEnter",
+      "royalActivityProcessingGlow",
+      "royalActivityRipple",
       "royalDockIn",
       "royalSkillRowIn",
     ]) {
@@ -78,5 +80,52 @@ describe("Royal motion effects on the classic Qnector theme", () => {
       (match) => Number(match[1]),
     );
     expect(inlineSizes.every((size) => size >= 10)).toBe(true);
+  });
+
+  it("keeps all dashboard dock labels gold without falsely selecting a tab", async () => {
+    const css = await effects();
+    const text = await source();
+    expect(text).toContain(
+      'className={`floating-glass-dock ${activeDrawer ? "" : "dashboard-dock"}`}',
+    );
+    expect(css).toContain(
+      ".floating-glass-dock.dashboard-dock .dock-pill-btn > span:last-child",
+    );
+    expect(css).toContain("color: var(--text-gold);");
+    expect(css).toContain(
+      ".floating-glass-dock:has(.dock-pill-btn.active)::after",
+    );
+    expect(css).toMatch(/\.floating-glass-dock::after[\s\S]*?opacity:\s*0;/);
+  });
+
+  it("marks running activity rows and gives them gold processing feedback", async () => {
+    const css = await effects();
+    const text = await source();
+    expect(text).toContain("activity-item ${item.status}");
+    expect(text).toContain('className="activity-processing-label"');
+    expect(text).toContain("PROCESSING…");
+    expect(css).toContain(".activity-item.running::before");
+    expect(css).toContain(
+      "animation: royalActivityRipple 1.8s ease-out infinite;",
+    );
+    expect(css).toContain(
+      "animation: royalActivityProcessingGlow 1.8s ease-in-out infinite;",
+    );
+  });
+
+  it("centers action-button content consistently across primary UI flows", async () => {
+    const css = await effects();
+    for (const selector of [
+      ".btn-gold-copy,",
+      ".btn-drawer-action,",
+      ".btn-update-primary,",
+      ".setup-primary,",
+      ".skills-primary,",
+    ]) {
+      expect(css).toContain(selector);
+    }
+    expect(css).toMatch(
+      /\.btn-gold-copy,[\s\S]*?display:\s*inline-flex;[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;[\s\S]*?text-align:\s*center;/,
+    );
   });
 });

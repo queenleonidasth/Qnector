@@ -297,7 +297,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
               return (
                 <button
                   type="button"
-                  className={`activity-item ${enteringActivityId === item.id ? "entering" : ""}`}
+                  className={`activity-item ${item.status} ${enteringActivityId === item.id ? "entering" : ""}`}
                   data-activity-id={item.id}
                   key={item.id}
                   style={{
@@ -313,9 +313,13 @@ const ActivityPanel = React.memo(function ActivityPanel({
                     <div className="item-args">{item.argsSummary || "—"}</div>
                   </div>
                   <div className="item-right">
-                    {item.durationMs !== undefined && (
+                    {item.status === "running" ? (
+                      <span className="activity-processing-label">
+                        PROCESSING…
+                      </span>
+                    ) : item.durationMs !== undefined ? (
                       <span>{item.durationMs}ms</span>
-                    )}
+                    ) : null}
                     <span>{formatTime(item.timestamp)}</span>
                     <span className={`item-bead ${item.status}`} />
                     <span className="activity-open-glyph">›</span>
@@ -1371,7 +1375,9 @@ function App(): React.ReactElement {
         <ActivityPanel initialActivity={initialActivity} />
       </main>
 
-      <footer className="floating-glass-dock">
+      <footer
+        className={`floating-glass-dock ${activeDrawer ? "" : "dashboard-dock"}`}
+      >
         <button
           className={`dock-pill-btn ${activeDrawer === "workspace" ? "active" : ""}`}
           onClick={() => toggleDrawer("workspace")}
