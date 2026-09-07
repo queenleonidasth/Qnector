@@ -16,6 +16,7 @@ import type {
   DocumentIntelligenceService,
   WorkflowManager,
   PtyManager,
+  AgentSkillService,
 } from "@qnector/core";
 import type {
   QnectorConfig,
@@ -43,6 +44,7 @@ export interface ToolContext {
   documentIntelligence?: DocumentIntelligenceService;
   workflowManager?: WorkflowManager;
   ptyManager?: PtyManager;
+  agentSkills?: AgentSkillService;
   memory?: MemoryStore;
   memoryV2?: MemoryV2Store;
   memoryTaskId?: string;

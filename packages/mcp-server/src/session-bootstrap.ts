@@ -1,4 +1,4 @@
-import type { MemoryRecall } from "@qnector/core";
+import type { AgentSkillSummary, MemoryRecall } from "@qnector/core";
 import type {
   ActivityEntry,
   MemoryFact,
@@ -11,6 +11,7 @@ export function buildSessionBootstrapInstructions(
   memory: MemoryRecall,
   recentActivity: ActivityEntry[] = [],
   memoryV2?: MemoryV2Snapshot,
+  skills: AgentSkillSummary[] = [],
 ): string {
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
@@ -21,6 +22,18 @@ export function buildSessionBootstrapInstructions(
     `Workspace: ${clip(memory.workspacePath, 500)}`,
     `Memory updated: ${memory.updatedAt}`,
   ];
+
+  if (skills.length > 0) {
+    lines.push(
+      "",
+      `Agent Skills: ${skills.length} skill(s) are available. For specialized or multi-step work, call system.skills_match with the task description, then system.skill_get for the best match before acting.`,
+      "UI/UX rule: for any non-trivial interface, layout, styling, loading/motion, responsiveness, or usability task, match and activate the relevant UI/UX skill before editing, then visually verify the real surface with browser/computer tools when available.",
+      "Available skill catalog:",
+    );
+    for (const skill of skills.slice(0, 12)) {
+      lines.push(`- ${clip(skill.name, 100)}: ${clip(skill.description, 120)}`);
+    }
+  }
 
   if (memoryV2) {
     const activeTasks = memoryV2.tasks.filter(

@@ -174,9 +174,9 @@ describe("Windows updater bootstrap", () => {
         "Apply helper started PID",
       );
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeTempTree(root);
     }
-  });
+  }, 20_000);
 
   it("waits only for the apply helper PID, not a relaunched descendant process", () => {
     if (process.platform !== "win32") return;
@@ -228,9 +228,9 @@ describe("Windows updater bootstrap", () => {
       ).toBe(0);
       expect(elapsedMs).toBeLessThan(6_000);
       expect(waitForFileSync(childPidPath, 5_000)).toBe(true);
-      descendantPid = Number(readFileSync(childPidPath, "utf8").trim());
+      descendantPid = Number(readFileWithRetrySync(childPidPath, 2_000).trim());
       expect(descendantPid).toBeGreaterThan(0);
-      expect(readFileSync(logPath, "utf8")).toContain(
+      expect(readFileWithRetrySync(logPath, 2_000)).toContain(
         "Apply helper started PID",
       );
     } finally {
@@ -240,9 +240,9 @@ describe("Windows updater bootstrap", () => {
           stdio: "ignore",
         });
       }
-      rmSync(root, { recursive: true, force: true });
+      removeTempTree(root);
     }
-  });
+  }, 20_000);
 });
 
 function waitForFileSync(file: string, timeoutMs: number): boolean {
@@ -253,6 +253,46 @@ function waitForFileSync(file: string, timeoutMs: number): boolean {
     Atomics.wait(sleeper, 0, 0, 50);
   }
   return existsSync(file);
+}
+
+function readFileWithRetrySync(file: string, timeoutMs: number): string {
+  const deadline = Date.now() + timeoutMs;
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      return readFileSync(file, "utf8");
+    } catch (error) {
+      lastError = error;
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : "";
+      if (!["EBUSY", "EPERM", "EACCES"].includes(code)) throw error;
+      Atomics.wait(sleeper, 0, 0, 50);
+    }
+  }
+  throw lastError;
+}
+
+function removeTempTree(root: string): void {
+  const wait = new Int32Array(new SharedArrayBuffer(4));
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      rmSync(root, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String((error as { code?: unknown }).code)
+          : "";
+      if (!["EPERM", "EBUSY", "ENOTEMPTY"].includes(code)) throw error;
+      Atomics.wait(wait, 0, 0, 100);
+    }
+  }
+  throw lastError;
 }
 
 function expectPowerShellParses(script: string): void {

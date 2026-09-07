@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
+import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import AdmZip from "adm-zip";
 import * as XLSXImport from "xlsx";
 
@@ -8,6 +10,7 @@ const XLSX =
   (XLSXImport as typeof XLSXImport & { default?: typeof XLSXImport }).default ??
   XLSXImport;
 XLSX.set_fs(fs);
+const execFileAsync = promisify(execFile);
 import type { ToolAttachment } from "@qnector/shared";
 
 export type DocumentKind =
@@ -19,6 +22,7 @@ export type DocumentKind =
   | "zip"
   | "sqlite"
   | "text"
+  | "markitdown"
   | "unknown";
 
 export interface DocumentInspection {
@@ -48,6 +52,21 @@ export interface DocumentRenderResult {
 }
 
 export class DocumentIntelligenceService {
+  public async providers(): Promise<{
+    markitdown: { available: boolean; command?: string; version?: string };
+  }> {
+    const provider = await findMarkItDownCommand();
+    return {
+      markitdown: provider
+        ? {
+            available: true,
+            command: [provider.command, ...provider.prefix].join(" "),
+            version: provider.version,
+          }
+        : { available: false },
+    };
+  }
+
   public async inspect(file: string): Promise<DocumentInspection> {
     const absolute = path.resolve(file);
     const info = await stat(absolute);
@@ -164,6 +183,14 @@ export class DocumentIntelligenceService {
         );
         text = JSON.stringify(schema, null, 2);
         extra.rows = schema.length;
+        break;
+      }
+      case "markitdown": {
+        const converted = await markItDown(absolute);
+        text = converted.text;
+        extra.provider = "markitdown";
+        extra.providerCommand = converted.command;
+        extra.providerVersion = converted.version;
         break;
       }
       default:
@@ -337,6 +364,19 @@ export class DocumentIntelligenceService {
       );
       return { objects: rows };
     }
+    if (kind === "markitdown") {
+      const provider = await findMarkItDownCommand();
+      return {
+        provider: "markitdown",
+        providerAvailable: Boolean(provider),
+        ...(provider
+          ? {
+              providerCommand: [provider.command, ...provider.prefix].join(" "),
+              providerVersion: provider.version,
+            }
+          : {}),
+      };
+    }
     return {};
   }
 }
@@ -350,6 +390,32 @@ export function detectDocumentKind(file: string): DocumentKind {
   if (ext === ".json" || ext === ".jsonc") return "json";
   if (ext === ".zip") return "zip";
   if ([".sqlite", ".sqlite3", ".db"].includes(ext)) return "sqlite";
+  if (
+    [
+      ".pptx",
+      ".odt",
+      ".ods",
+      ".odp",
+      ".epub",
+      ".rtf",
+      ".msg",
+      ".eml",
+      ".ipynb",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".bmp",
+      ".tif",
+      ".tiff",
+      ".webp",
+      ".mp3",
+      ".wav",
+      ".m4a",
+      ".flac",
+    ].includes(ext)
+  )
+    return "markitdown";
   if (
     [
       ".txt",
@@ -453,6 +519,81 @@ function parseCsvLine(line: string): string[] {
   }
   result.push(current);
   return result;
+}
+
+type MarkItDownCommand = {
+  command: string;
+  prefix: string[];
+  version: string;
+};
+
+let markItDownCommandPromise: Promise<MarkItDownCommand | null> | undefined;
+
+async function findMarkItDownCommand(): Promise<MarkItDownCommand | null> {
+  markItDownCommandPromise ??= (async () => {
+    const candidates: Array<{ command: string; prefix: string[] }> = [
+      { command: "python", prefix: ["-m", "markitdown"] },
+      { command: "py", prefix: ["-m", "markitdown"] },
+      { command: "markitdown", prefix: [] },
+    ];
+    for (const candidate of candidates) {
+      try {
+        const result = await execFileAsync(
+          candidate.command,
+          [...candidate.prefix, "--version"],
+          {
+            encoding: "utf8",
+            timeout: 5_000,
+            maxBuffer: 256_000,
+            windowsHide: true,
+          },
+        );
+        const version = String(result.stdout).trim();
+        if (version)
+          return {
+            ...candidate,
+            version,
+          };
+      } catch {
+        // Try the next optional provider command.
+      }
+    }
+    return null;
+  })();
+  return markItDownCommandPromise;
+}
+
+async function markItDown(file: string): Promise<{
+  text: string;
+  command: string;
+  version: string;
+}> {
+  const provider = await findMarkItDownCommand();
+  if (!provider)
+    throw new Error(
+      "DOCUMENT_PROVIDER_UNAVAILABLE: this file type requires MarkItDown; install Microsoft MarkItDown or use a native Qnector-supported format",
+    );
+  try {
+    const result = await execFileAsync(
+      provider.command,
+      [...provider.prefix, file],
+      {
+        encoding: "utf8",
+        timeout: 60_000,
+        maxBuffer: 12 * 1024 * 1024,
+        windowsHide: true,
+      },
+    );
+    return {
+      text: String(result.stdout),
+      command: [provider.command, ...provider.prefix].join(" "),
+      version: provider.version,
+    };
+  } catch (error) {
+    throw new Error(
+      `DOCUMENT_PARSE_ERROR: MarkItDown could not convert ${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 async function sqliteQuery(file: string, sql: string): Promise<unknown[]> {

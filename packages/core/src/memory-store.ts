@@ -141,9 +141,9 @@ export class MemoryStore {
   private workspaceId?: string;
   private state?: MemoryState;
   private stateExisted = false;
-  private stateMtimeMs: number | null | undefined;
+  private stateFileStamp: string | null | undefined;
   private checkpoints?: MemoryCheckpoint[];
-  private checkpointsMtimeMs: number | null | undefined;
+  private checkpointsFileStamp: string | null | undefined;
   private stateWarning?: string;
   private mirrorMode: "off" | "memory-md";
   private readonly storageRoot: string;
@@ -181,9 +181,9 @@ export class MemoryStore {
     this.workspaceId = undefined;
     this.state = undefined;
     this.stateExisted = false;
-    this.stateMtimeMs = undefined;
+    this.stateFileStamp = undefined;
     this.checkpoints = undefined;
-    this.checkpointsMtimeMs = undefined;
+    this.checkpointsFileStamp = undefined;
     this.stateWarning = undefined;
   }
 
@@ -652,10 +652,8 @@ export class MemoryStore {
     const workspaceId = await this.ensureWorkspaceId();
     const file = this.statePath();
     if (!force && this.state && this.state.workspaceId === workspaceId) {
-      const currentMtime = await stat(file)
-        .then((info) => info.mtimeMs)
-        .catch(() => null);
-      if (currentMtime === this.stateMtimeMs)
+      const currentStamp = await fileStamp(file);
+      if (currentStamp === this.stateFileStamp)
         return {
           state: this.state,
           existed: this.stateExisted,
@@ -663,7 +661,7 @@ export class MemoryStore {
         };
     }
     try {
-      const info = await stat(file);
+      const stamp = await fileStamp(file);
       const parsed = memoryStateSchema.safeParse(
         JSON.parse(await readFile(file, "utf8")),
       );
@@ -671,7 +669,7 @@ export class MemoryStore {
         const sanitized = sanitizeValue(parsed.data);
         this.state = sanitized.value as MemoryState;
         this.stateExisted = true;
-        this.stateMtimeMs = info.mtimeMs;
+        this.stateFileStamp = stamp;
         this.stateWarning = undefined;
         if (sanitized.redacted) await this.writeState(this.state);
         return { state: this.state, existed: true };
@@ -690,9 +688,7 @@ export class MemoryStore {
     const state = emptyState(workspaceId, this.workspacePath);
     this.state = state;
     this.stateExisted = false;
-    this.stateMtimeMs = await stat(file)
-      .then((info) => info.mtimeMs)
-      .catch(() => null);
+    this.stateFileStamp = await fileStamp(file);
     return {
       state,
       existed: false,
@@ -703,14 +699,12 @@ export class MemoryStore {
   private async loadCheckpoints(force = false): Promise<MemoryCheckpoint[]> {
     const file = this.checkpointsPath();
     if (!force && this.checkpoints) {
-      const currentMtime = await stat(file)
-        .then((info) => info.mtimeMs)
-        .catch(() => null);
-      if (currentMtime === this.checkpointsMtimeMs)
+      const currentStamp = await fileStamp(file);
+      if (currentStamp === this.checkpointsFileStamp)
         return [...this.checkpoints];
     }
     try {
-      const info = await stat(file);
+      const stamp = await fileStamp(file);
       const lines = (await readFile(file, "utf8"))
         .split(/\r?\n/)
         .filter(Boolean);
@@ -724,11 +718,11 @@ export class MemoryStore {
           return [sanitized.value as MemoryCheckpoint];
         })
         .slice(-this.maxCheckpoints);
-      this.checkpointsMtimeMs = info.mtimeMs;
+      this.checkpointsFileStamp = stamp;
       if (redacted) await this.writeCheckpoints(this.checkpoints);
     } catch {
       this.checkpoints = [];
-      this.checkpointsMtimeMs = null;
+      this.checkpointsFileStamp = null;
     }
     return [...this.checkpoints];
   }
@@ -817,9 +811,7 @@ export class MemoryStore {
     await writeAtomic(file, `${JSON.stringify(state, null, 2)}\n`);
     this.state = state;
     this.stateExisted = true;
-    this.stateMtimeMs = await stat(file)
-      .then((info) => info.mtimeMs)
-      .catch(() => Date.now());
+    this.stateFileStamp = await fileStamp(file);
     this.stateWarning = undefined;
   }
 
@@ -832,9 +824,7 @@ export class MemoryStore {
     const file = this.checkpointsPath();
     await writeAtomic(file, content);
     this.checkpoints = [...checkpoints];
-    this.checkpointsMtimeMs = await stat(file)
-      .then((info) => info.mtimeMs)
-      .catch(() => Date.now());
+    this.checkpointsFileStamp = await fileStamp(file);
   }
 
   private async writeMirror(
@@ -1117,6 +1107,22 @@ function clampLimit(input: number | undefined, fallback: number): number {
 function normalizeWorkspacePath(input: string): string {
   const normalized = path.normalize(path.resolve(input));
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+async function fileStamp(file: string): Promise<string | null> {
+  try {
+    const info = await stat(file, { bigint: true });
+    return [
+      info.dev,
+      info.ino,
+      info.size,
+      info.mtimeNs,
+      info.ctimeNs,
+      info.birthtimeNs,
+    ].join(":");
+  } catch {
+    return null;
+  }
 }
 
 async function writeAtomic(file: string, content: string): Promise<void> {

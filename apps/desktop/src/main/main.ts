@@ -47,6 +47,7 @@ import {
 } from "./login-item.js";
 import { DesktopUpdater } from "./updater.js";
 import { openTerminalWindow } from "./terminal-launcher.js";
+import { closeSplashWindow, createSplashWindow } from "./splash-window.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
@@ -107,8 +108,20 @@ export async function bootstrap(): Promise<void> {
   updater = new DesktopUpdater((state) => broadcast("updater:state", state));
   registerIpc();
   if (startupProbe) {
-    createWindow();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const rendererReady = new Promise<void>((resolve) => {
+      createWindow({
+        showWhenReady: false,
+        onRendererReady: () => {
+          qnectorPerformance.mark("renderer-ready-to-show");
+          if (timeout) clearTimeout(timeout);
+          resolve();
+        },
+      });
+      timeout = setTimeout(resolve, 5_000);
+    });
     qnectorPerformance.mark("window-created");
+    await rendererReady;
     const probeFile = process.env.QNECTOR_STARTUP_PROBE_FILE?.trim();
     if (probeFile)
       await writeFile(
@@ -120,11 +133,28 @@ export async function bootstrap(): Promise<void> {
     return;
   }
   applyLoginItemSetting(config);
-  // Begin importing/starting the heavy MCP runtime, but do not put it on the
-  // BrowserWindow critical path. IPC actions that require it await this promise.
-  runtimeReadyPromise = initializeRuntime(config);
-  void runtimeReadyPromise.catch(() => undefined);
-  createWindow();
+  const presentOnStartup =
+    process.env.QNECTOR_START_HIDDEN !== "1" && !config.ui.startMinimized;
+  const splash = presentOnStartup
+    ? createSplashWindow({ iconPath: getResourcePath("icon.png") })
+    : undefined;
+  if (splash) qnectorPerformance.mark("splash-created");
+  let runtimeStartQueued = false;
+  const startRuntime = (): void => {
+    if (runtimeStartQueued) return;
+    runtimeStartQueued = true;
+    qnectorPerformance.mark("runtime-start-queued");
+    runtimeReadyPromise = initializeRuntime(config);
+    void runtimeReadyPromise.catch(() => undefined);
+  };
+  createWindow({
+    showWhenReady: presentOnStartup,
+    onRendererReady: () => {
+      qnectorPerformance.mark("renderer-ready-to-show");
+      startRuntime();
+      closeSplashWindow(splash);
+    },
+  });
   qnectorPerformance.mark("window-created");
   createTray();
   setTimeout(() => void updater?.check(), 4_000);
@@ -202,11 +232,16 @@ function getResourcePath(relativePath: string): string {
   return devPath;
 }
 
-function createWindow(): void {
+function createWindow(options?: {
+  showWhenReady?: boolean;
+  onRendererReady?: () => void;
+}): void {
   const iconPath = getResourcePath("icon.png");
   const windowIcon = existsSync(iconPath)
     ? nativeImage.createFromPath(iconPath)
     : undefined;
+  const startupProbe = process.env.QNECTOR_STARTUP_PROBE === "1";
+  const showWhenReady = options?.showWhenReady ?? !startupProbe;
 
   mainWindow = new BrowserWindow({
     width: 451,
@@ -221,13 +256,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    show:
-      process.env.QNECTOR_STARTUP_PROBE !== "1" &&
-      process.env.QNECTOR_START_HIDDEN !== "1" &&
-      !(
-        runtime?.getConfig().ui.startMinimized ??
-        bootstrapConfig?.ui.startMinimized
-      ),
+    show: false,
   });
   if (process.platform === "win32") {
     mainWindow.setAppDetails({
@@ -236,6 +265,32 @@ function createWindow(): void {
       appIconIndex: 0,
     });
   }
+  let rendererReadyHandled = false;
+  const handleRendererReady = (): void => {
+    if (rendererReadyHandled) return;
+    rendererReadyHandled = true;
+    options?.onRendererReady?.();
+  };
+  mainWindow.once("ready-to-show", () => {
+    handleRendererReady();
+    if (showWhenReady && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+  mainWindow.webContents.once("did-finish-load", () =>
+    qnectorPerformance.mark("renderer-loaded"),
+  );
+  mainWindow.webContents.once(
+    "did-fail-load",
+    (_event, errorCode, errorDescription) => {
+      qnectorPerformance.mark("renderer-load-failed", {
+        errorCode,
+        errorDescription,
+      });
+      handleRendererReady();
+    },
+  );
   void mainWindow.loadFile(path.join(currentDir, "../../index.html"));
   mainWindow.on("close", (event) => {
     const config = runtime?.getConfig() ?? bootstrapConfig;

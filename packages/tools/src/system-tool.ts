@@ -28,7 +28,7 @@ const execFileAsync = promisify(execFile);
 export const systemDefinition: ToolDefinition = {
   name: "system",
   description:
-    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
+    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For specialized or multi-step work, use skills_match followed by skill_get to activate a relevant local Agent Skill without loading every skill into context. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
   inputSchema: {
     type: "object",
     properties: {
@@ -49,6 +49,10 @@ export const systemDefinition: ToolDefinition = {
           "find_process",
           "ports",
           "doctor",
+          "skills_status",
+          "skills_list",
+          "skills_match",
+          "skill_get",
           "everything_status",
           "which",
           "search_files",
@@ -107,7 +111,11 @@ export const systemDefinition: ToolDefinition = {
         description:
           "Maximum subcalls running at once; defaults to 6. Results remain in calls[] input order.",
       },
-      name: { type: "string", description: "Executable name for which" },
+      name: {
+        type: "string",
+        description:
+          "Executable name for which, or Agent Skill name for skill_get",
+      },
       query: {
         type: "string",
         description:
@@ -377,8 +385,62 @@ export async function executeSystem(
               browser: Boolean(context.browserRuntime),
               codeIntelligence: Boolean(context.codeIntelligence),
               semanticSearch: Boolean(context.semanticSearch),
+              agentSkills: Boolean(context.agentSkills),
             },
           },
+        };
+      }
+      if (action === "skills_status") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const status = await context.agentSkills.status();
+        return {
+          summary: `Agent Skills runtime found ${status.skillCount} skill(s) across ${status.roots.length} root(s)`,
+          data: status,
+        };
+      }
+      if (action === "skills_list") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const skills = await context.agentSkills.list({
+          query: stringInput(object, "query"),
+          limit: numberInput(object, "maxResults", 100),
+        });
+        return {
+          summary: `Agent Skills list returned ${skills.length} skill(s)`,
+          data: { skills },
+        };
+      }
+      if (action === "skills_match") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const query = stringInput(object, "query", true)!;
+        const skills = await context.agentSkills.match(
+          query,
+          numberInput(object, "maxResults", 5),
+        );
+        return {
+          summary: `Matched ${skills.length} Agent Skill(s) for '${query}'`,
+          data: { query, skills },
+        };
+      }
+      if (action === "skill_get") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const skill = await context.agentSkills.get(
+          stringInput(object, "name", true)!,
+        );
+        return {
+          summary: `Loaded Agent Skill ${skill.name}`,
+          data: skill,
         };
       }
       if (action === "everything_status") {
@@ -550,9 +612,45 @@ export async function executeSystem(
           "document-intelligence",
           context.documentIntelligence ? "pass" : "fail",
           context.documentIntelligence
-            ? "PDF/DOCX/XLSX/CSV/ZIP/JSON/SQLite document inspection available"
+            ? "Native PDF/DOCX/XLSX/CSV/ZIP/JSON/SQLite handling available"
             : "service unavailable",
         );
+        if (context.documentIntelligence) {
+          try {
+            const providers = await context.documentIntelligence.providers();
+            add(
+              "document-markitdown",
+              providers.markitdown.available ? "pass" : "warn",
+              providers.markitdown.available
+                ? `${providers.markitdown.version ?? "MarkItDown"} via ${providers.markitdown.command}`
+                : "optional MarkItDown provider not found; extended PPTX/EPUB/RTF/MSG/media extraction is unavailable",
+            );
+          } catch (error) {
+            add(
+              "document-markitdown",
+              "warn",
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+        }
+        if (context.agentSkills) {
+          try {
+            const skills = await context.agentSkills.status();
+            add(
+              "agent-skills",
+              skills.skillCount > 0 ? "pass" : "warn",
+              `${skills.skillCount} skill(s) discovered across ${skills.roots.length} root(s)`,
+            );
+          } catch (error) {
+            add(
+              "agent-skills",
+              "warn",
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+        } else {
+          add("agent-skills", "fail", "Agent Skills runtime unavailable");
+        }
         add(
           "workflow-engine",
           context.workflowManager ? "pass" : "fail",

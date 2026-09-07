@@ -10,6 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import AdmZip from "adm-zip";
 import type {
   ToolAttachment,
   ToolDefinition,
@@ -27,7 +28,7 @@ import {
 export const filesDefinition: ToolDefinition = {
   name: "files",
   description:
-    "Read, preview images, create, edit, patch, move, copy, hash, or delete local files. Prefer read_many when 2 or more known files are needed so they can be fetched in one tool turn. files.preview returns PNG/JPEG/WEBP as an MCP image attachment. Relative paths resolve from the active Qnector workspace; absolute paths are supported. Prefer read before edit and apply_patch for multi-file changes.",
+    "Read, preview images, inspect/extract documents, perform exact DOCX/PPTX OOXML text replacement, create, edit, patch, move, copy, hash, or delete local files. Prefer read_many when 2 or more known files are needed so they can be fetched in one tool turn. files.preview returns PNG/JPEG/WEBP as an MCP image attachment. files.extract_text uses native document parsers first and optional local providers for extended formats. Relative paths resolve from the active Qnector workspace; absolute paths are supported. Prefer read before edit and apply_patch for multi-file text changes.",
   inputSchema: {
     type: "object",
     properties: {
@@ -41,6 +42,7 @@ export const filesDefinition: ToolDefinition = {
           "extract_text",
           "render",
           "document_query",
+          "document_replace_text",
           "write",
           "append",
           "replace",
@@ -105,6 +107,8 @@ export async function executeFiles(
     if (action === "read") return readFileAction(context, object);
     if (action === "read_many") return readManyAction(context, object);
     if (action === "preview") return previewFileAction(context, object);
+    if (action === "document_replace_text")
+      return documentReplaceTextAction(context, object);
     if (
       ["inspect", "extract_text", "render", "document_query"].includes(action)
     ) {
@@ -594,6 +598,132 @@ async function readManyAction(
     truncated: omitted > 0,
     nextCursor: null,
   };
+}
+
+async function documentReplaceTextAction(
+  context: ToolContext,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const source = context.workspace.resolve(stringInput(input, "path", true)!);
+  await checkExpected(source, stringInput(input, "expectedSha256"));
+  const oldText = stringInput(input, "oldText", true)!;
+  const newText = stringInput(input, "newText", true)!;
+  if (!oldText) throw new Error("INVALID_INPUT: oldText must not be empty");
+  const replaceAll = booleanInput(input, "replaceAll", false);
+  const extension = path.extname(source).toLowerCase();
+  if (extension !== ".docx" && extension !== ".pptx")
+    throw new Error(
+      "UNSUPPORTED_DOCUMENT_EDIT: document_replace_text currently supports DOCX and PPTX OOXML packages",
+    );
+  const destinationInput = stringInput(input, "destination");
+  const destination = destinationInput
+    ? context.workspace.resolve(destinationInput)
+    : source;
+  const zip = new AdmZip(source);
+  const tag = extension === ".docx" ? "w:t" : "a:t";
+  const eligible =
+    extension === ".docx"
+      ? /^word\/(?:document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$/i
+      : /^ppt\/(?:slides|notesSlides)\/[^/]+\.xml$/i;
+  let replacements = 0;
+  const entriesChanged: string[] = [];
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory || !eligible.test(entry.entryName)) continue;
+    const current = entry.getData().toString("utf8");
+    const result = replaceOoxmlTextNodes(
+      current,
+      tag,
+      oldText,
+      newText,
+      replaceAll,
+      replacements > 0,
+    );
+    if (result.replacements === 0) continue;
+    zip.updateFile(entry.entryName, Buffer.from(result.xml, "utf8"));
+    replacements += result.replacements;
+    entriesChanged.push(entry.entryName);
+    if (!replaceAll) break;
+  }
+  if (replacements === 0)
+    throw new Error(
+      `TEXT_NOT_FOUND: '${oldText}' was not found inside a single ${tag} text run in ${source}; text split across OOXML runs requires a structure-aware document editor`,
+    );
+  await mkdir(path.dirname(destination), { recursive: true });
+  await writeAtomicFile(destination, zip.toBuffer());
+  const changed = await changedFile(destination, "document_replace_text");
+  await recordFileChange(
+    context,
+    `Replaced ${replacements} document text occurrence(s) in ${destination}`,
+    [destination],
+  );
+  return {
+    summary: `Replaced ${replacements} occurrence(s) in ${path.basename(destination)} while preserving the ${extension.slice(1).toUpperCase()} package`,
+    data: {
+      source,
+      destination,
+      format: extension.slice(1),
+      replacements,
+      entriesChanged,
+      changed: [changed],
+    },
+  };
+}
+
+function replaceOoxmlTextNodes(
+  xml: string,
+  tag: string,
+  oldText: string,
+  newText: string,
+  replaceAll: boolean,
+  alreadyReplaced: boolean,
+): { xml: string; replacements: number } {
+  const pattern = new RegExp(
+    `(<${escapeRegExp(tag)}\\b[^>]*>)([\\s\\S]*?)(<\\/${escapeRegExp(tag)}>)`,
+    "g",
+  );
+  let replacements = 0;
+  const next = xml.replace(
+    pattern,
+    (full, open: string, raw: string, close: string) => {
+      if (!replaceAll && (alreadyReplaced || replacements > 0)) return full;
+      const decoded = decodeXmlText(raw);
+      const occurrences = decoded.split(oldText).length - 1;
+      if (occurrences <= 0) return full;
+      const replacementCount = replaceAll ? occurrences : 1;
+      const replaced = replaceAll
+        ? decoded.split(oldText).join(newText)
+        : decoded.replace(oldText, newText);
+      replacements += replacementCount;
+      return `${open}${encodeXmlText(replaced)}${close}`;
+    },
+  );
+  return { xml: next, replacements };
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) =>
+      String.fromCodePoint(Number.parseInt(code, 16)),
+    )
+    .replace(/&#(\d+);/g, (_match, code: string) =>
+      String.fromCodePoint(Number(code)),
+    )
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+}
+
+function encodeXmlText(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, (character) => `\\${character}`);
 }
 
 async function writeFileAction(

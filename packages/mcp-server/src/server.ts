@@ -38,6 +38,7 @@ import {
   DocumentIntelligenceService,
   WorkflowManager,
   PtyManager,
+  AgentSkillService,
   type CodeIntelligenceService,
   type FileSearchService,
   type UiAutomationService,
@@ -85,6 +86,7 @@ export interface QnectorRuntimeOptions {
   documentIntelligence?: DocumentIntelligenceService;
   workflowManager?: WorkflowManager;
   ptyManager?: PtyManager;
+  agentSkills?: AgentSkillService;
   memory?: MemoryStore;
   platform?: PlatformServices;
   platformServices?: PlatformServices;
@@ -107,6 +109,7 @@ export class QnectorRuntime {
   public readonly documentIntelligence: DocumentIntelligenceService;
   public readonly workflowManager: WorkflowManager;
   public readonly ptyManager: PtyManager;
+  public readonly agentSkills: AgentSkillService;
   public readonly activity: ActivityLogger;
   public readonly workspace: WorkspaceState;
   public readonly memory: MemoryStore;
@@ -168,6 +171,12 @@ export class QnectorRuntime {
       new WorkflowManager(this.processManager, this.fileWatch);
     this.ptyManager =
       options.ptyManager ?? new PtyManager(this.config.shell.windows);
+    this.agentSkills =
+      options.agentSkills ??
+      new AgentSkillService({
+        roots: defaultAgentSkillRoots(),
+        workspaceRoot: () => this.config.activeWorkspace,
+      });
     this.activity =
       options.logger ??
       new ActivityLogger(
@@ -242,6 +251,7 @@ export class QnectorRuntime {
       documentIntelligence: this.documentIntelligence,
       workflowManager: this.workflowManager,
       ptyManager: this.ptyManager,
+      agentSkills: this.agentSkills,
       memory: this.memory,
       memoryV2: this.memoryV2,
       platform: this.platform,
@@ -489,10 +499,12 @@ export class QnectorRuntime {
         factLimit: 100,
         changeLimit: 6,
       });
+      const skills = await this.agentSkills.list({ limit: 8 });
       return buildSessionBootstrapInstructions(
         memory,
         this.activity.list(),
         this.memoryV2.snapshot({ eventLimit: 8, taskLimit: 8 }),
+        skills,
       );
     } catch (error) {
       return buildSessionBootstrapError(
@@ -589,6 +601,22 @@ function inputSchemaFor(
   mcpInputSchemaCache.set(definition.name, schema);
   return schema;
 }
+function defaultAgentSkillRoots() {
+  const runtimeResources = (
+    process as NodeJS.Process & { resourcesPath?: string }
+  ).resourcesPath;
+  const appData = process.env.APPDATA;
+  return [
+    ...(runtimeResources
+      ? [{ path: path.join(runtimeResources, "skills"), source: "bundled" }]
+      : []),
+    { path: path.join(process.cwd(), "skills"), source: "project" },
+    ...(appData
+      ? [{ path: path.join(appData, "Qnector", "skills"), source: "user" }]
+      : []),
+  ];
+}
+
 export async function createRuntime(
   options: { configFile?: string; workspace?: string; port?: number } = {},
 ): Promise<QnectorRuntime> {

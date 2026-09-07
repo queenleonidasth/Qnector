@@ -50,7 +50,13 @@ user who launches Qnector.
 ### Inspect documents and Windows applications
 
 - Extract or query text and metadata from PDF, DOCX, XLSX, CSV, JSON, ZIP, and
-  SQLite files.
+  SQLite files; when Microsoft MarkItDown is installed, extend extraction to
+  PPTX, OpenDocument, EPUB, RTF, email, notebook, image, and audio formats.
+- Perform exact text-run replacement inside DOCX/PPTX packages without
+  flattening them to plain text.
+- Discover and activate local Agent Skills on demand for project QC, documents,
+  spreadsheets, archives/7-Zip, UI/UX design, design systems, UI audits, loading
+  and motion design, UX writing, and workspace-specific workflows.
 - Render PDF pages for visual inspection.
 - Capture screens and inspect visible windows, processes, ports, and executable
   metadata.
@@ -220,6 +226,8 @@ npx pnpm@10.15.0 smoke:mcp
 npx pnpm@10.15.0 accept:p1-p10
 npx pnpm@10.15.0 accept:p11-p18
 npx pnpm@10.15.0 accept:p23
+npx pnpm@10.15.0 accept:performance
+npx pnpm@10.15.0 accept:startup
 npx pnpm@10.15.0 accept:browser
 ```
 

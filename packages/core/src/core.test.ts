@@ -386,10 +386,41 @@ describe("MemoryStore", () => {
     const storage = path.join(root, "memory");
     const first = new MemoryStore(root, { rootDirectory: storage });
     const second = new MemoryStore(root, { rootDirectory: storage });
-    await first.upsertNote({ key: "shared", value: "before" });
-    expect((await first.getFact({ key: "shared" }))?.value).toBe("before");
-    await second.upsertNote({ key: "shared", value: "after" });
-    expect((await first.getFact({ key: "shared" }))?.value).toBe("after");
+    await first.upsertNote({ key: "shared", value: "value-00" });
+    expect((await first.getFact({ key: "shared" }))?.value).toBe("value-00");
+    for (let index = 1; index <= 25; index += 1) {
+      const value = `value-${String(index).padStart(2, "0")}`;
+      await second.upsertNote({ key: "shared", value });
+      expect((await first.getFact({ key: "shared" }))?.value).toBe(value);
+    }
+  });
+
+  it("invalidates the checkpoint RAM cache when another store replaces checkpoints rapidly", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-core-checkpoint-cache-"));
+    const storage = path.join(root, "memory");
+    const first = new MemoryStore(root, { rootDirectory: storage });
+    const second = new MemoryStore(root, { rootDirectory: storage });
+    await first.saveCheckpoint({
+      label: "checkpoint-00",
+      currentTask: "task-00",
+      completedSteps: [],
+      pendingSteps: [],
+      criticalContext: "context-00",
+    });
+    expect((await first.recall()).checkpoints[0]?.label).toBe("checkpoint-00");
+    for (let index = 1; index <= 20; index += 1) {
+      const suffix = String(index).padStart(2, "0");
+      await second.saveCheckpoint({
+        label: `checkpoint-${suffix}`,
+        currentTask: `task-${suffix}`,
+        completedSteps: [],
+        pendingSteps: [],
+        criticalContext: `context-${suffix}`,
+      });
+      expect((await first.recall()).checkpoints[0]?.label).toBe(
+        `checkpoint-${suffix}`,
+      );
+    }
   });
 });
 

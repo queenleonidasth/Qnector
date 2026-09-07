@@ -10,6 +10,8 @@ export interface PackagedBuildInfo {
   modifiedAt: string;
   sizeBytes: number;
   sha256?: string;
+  payloadPath?: string;
+  payloadSha256?: string;
 }
 
 export interface ReleaseStatus {
@@ -24,9 +26,17 @@ export interface ReleaseStatus {
   recommendation: string;
 }
 
+export interface ReleaseManagerOptions {
+  buildIdentity?: () => Promise<BuildIdentity>;
+  resourcesPath?: string;
+}
+
 export class ReleaseManager {
+  public constructor(private readonly options: ReleaseManagerOptions = {}) {}
+
   public async status(workspaceRoot: string): Promise<ReleaseStatus> {
-    const running = await getBuildIdentity();
+    const running = await (this.options.buildIdentity?.() ??
+      getBuildIdentity());
     const projectRoot = await findProjectRoot(workspaceRoot);
     const releaseRoot = path.join(projectRoot, "apps", "desktop", "release");
     const builds = await collectPortableBuilds(releaseRoot);
@@ -42,16 +52,46 @@ export class ReleaseManager {
 
     let runningMatchesLatest: boolean | null = null;
     if (latestPackaged && running.channel !== "development") {
-      runningMatchesLatest = samePath(
-        running.executablePath,
-        latestPackaged.path,
-      );
-      if (!runningMatchesLatest && running.executableSha256) {
-        const latestHash = await hashFile(latestPackaged.path).catch(
-          () => null,
+      if (running.channel === "packaged") {
+        const latestPayloadPath = path.join(
+          releaseRoot,
+          "win-unpacked",
+          "resources",
+          "app.asar",
         );
-        runningMatchesLatest = latestHash === running.executableSha256;
-        if (latestHash) latestPackaged.sha256 = latestHash;
+        const runningPayloadPath = resolveRunningPayloadPath(
+          running.executablePath,
+          this.options.resourcesPath,
+        );
+        if (
+          runningPayloadPath &&
+          (await exists(runningPayloadPath)) &&
+          (await exists(latestPayloadPath))
+        ) {
+          const [runningPayloadHash, latestPayloadHash] = await Promise.all([
+            hashFile(runningPayloadPath).catch(() => null),
+            hashFile(latestPayloadPath).catch(() => null),
+          ]);
+          if (runningPayloadHash && latestPayloadHash) {
+            latestPackaged.payloadPath = latestPayloadPath;
+            latestPackaged.payloadSha256 = latestPayloadHash;
+            runningMatchesLatest = runningPayloadHash === latestPayloadHash;
+          }
+        }
+      } else {
+        runningMatchesLatest = samePath(
+          running.executablePath,
+          latestPackaged.path,
+        );
+        if (!runningMatchesLatest && running.executableSha256) {
+          const latestHash = await hashFile(latestPackaged.path).catch(
+            () => null,
+          );
+          if (latestHash) {
+            latestPackaged.sha256 = latestHash;
+            runningMatchesLatest = latestHash === running.executableSha256;
+          }
+        }
       }
     }
 
@@ -68,13 +108,19 @@ export class ReleaseManager {
         status = "source-newer";
         recommendation =
           "Source files changed after the latest package; rebuild/package Qnector and restart it before final validation.";
-      } else if (runningMatchesLatest) {
+      } else if (runningMatchesLatest === true) {
         status = "latest";
         recommendation =
-          "The running executable matches the newest local packaged build.";
-      } else {
+          running.channel === "packaged"
+            ? "The running installed payload matches the newest local packaged build."
+            : "The running portable executable matches the newest local portable build.";
+      } else if (runningMatchesLatest === false) {
         status = "outdated";
-        recommendation = `A newer local packaged build exists at ${latestPackaged.path}; restart Qnector from that executable.`;
+        recommendation = `A newer local packaged build exists at ${latestPackaged.path}; restart Qnector from that build.`;
+      } else {
+        status = "unknown";
+        recommendation =
+          "A local packaged build exists, but Qnector could not compare it to the running payload reliably.";
       }
     }
 
@@ -121,7 +167,8 @@ async function collectPortableBuilds(
         await visit(absolute, depth + 1);
         continue;
       }
-      if (!entry.isFile() || !/^Qnector-.*\.exe$/i.test(entry.name)) continue;
+      if (!entry.isFile() || !/^Qnector-.*-portable\.exe$/i.test(entry.name))
+        continue;
       const info = await stat(absolute);
       result.push({
         path: absolute,
@@ -183,6 +230,24 @@ async function newestSourceMtime(projectRoot: string): Promise<string | null> {
   }
   await visit(projectRoot);
   return newest ? new Date(newest).toISOString() : null;
+}
+
+function resolveRunningPayloadPath(
+  executablePath: string,
+  configuredResourcesPath?: string,
+): string | null {
+  const runtimeResourcesPath = (
+    process as NodeJS.Process & { resourcesPath?: string }
+  ).resourcesPath;
+  const candidates = [
+    configuredResourcesPath,
+    runtimeResourcesPath,
+    path.join(path.dirname(executablePath), "resources"),
+  ].filter((value): value is string => Boolean(value?.trim()));
+  const unique = Array.from(
+    new Set(candidates.map((value) => path.resolve(value))),
+  );
+  return unique.length > 0 ? path.join(unique[0]!, "app.asar") : null;
 }
 
 function samePath(a: string, b: string): boolean {

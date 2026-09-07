@@ -20,6 +20,10 @@ files:
   - "!node_modules/node-pty/third_party/conpty/**/win10-arm64/**"
 asar: true
 extraResources:
+  - from: ../../skills
+    to: skills
+    filter:
+      - "**/SKILL.md"
   - from: ../../tools/uia-helper/publish/qnector-uia.exe
     to: uia-helper/qnector-uia.exe
   - from: ../../tools/everything-cli/es.exe

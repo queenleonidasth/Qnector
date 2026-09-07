@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer } from "ws";
+import AdmZip from "adm-zip";
 import { describe, expect, it, afterEach } from "vitest";
 import { ActivityLogger } from "../../core/src/activity-log.js";
 import { TypeScriptCodeIntelligence } from "../../core/src/code-intelligence.js";
@@ -83,6 +84,40 @@ describe("Qnector grouped tools", () => {
     expect(await readFile(path.join(root, "added.txt"), "utf8")).toBe(
       "added\n",
     );
+  });
+
+  it("replaces exact text inside DOCX and PPTX OOXML packages", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-ooxml-edit-"));
+    const registry = new ToolRegistry();
+    const context = makeContext(defaultConfig(root));
+    const fixtures = [
+      {
+        filename: "sample.docx",
+        entry: "word/document.xml",
+        xml: '<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>Hello Queen</w:t></w:r></w:p></w:body></w:document>',
+      },
+      {
+        filename: "sample.pptx",
+        entry: "ppt/slides/slide1.xml",
+        xml: '<p:sld xmlns:p="urn:p" xmlns:a="urn:a"><a:t>Hello Queen</a:t></p:sld>',
+      },
+    ];
+    for (const fixture of fixtures) {
+      const file = path.join(root, fixture.filename);
+      const zip = new AdmZip();
+      zip.addFile(fixture.entry, Buffer.from(fixture.xml, "utf8"));
+      zip.writeZip(file);
+      const result = await registry.call("files", context, {
+        action: "document_replace_text",
+        path: file,
+        oldText: "Hello Queen",
+        newText: "Hello Qnector",
+      });
+      expect(result.ok).toBe(true);
+      expect(new AdmZip(file).readAsText(fixture.entry)).toContain(
+        "Hello Qnector",
+      );
+    }
   });
 
   it("runs independent tool calls through one bounded parallel batch", async () => {
