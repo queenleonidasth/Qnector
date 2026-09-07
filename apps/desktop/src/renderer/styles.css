@@ -71,8 +71,20 @@ body,
   min-height: 0;
   max-width: 100%;
   max-height: 100%;
-  overflow: hidden !important;
+  overflow: clip !important;
   overscroll-behavior: none;
+  scrollbar-width: none;
+}
+
+/* Keep the root physically non-scrollable. Chromium computes overflow-y:auto when
+   overflow-x:hidden is paired with the default visible Y axis, which caused a
+   4px scrollbar to appear during Activity growth and squeeze the whole UI. */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
 }
 
 body {
@@ -114,6 +126,7 @@ body {
   margin: 0 auto;
   position: relative;
   box-sizing: border-box;
+  overflow: clip;
 }
 
 /* Header */
@@ -2978,7 +2991,6 @@ body {
   max-width: 100%;
 }
 
-.app-container,
 .drawer-backdrop,
 .drawer-card,
 .drawer-content,

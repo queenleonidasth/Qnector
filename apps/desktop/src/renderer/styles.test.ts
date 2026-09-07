@@ -118,10 +118,16 @@ describe("desktop UI overflow guards", () => {
   it("locks the viewport so tool-call overflow cannot create a root scrollbar", async () => {
     const css = await styles();
     expect(css).toMatch(
-      /html,\s*body,\s*#root \{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*hidden !important;/,
+      /html,\s*body,\s*#root \{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*clip !important;[\s\S]*?scrollbar-width:\s*none;/,
     );
     expect(css).toMatch(
-      /\.app-container \{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/,
+      /html::-webkit-scrollbar,[\s\S]*?body::-webkit-scrollbar,[\s\S]*?#root::-webkit-scrollbar \{[\s\S]*?width:\s*0 !important;[\s\S]*?display:\s*none !important;/,
+    );
+    expect(css).toMatch(
+      /\.app-container \{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;[\s\S]*?overflow:\s*clip;/,
+    );
+    expect(css).not.toMatch(
+      /\.app-container,\s*\.drawer-backdrop,[\s\S]*?overflow-x:\s*hidden;/,
     );
     expect(css).not.toContain("height: 100vh;");
     expect(css).toMatch(
