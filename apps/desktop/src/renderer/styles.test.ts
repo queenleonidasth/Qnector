@@ -37,7 +37,10 @@ describe("desktop UI overflow guards", () => {
     expect(css).toMatch(/\.endpoint-url-text \{[\s\S]*?min-width:\s*0;/);
     expect(css).toMatch(/\.item-right,[\s\S]*?flex-shrink:\s*0;/);
     expect(css).toMatch(
-      /\.dock-pill-btn \{[\s\S]*?min-width:\s*0;[\s\S]*?overflow:\s*hidden;/,
+      /\.floating-glass-dock \{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/,
+    );
+    expect(css).toMatch(
+      /\.dock-pill-btn > span:last-child \{[\s\S]*?overflow:\s*visible;[\s\S]*?text-overflow:\s*clip;/,
     );
   });
 
@@ -110,6 +113,23 @@ describe("desktop UI overflow guards", () => {
     expect(css).toMatch(
       /\.btn-update-primary,[\s\S]*?\.btn-update-secondary \{[\s\S]*?min-height:\s*40px;/,
     );
+  });
+
+  it("keeps typography and dock metrics stable during activity re-renders", async () => {
+    const css = await styles();
+    expect(css).not.toContain("fonts.googleapis.com");
+    expect(css).not.toContain("Plus Jakarta Sans");
+    expect(css).not.toContain("JetBrains Mono");
+    expect(css).toContain(
+      '--font-sans: "Segoe UI", Tahoma, Arial, sans-serif;',
+    );
+    expect(css).toContain("--font-royal: Constantia, Cambria, Georgia, serif;");
+    expect(css).toContain("-webkit-text-size-adjust: 100%;");
+    expect(css).toContain("text-size-adjust: 100%;");
+    expect(css).toMatch(
+      /\.dock-pill-btn > span:first-child \{[\s\S]*?width:\s*14px;[\s\S]*?flex:\s*0 0 14px;/,
+    );
+    expect(css).not.toMatch(/\.dock-pill-btn[\s\S]{0,800}?transition:\s*all/);
   });
 });
 
