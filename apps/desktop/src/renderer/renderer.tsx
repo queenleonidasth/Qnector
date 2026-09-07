@@ -22,6 +22,7 @@ import {
   sameActivityCall,
 } from "./activity-feed.js";
 import { SkillManager } from "./skill-manager.js";
+import "./royal-porcelain.css";
 
 const fallbackBridge: TransportSnapshot = {
   state: "disconnected",
@@ -1177,8 +1178,8 @@ function App(): React.ReactElement {
             <span className="crest-symbol">⚜</span>
           </div>
           <div>
-            <h1 className="brand-title">MCP BRIDGE</h1>
-            <div className="brand-tag">Qnector Desktop</div>
+            <h1 className="brand-title">QNECTOR</h1>
+            <div className="brand-tag">Royal MCP Bridge</div>
           </div>
         </div>
         <div className="header-actions">
@@ -1906,7 +1907,7 @@ function App(): React.ReactElement {
                           <span>🎯 CURRENT ACTIVE GOAL</span>
                           <span
                             style={{
-                              fontSize: "9px",
+                              fontSize: "10px",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -1969,7 +1970,7 @@ function App(): React.ReactElement {
                             <span>💡 PROJECT RULES & KNOWLEDGE</span>
                             <span
                               style={{
-                                fontSize: "9px",
+                                fontSize: "10px",
                                 color: "var(--text-muted)",
                               }}
                             >
@@ -2530,7 +2531,7 @@ function App(): React.ReactElement {
                         <span className="drawer-label">Tunnel Mode</span>
                         <span
                           style={{
-                            fontSize: "9px",
+                            fontSize: "10px",
                             color: "var(--text-muted)",
                           }}
                         >
@@ -2578,7 +2579,7 @@ function App(): React.ReactElement {
                           <span>Global Hotkey</span>
                           <span
                             style={{
-                              fontSize: "9px",
+                              fontSize: "10px",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -2618,7 +2619,7 @@ function App(): React.ReactElement {
                           <span>Minimize to Tray</span>
                           <span
                             style={{
-                              fontSize: "9px",
+                              fontSize: "10px",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -2648,7 +2649,7 @@ function App(): React.ReactElement {
                           <span>Auto Start</span>
                           <span
                             style={{
-                              fontSize: "9px",
+                              fontSize: "10px",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -2696,7 +2697,7 @@ function App(): React.ReactElement {
                           <span>Save .qnector/MEMORY.md</span>
                           <span
                             style={{
-                              fontSize: "9px",
+                              fontSize: "10px",
                               color: "var(--text-muted)",
                             }}
                           >
