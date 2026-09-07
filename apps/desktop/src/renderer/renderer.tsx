@@ -22,7 +22,7 @@ import {
   sameActivityCall,
 } from "./activity-feed.js";
 import { SkillManager } from "./skill-manager.js";
-import "./royal-porcelain.css";
+import "./royal-effects.css";
 
 const fallbackBridge: TransportSnapshot = {
   state: "disconnected",

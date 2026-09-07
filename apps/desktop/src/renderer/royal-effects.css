@@ -1,0 +1,439 @@
+/* Royal effects layer
+   Keep the original Qnector dark/gold palette and component surfaces intact.
+   This file adds only restrained motion, decorative gold accents and the
+   readability floor requested for the desktop UI. */
+
+:root {
+  color-scheme: dark;
+}
+
+.app-container {
+  isolation: isolate;
+}
+
+.app-container::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 4px;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  pointer-events: none;
+  opacity: 0.82;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(168, 126, 34, 0.18) 10%,
+    rgba(230, 186, 80, 0.72) 34%,
+    rgba(251, 230, 162, 0.95) 50%,
+    rgba(230, 186, 80, 0.72) 66%,
+    rgba(168, 126, 34, 0.18) 90%,
+    transparent 100%
+  );
+  background-size: 180% 100%;
+  animation: royalRailShimmer 5.2s ease-in-out infinite;
+}
+
+.app-container::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image:
+    radial-gradient(
+      circle at 16% 23%,
+      rgba(230, 186, 80, 0.8) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 82% 31%,
+      rgba(251, 230, 162, 0.7) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 31% 73%,
+      rgba(230, 186, 80, 0.62) 0 1px,
+      transparent 1.5px
+    ),
+    radial-gradient(
+      circle at 76% 83%,
+      rgba(230, 186, 80, 0.55) 0 1px,
+      transparent 1.5px
+    );
+  background-repeat: no-repeat;
+  animation: royalDustDrift 10s ease-in-out infinite alternate;
+}
+
+.app-header,
+.app-main,
+.floating-glass-dock {
+  position: relative;
+  z-index: 1;
+}
+
+.app-header {
+  animation: royalHeaderIn 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.brand-crest {
+  animation: royalCrestBreathe 4.8s ease-in-out infinite;
+}
+
+/* Remove the old white diagonal shine from the crest. Keep gold-only motion. */
+.brand-crest::after {
+  content: none;
+}
+
+.crest-symbol {
+  filter: drop-shadow(0 0 7px rgba(230, 186, 80, 0.22));
+  animation: royalCrestSymbol 5.4s ease-in-out infinite;
+}
+
+.status-dot,
+.live-beacon,
+.item-bead.running {
+  animation: royalStatusPulse 2.1s ease-in-out infinite;
+}
+
+.hero-glass-section,
+.activity-glass-card {
+  animation: royalPanelRise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.activity-glass-card {
+  animation-delay: 55ms;
+}
+
+/* Explicitly keep the rejected curved-corner / frame-sweep decoration off. */
+.hero-glass-section::before,
+.hero-glass-section::after {
+  content: none !important;
+}
+
+.glass-sphere-enclosure {
+  animation: royalOrbShell 4.6s ease-in-out infinite;
+}
+
+.liquid-gold-core.connected {
+  animation:
+    moltenFloat 5s ease-in-out infinite,
+    royalOrbBreathe 3.6s ease-in-out infinite;
+}
+
+/* Preserve the original gold button, but animate its gold gradient itself.
+   Never run a wide white blade across the control. */
+.btn-liquid-action {
+  background-size: 180% 180%;
+  animation: royalGoldButtonFlow 6.4s ease-in-out infinite;
+}
+
+.btn-liquid-action::before {
+  content: none !important;
+}
+
+.activity-glass-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 1px;
+  pointer-events: none;
+  opacity: 0.58;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(230, 186, 80, 0.78),
+    transparent
+  );
+  background-size: 180% 100%;
+  animation: royalRailShimmer 4.6s ease-in-out infinite;
+}
+
+.activity-item.entering {
+  animation: royalActivityEnter 180ms ease-out both;
+}
+
+.floating-glass-dock {
+  overflow: hidden;
+  animation: royalDockIn 420ms 90ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Moving gold underline: keeps the original dark dock colors untouched. */
+.floating-glass-dock::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  bottom: 3px;
+  left: 8px;
+  width: calc((100% - 34px) / 4);
+  height: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #e6ba50 24%,
+    #fbe6a2 50%,
+    #e6ba50 76%,
+    transparent
+  );
+  box-shadow: 0 0 8px rgba(230, 186, 80, 0.28);
+  transform: translateX(0);
+  transition: transform 300ms cubic-bezier(0.2, 0.85, 0.2, 1);
+}
+
+.floating-glass-dock:has(.dock-pill-btn:nth-child(2).active)::after {
+  transform: translateX(calc(100% + 6px));
+}
+
+.floating-glass-dock:has(.dock-pill-btn:nth-child(3).active)::after {
+  transform: translateX(calc(200% + 12px));
+}
+
+.floating-glass-dock:has(.dock-pill-btn:nth-child(4).active)::after {
+  transform: translateX(calc(300% + 18px));
+}
+
+.dock-pill-btn {
+  position: relative;
+  z-index: 3;
+}
+
+.skill-row {
+  animation: royalSkillRowIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.skill-row:nth-child(2) {
+  animation-delay: 24ms;
+}
+
+.skill-row:nth-child(3) {
+  animation-delay: 48ms;
+}
+
+.skill-row:nth-child(4) {
+  animation-delay: 72ms;
+}
+
+/* Readability floor. These selectors were previously 7.5–9.5px in parts of
+   the legacy UI; 10px is now the absolute minimum. */
+.brand-tag,
+.activity-detail-status,
+.activity-detail-meta span,
+.activity-detail-label,
+.runtime-summary-card small,
+.runtime-summary-label,
+.runtime-section-count,
+.runtime-section-body,
+.runtime-list-row strong,
+.runtime-list-row > div > span,
+.runtime-footer > span,
+.update-card-copy small,
+.update-version-panel small,
+.btn-update-secondary,
+.setup-launch-copy small,
+.setup-kicker,
+.setup-note,
+.setup-instruction-list strong,
+.setup-instruction-list small,
+.setup-link-grid button > b,
+.setup-link-grid strong,
+.setup-link-grid small,
+.setup-field > span,
+.setup-error,
+.setup-progress-step small,
+.update-card-eyebrow,
+.update-status-badge,
+.update-progress-inline-meta,
+.memory-v2-meta,
+.memory-v2-task-head code,
+.memory-v2-status,
+.memory-v2-task-stats,
+.memory-v2-conflicts,
+.memory-v2-event,
+.skills-add > span,
+.skills-add-menu small,
+.skills-state-pill,
+.skill-row-meta,
+.skill-field > span,
+.skill-validation-row small,
+.skill-detail-meta > div,
+.skills-modal-head small,
+.duplicate-list small {
+  font-size: 10px !important;
+  line-height: 1.38;
+}
+
+@keyframes royalRailShimmer {
+  0%,
+  100% {
+    background-position: 0 0;
+    opacity: 0.68;
+  }
+  50% {
+    background-position: 100% 0;
+    opacity: 1;
+  }
+}
+
+@keyframes royalDustDrift {
+  0% {
+    transform: translate3d(0, 7px, 0);
+    opacity: 0.16;
+  }
+  100% {
+    transform: translate3d(0, -9px, 0);
+    opacity: 0.28;
+  }
+}
+
+@keyframes royalHeaderIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes royalPanelRise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.996);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes royalCrestBreathe {
+  0%,
+  100% {
+    border-color: var(--glass-border);
+    box-shadow: 0 4px 12px rgba(230, 186, 80, 0.18);
+  }
+  50% {
+    border-color: var(--glass-border-strong);
+    box-shadow:
+      0 5px 17px rgba(230, 186, 80, 0.3),
+      inset 0 0 12px rgba(230, 186, 80, 0.04);
+  }
+}
+
+@keyframes royalCrestSymbol {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 5px rgba(230, 186, 80, 0.18));
+  }
+  50% {
+    filter: drop-shadow(0 0 9px rgba(251, 230, 162, 0.34));
+  }
+}
+
+@keyframes royalStatusPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.82;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+
+@keyframes royalOrbShell {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes royalOrbBreathe {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.045);
+  }
+}
+
+@keyframes royalGoldButtonFlow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes royalActivityEnter {
+  from {
+    opacity: 0;
+    filter: brightness(1.16);
+  }
+  to {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+@keyframes royalDockIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 7px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes royalSkillRowIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 5px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-container::before,
+  .app-container::after,
+  .app-header,
+  .brand-crest,
+  .crest-symbol,
+  .status-dot,
+  .live-beacon,
+  .item-bead.running,
+  .hero-glass-section,
+  .glass-sphere-enclosure,
+  .liquid-gold-core.connected,
+  .btn-liquid-action,
+  .activity-glass-card,
+  .activity-glass-card::before,
+  .activity-item.entering,
+  .floating-glass-dock,
+  .skill-row {
+    animation: none !important;
+  }
+
+  .floating-glass-dock::after {
+    transition-duration: 1ms !important;
+  }
+}
