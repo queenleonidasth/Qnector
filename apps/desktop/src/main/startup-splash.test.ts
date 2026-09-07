@@ -17,8 +17,12 @@ describe("desktop startup splash", () => {
     );
   });
 
-  it("ships a self-contained accessible splash with reduced-motion support", async () => {
+  it("ships a self-contained accessible splash that is immediately visible", async () => {
     const source = await readFile(splashPath, "utf8");
+    expect(source).toContain("MIN_SPLASH_VISIBLE_MS = 360");
+    expect(source).toContain("show: true");
+    expect(source).toContain("focusable: false");
+    expect(source).toContain("alwaysOnTop: true");
     expect(source).toContain('role="status"');
     expect(source).toContain('aria-label="Qnector is starting"');
     expect(source).toContain("prefers-reduced-motion:reduce");

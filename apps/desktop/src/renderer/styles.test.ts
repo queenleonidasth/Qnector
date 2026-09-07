@@ -66,6 +66,17 @@ describe("desktop UI overflow guards", () => {
     expect(css).toMatch(/\.runtime-footer \{[\s\S]*?flex:\s*0 0 auto;/);
   });
 
+  it("keeps Live Activity Feed text comfortably readable", async () => {
+    const css = await styles();
+    expect(css).toMatch(/\.card-eyebrow \{[\s\S]*?font-size:\s*11px;/);
+    expect(css).toMatch(/\.item-title \{[\s\S]*?font-size:\s*12px;/);
+    expect(css).toMatch(/\.item-args \{[\s\S]*?font-size:\s*10px;/);
+    expect(css).toMatch(/\.item-right \{[\s\S]*?font-size:\s*10px;/);
+    expect(css).toMatch(
+      /\.activity-detail-summary \{[\s\S]*?font-size:\s*11px;/,
+    );
+  });
+
   it("keeps the setup wizard readable and touch-friendly", async () => {
     const css = await styles();
     expect(css).toContain(

@@ -20,8 +20,10 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).toContain('className="drawer-menu-tabs"');
     expect(renderer).toContain('{ key: "workspace", label: "Workspace" }');
     expect(renderer).toContain('{ key: "memory", label: "Memory" }');
-    expect(renderer).toContain('{ key: "runtime", label: "Runtime" }');
+    expect(renderer).toContain('{ key: "skills", label: "Skills" }');
     expect(renderer).toContain('{ key: "settings", label: "Settings" }');
+    expect(renderer).not.toContain('{ key: "runtime", label: "Runtime" }');
+    expect(renderer).toContain("Runtime & Diagnostics");
     expect(renderer).not.toContain("settings-jump-nav");
     expect(renderer).not.toContain("settings-quick-actions");
     expect(renderer).not.toContain("memory-quick-stats");

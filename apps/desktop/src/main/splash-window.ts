@@ -1,6 +1,14 @@
 import { BrowserWindow, nativeImage } from "electron";
 import { existsSync } from "node:fs";
 
+export const MIN_SPLASH_VISIBLE_MS = 360;
+
+const splashShownAt = new WeakMap<BrowserWindow, number>();
+const splashCloseTimers = new WeakMap<
+  BrowserWindow,
+  ReturnType<typeof setTimeout>
+>();
+
 export interface SplashWindowOptions {
   iconPath?: string;
 }
@@ -21,7 +29,12 @@ export function createSplashWindow(
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
-    show: false,
+    // Show the lightweight shell immediately instead of depending on the
+    // ready-to-show timing of a tiny data: URL. backgroundColor prevents a
+    // white flash while the self-contained HTML paints.
+    show: true,
+    focusable: false,
+    alwaysOnTop: true,
     skipTaskbar: true,
     backgroundColor: "#101216",
     icon,
@@ -31,18 +44,38 @@ export function createSplashWindow(
       sandbox: true,
     },
   });
+  splashShownAt.set(splash, Date.now());
+  splash.on("closed", () => {
+    const timer = splashCloseTimers.get(splash);
+    if (timer) clearTimeout(timer);
+    splashCloseTimers.delete(splash);
+    splashShownAt.delete(splash);
+  });
   void splash.loadURL(
     `data:text/html;charset=utf-8,${encodeURIComponent(splashHtml())}`,
   );
-  splash.once("ready-to-show", () => {
-    if (!splash.isDestroyed()) splash.showInactive();
-  });
   return splash;
 }
 
 export function closeSplashWindow(splash?: BrowserWindow): void {
   if (!splash || splash.isDestroyed()) return;
-  splash.close();
+  const shownAt = splashShownAt.get(splash) ?? Date.now();
+  const remainingMs = Math.max(
+    0,
+    MIN_SPLASH_VISIBLE_MS - (Date.now() - shownAt),
+  );
+  if (remainingMs === 0) {
+    splash.close();
+    return;
+  }
+  const existing = splashCloseTimers.get(splash);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    splashCloseTimers.delete(splash);
+    if (!splash.isDestroyed()) splash.close();
+  }, remainingMs);
+  timer.unref?.();
+  splashCloseTimers.set(splash, timer);
 }
 
 export function splashHtml(): string {

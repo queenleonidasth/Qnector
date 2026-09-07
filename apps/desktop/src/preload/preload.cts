@@ -8,6 +8,8 @@ const api: QnectorApi = {
   disconnect: () => ipcRenderer.invoke("bridge:disconnect"),
   chooseWorkspace: () => ipcRenderer.invoke("workspace:choose"),
   setWorkspace: (path) => ipcRenderer.invoke("workspace:set", path),
+  chooseSkillImport: (kind = "file") =>
+    ipcRenderer.invoke("skills:choose-import", kind),
   getActivity: () => ipcRenderer.invoke("activity:list"),
   callMemory: (input) => ipcRenderer.invoke("memory:call", input),
   callTool: (tool, input) => ipcRenderer.invoke("tool:call", tool, input),

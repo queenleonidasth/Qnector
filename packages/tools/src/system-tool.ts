@@ -53,6 +53,13 @@ export const systemDefinition: ToolDefinition = {
           "skills_list",
           "skills_match",
           "skill_get",
+          "skill_create",
+          "skill_update",
+          "skill_delete",
+          "skill_enable",
+          "skill_duplicate",
+          "skill_import",
+          "skill_validate",
           "everything_status",
           "which",
           "search_files",
@@ -114,8 +121,20 @@ export const systemDefinition: ToolDefinition = {
       name: {
         type: "string",
         description:
-          "Executable name for which, or Agent Skill name for skill_get",
+          "Executable name for which, or Agent Skill name for skill_get/management actions",
       },
+      newName: { type: "string" },
+      scope: { type: "string", enum: ["user", "workspace"] },
+      description: { type: "string" },
+      instructions: { type: "string" },
+      license: { type: "string" },
+      compatibility: { type: "string" },
+      allowedTools: {
+        type: "array",
+        items: { type: "string" },
+      },
+      enabled: { type: "boolean" },
+      sourcePath: { type: "string" },
       query: {
         type: "string",
         description:
@@ -437,10 +456,105 @@ export async function executeSystem(
           );
         const skill = await context.agentSkills.get(
           stringInput(object, "name", true)!,
+          { includeDisabled: true },
         );
         return {
           summary: `Loaded Agent Skill ${skill.name}`,
           data: skill,
+        };
+      }
+      if (action === "skill_create" || action === "skill_update") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const name = stringInput(object, "name", true)!;
+        const description = stringInput(object, "description", true)!;
+        const instructions = stringInput(object, "instructions", true)!;
+        const allowedTools = Array.isArray(object.allowedTools)
+          ? object.allowedTools.filter(
+              (entry): entry is string => typeof entry === "string",
+            )
+          : undefined;
+        const shared = {
+          name,
+          description,
+          instructions,
+          ...(stringInput(object, "license")
+            ? { license: stringInput(object, "license") }
+            : {}),
+          ...(stringInput(object, "compatibility")
+            ? { compatibility: stringInput(object, "compatibility") }
+            : {}),
+          ...(allowedTools ? { allowedTools } : {}),
+        };
+        const skill =
+          action === "skill_create"
+            ? await context.agentSkills.create({
+                scope: requiredSkillScope(object),
+                ...shared,
+              })
+            : await context.agentSkills.update(name, shared);
+        return {
+          summary: `${action === "skill_create" ? "Created" : "Updated"} Agent Skill ${skill.name}`,
+          data: skill,
+        };
+      }
+      if (action === "skill_delete") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const name = stringInput(object, "name", true)!;
+        await context.agentSkills.remove(name);
+        return { summary: `Deleted Agent Skill ${name}`, data: { name } };
+      }
+      if (action === "skill_enable") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const name = stringInput(object, "name", true)!;
+        const enabled = booleanInput(object, "enabled", true);
+        await context.agentSkills.setEnabled(name, enabled);
+        return {
+          summary: `${enabled ? "Enabled" : "Disabled"} Agent Skill ${name}`,
+          data: { name, enabled },
+        };
+      }
+      if (action === "skill_duplicate") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const skill = await context.agentSkills.duplicate(
+          stringInput(object, "name", true)!,
+          requiredSkillScope(object),
+          stringInput(object, "newName"),
+        );
+        return { summary: `Duplicated Agent Skill ${skill.name}`, data: skill };
+      }
+      if (action === "skill_import") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const skill = await context.agentSkills.importSkill(
+          stringInput(object, "sourcePath", true)!,
+          requiredSkillScope(object),
+        );
+        return { summary: `Imported Agent Skill ${skill.name}`, data: skill };
+      }
+      if (action === "skill_validate") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const name = stringInput(object, "name", true)!;
+        const validation = await context.agentSkills.validate(name);
+        return {
+          summary: `${validation.healthy ? "Validated" : "Validation issues in"} Agent Skill ${name}`,
+          data: { name, ...validation },
         };
       }
       if (action === "everything_status") {
@@ -887,6 +1001,15 @@ function activityInput(
           htmlSha256: sanitizedHash(html),
         }),
   };
+}
+
+function requiredSkillScope(
+  object: Record<string, unknown>,
+): "user" | "workspace" {
+  const scope = stringInput(object, "scope", true)!;
+  if (scope !== "user" && scope !== "workspace")
+    throw new Error("INVALID_INPUT: skill scope must be user or workspace");
+  return scope;
 }
 
 function requirePlatform(context: ToolContext) {

@@ -40,6 +40,7 @@ export interface QnectorApi {
   disconnect(): Promise<void>;
   chooseWorkspace(): Promise<ServerStatus>;
   setWorkspace(path: string): Promise<ServerStatus>;
+  chooseSkillImport(kind?: "file" | "folder"): Promise<string | undefined>;
   getActivity(): Promise<ActivityEntry[]>;
   callMemory(input: Record<string, unknown>): Promise<ToolResult>;
   callTool(

@@ -21,6 +21,7 @@ import {
   mergeActivityEntry,
   sameActivityCall,
 } from "./activity-feed.js";
+import { SkillManager } from "./skill-manager.js";
 
 const fallbackBridge: TransportSnapshot = {
   state: "disconnected",
@@ -49,27 +50,30 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
   { value: "local-only", label: "Local Only" },
 ];
 
-type DrawerName = "workspace" | "memory" | "runtime" | "settings";
+type DrawerName = "workspace" | "memory" | "skills" | "runtime" | "settings";
 type DrawerTransition = "left" | "right" | null;
 
-const drawerMenuItems: Array<{ key: DrawerName; label: string }> = [
+type PrimaryDrawerName = Exclude<DrawerName, "runtime">;
+
+const drawerMenuItems: Array<{ key: PrimaryDrawerName; label: string }> = [
   { key: "workspace", label: "Workspace" },
   { key: "memory", label: "Memory" },
-  { key: "runtime", label: "Runtime" },
+  { key: "skills", label: "Skills" },
   { key: "settings", label: "Settings" },
 ];
 
 const drawerTitles: Record<DrawerName, string> = {
   workspace: "📁 ACTIVE WORKSPACE",
   memory: "🧠 AI PROJECT MEMORY",
+  skills: "◇ SKILL MANAGER",
   runtime: "◈ RUNTIME & DIAGNOSTICS",
   settings: "⚙ BRIDGE SETTINGS",
 };
 
-const drawerOrder: DrawerName[] = [
+const drawerOrder: PrimaryDrawerName[] = [
   "workspace",
   "memory",
-  "runtime",
+  "skills",
   "settings",
 ];
 
@@ -536,8 +540,12 @@ function App(): React.ReactElement {
       return;
     }
 
-    const currentIndex = drawerOrder.indexOf(activeDrawer);
-    const nextIndex = drawerOrder.indexOf(drawer);
+    const currentIndex = drawerOrder.indexOf(
+      activeDrawer === "runtime" ? "settings" : activeDrawer,
+    );
+    const nextIndex = drawerOrder.indexOf(
+      drawer === "runtime" ? "settings" : drawer,
+    );
     const direction: Exclude<DrawerTransition, null> =
       nextIndex > currentIndex ? "left" : "right";
 
@@ -1964,6 +1972,7 @@ function App(): React.ReactElement {
                   </div>
                 </>
               )}
+              {activeDrawer === "skills" && <SkillManager />}
               {activeDrawer === "runtime" && (
                 <>
                   <div className="runtime-scroll" data-testid="runtime-scroll">
@@ -2282,6 +2291,24 @@ function App(): React.ReactElement {
                         <strong>Connection Setup</strong>
                         <small>
                           Guided OpenAI Tunnel setup from first run to connected
+                        </small>
+                      </span>
+                      <span className="activity-open-glyph">›</span>
+                    </button>
+
+                    <button
+                      className="setup-launch-card runtime-settings-launch"
+                      type="button"
+                      onClick={() => {
+                        void refreshRuntime(true);
+                        setActiveDrawer("runtime");
+                      }}
+                    >
+                      <span className="setup-launch-icon">◈</span>
+                      <span className="setup-launch-copy">
+                        <strong>Runtime & Diagnostics</strong>
+                        <small>
+                          Performance, health checks, processes and build state
                         </small>
                       </span>
                       <span className="activity-open-glyph">›</span>

@@ -456,6 +456,10 @@ function registerIpc(): void {
   ipcMain.handle("workspace:set", (_event, workspace: string) =>
     setWorkspace(workspace),
   );
+  ipcMain.handle(
+    "skills:choose-import",
+    (_event, kind: "file" | "folder" = "file") => chooseSkillImport(kind),
+  );
   ipcMain.handle("system:open-path", (_event, target: string) =>
     shell.openPath(path.resolve(target)),
   );
@@ -604,6 +608,26 @@ async function chooseWorkspace(): Promise<
   if (selection.canceled || !selection.filePaths[0])
     return activeRuntime.status();
   return setWorkspace(selection.filePaths[0]);
+}
+
+async function chooseSkillImport(
+  kind: "file" | "folder",
+): Promise<string | undefined> {
+  if (!mainWindow) return undefined;
+  const selection = await dialog.showOpenDialog(mainWindow, {
+    title: kind === "folder" ? "Import Skill Folder" : "Import Skill",
+    properties: kind === "folder" ? ["openDirectory"] : ["openFile"],
+    ...(kind === "file"
+      ? {
+          filters: [
+            { name: "Qnector Skill", extensions: ["md", "zip"] },
+            { name: "All Files", extensions: ["*"] },
+          ],
+        }
+      : {}),
+  });
+  if (selection.canceled) return undefined;
+  return selection.filePaths[0];
 }
 
 async function setWorkspace(
