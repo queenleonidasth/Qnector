@@ -19,4 +19,18 @@ describe("GitHub release pipeline", () => {
     expect(script).toContain('state -ne "uploaded"');
     expect(script).toContain("Assert-ReleaseAssets $verified");
   });
+
+  it("blocks Windows packaging when desktop UI regression gates fail", async () => {
+    const script = await readFile(
+      path.join(projectRoot, "scripts", "package-windows.ps1"),
+      "utf8",
+    );
+    expect(script).toContain("apps/desktop/src/renderer/skill-manager.test.ts");
+    expect(script).toContain(
+      "apps/desktop/src/renderer/scroll-completeness.test.ts",
+    );
+    expect(script).toContain("accept-skill-layout.ps1");
+    expect(script).toContain("Desktop release regression gate failed");
+    expect(script).toContain("Skill discovery layout gate failed");
+  });
 });

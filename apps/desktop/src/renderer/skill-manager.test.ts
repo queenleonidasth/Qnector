@@ -55,4 +55,18 @@ describe("desktop Skill Manager", () => {
     expect(css).toMatch(/\.skills-search input \{[\s\S]*?11\.5px/);
     expect(css).toMatch(/\.skills-scroll \{[\s\S]*?overflow-y:\s*auto;/);
   });
+
+  it("keeps skills.sh result rows in normal flow at narrow widths", async () => {
+    const css = await readFile(cssUrl, "utf8");
+    expect(css).toMatch(/\.skills-discover-row \{[\s\S]*?flex:\s*0 0 auto;/);
+    expect(css).toMatch(
+      /\.skills-discover-row \{[\s\S]*?grid-template-areas:\s*"icon copy action";/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 460px\)[\s\S]*?grid-template-areas:\s*"icon copy"\s*"icon action";/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 460px\)[\s\S]*?\.skills-discover-row \.skills-secondary \{[\s\S]*?justify-self:\s*stretch;/,
+    );
+  });
 });

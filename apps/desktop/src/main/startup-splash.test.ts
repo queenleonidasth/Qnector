@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const mainPath = path.resolve(import.meta.dirname, "main.ts");
 const splashPath = path.resolve(import.meta.dirname, "splash-window.ts");
+const rootPackagePath = path.resolve(
+  import.meta.dirname,
+  "../../../../package.json",
+);
 
 describe("desktop startup splash", () => {
   it("keeps the main window hidden until Electron reports it ready", async () => {
@@ -29,5 +33,15 @@ describe("desktop startup splash", () => {
     expect(source).toContain("Preparing workspace");
     expect(source).not.toContain("http://");
     expect(source).not.toContain("https://");
+  });
+
+  it("launches desktop development through Electron instead of Node tsx", async () => {
+    const manifest = JSON.parse(await readFile(rootPackagePath, "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    const command = manifest.scripts?.["dev:desktop"] ?? "";
+    expect(command).not.toContain("tsx apps/desktop/src/main/dev.ts");
+    expect(command).toContain("pnpm build");
+    expect(command).toContain("pnpm --filter @qnector/desktop start");
   });
 });

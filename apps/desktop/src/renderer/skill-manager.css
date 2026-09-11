@@ -986,13 +986,16 @@
   gap: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .skills-discover-row {
   min-height: 66px;
   padding: 8px;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  flex: 0 0 auto;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(74px, max-content);
+  grid-template-areas: "icon copy action";
   align-items: center;
   gap: 8px;
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -1000,7 +1003,12 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+.skills-discover-row > .skill-row-icon {
+  grid-area: icon;
+}
+
 .skills-discover-copy {
+  grid-area: copy;
   min-width: 0;
 }
 
@@ -1036,10 +1044,12 @@
 }
 
 .skills-discover-row .skills-secondary {
+  grid-area: action;
   min-width: 74px;
   min-height: 34px;
   padding: 0 9px;
   font-size: 9.5px;
+  white-space: nowrap;
 }
 
 .skills-discover-results > p {
@@ -1069,11 +1079,21 @@
 
   .skills-discover-row {
     grid-template-columns: 32px minmax(0, 1fr);
+    grid-template-areas:
+      "icon copy"
+      "icon action";
+    align-items: start;
+    row-gap: 7px;
+  }
+
+  .skills-discover-row > .skill-row-icon {
+    align-self: start;
   }
 
   .skills-discover-row .skills-secondary {
-    grid-column: 2;
-    justify-self: start;
+    width: 100%;
+    min-width: 0;
+    justify-self: stretch;
   }
 }
 
