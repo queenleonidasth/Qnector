@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { configSchema } from "@qnector/shared";
@@ -75,9 +75,14 @@ export async function saveConfig(
 ): Promise<void> {
   const parsed = configSchema.parse(config) as QnectorConfig;
   await mkdir(path.dirname(file), { recursive: true });
+  await backupExistingValidConfig(file);
+  await writeConfigAtomic(parsed, file);
+}
+
+async function writeConfigAtomic(config: QnectorConfig, file: string): Promise<void> {
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporary, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, "utf8");
     await rename(temporary, file);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => undefined);
@@ -89,26 +94,79 @@ export async function loadConfig(
   options: { file?: string; workspace?: string; persist?: boolean } = {},
 ): Promise<QnectorConfig> {
   const file = options.file ?? configPath();
+  let primaryError: unknown;
   try {
-    const raw = await readFile(file, "utf8");
-    const parsed = configSchema.safeParse(JSON.parse(raw));
-    if (parsed.success) {
-      const loaded = parsed.data as QnectorConfig;
-      return {
-        ...loaded,
-        shell: normalizeShell(loaded.shell),
-        ui: {
-          ...loaded.ui,
-          setupCompleted: loaded.ui.setupCompleted ?? true,
-        },
-      };
-    }
-  } catch {
-    // First run or a partially written config: fall through to defaults.
+    return parseStoredConfig(await readFile(file, "utf8"));
+  } catch (error) {
+    primaryError = error;
   }
+
+  const backupFile = configBackupPath(file);
+  try {
+    return parseStoredConfig(await readFile(backupFile, "utf8"));
+  } catch (backupError) {
+    if (!isMissingFileError(primaryError) || !isMissingFileError(backupError)) {
+      throw new Error(
+        `CONFIG_LOAD_FAILED: Existing Qnector config was preserved at ${file}. ` +
+          `Primary error: ${errorMessage(primaryError)}. ` +
+          `Backup error: ${errorMessage(backupError)}.`,
+        { cause: primaryError },
+      );
+    }
+  }
+
   const config = defaultConfig(options.workspace ?? process.cwd());
   if (options.persist ?? true) await saveConfig(config, file);
   return config;
+}
+
+function parseStoredConfig(raw: string): QnectorConfig {
+  const normalized = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  const json = JSON.parse(normalized) as unknown;
+  const parsed = configSchema.safeParse(json);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .slice(0, 5)
+      .map((issue) => `${issue.path.join(".") || "config"}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`CONFIG_SCHEMA_INVALID: ${issues || "unknown schema error"}`);
+  }
+  const loaded = parsed.data as QnectorConfig;
+  return {
+    ...loaded,
+    shell: normalizeShell(loaded.shell),
+    ui: {
+      ...loaded.ui,
+      setupCompleted: loaded.ui.setupCompleted ?? true,
+    },
+  };
+}
+
+function configBackupPath(file: string): string {
+  return `${file}.bak`;
+}
+
+async function backupExistingValidConfig(file: string): Promise<void> {
+  try {
+    parseStoredConfig(await readFile(file, "utf8"));
+    await copyFile(file, configBackupPath(file));
+  } catch (error) {
+    // A missing or invalid current file must never replace the last known-good backup.
+    if (!isMissingFileError(error)) return;
+  }
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function normalizeShell(shell: QnectorConfig["shell"]): QnectorConfig["shell"] {

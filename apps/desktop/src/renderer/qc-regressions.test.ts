@@ -41,4 +41,10 @@ describe("2026-09-11 QC regression guards", () => {
     expect(skillManager).toContain("const confirmImport = async");
     expect(skillManager).not.toContain("Cancel = User");
   });
+
+  it("snapshots the current config before handing control to the updater", () => {
+    expect(mainSource).toContain('ipcMain.handle("updater:install", async () => {');
+    expect(mainSource).toContain("if (config) await saveConfig(config, configPath());");
+    expect(mainSource).toContain("return updater?.install();");
+  });
 });

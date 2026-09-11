@@ -17,6 +17,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   loadConfig,
+  saveConfig,
   configDirectory,
   configPath,
   QNECTOR_VERSION,
@@ -377,7 +378,11 @@ function registerIpc(): void {
   ipcMain.handle("updater:get-state", () => updater?.getState());
   ipcMain.handle("updater:check", () => updater?.check());
   ipcMain.handle("updater:download", () => updater?.download());
-  ipcMain.handle("updater:install", () => updater?.install());
+  ipcMain.handle("updater:install", async () => {
+    const config = runtime?.getConfig() ?? bootstrapConfig;
+    if (config) await saveConfig(config, configPath());
+    return updater?.install();
+  });
   ipcMain.handle("updater:open-release", () =>
     shell
       .openExternal(

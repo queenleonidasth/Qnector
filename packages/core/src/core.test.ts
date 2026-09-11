@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ActivityLogger } from "./activity-log.js";
-import { defaultConfig, loadConfig } from "./config.js";
+import { defaultConfig, loadConfig, saveConfig } from "./config.js";
 import { DocumentIntelligenceService } from "./document-intelligence.js";
 import { MemoryStore } from "./memory-store.js";
 import { REDACTED_SECRET, sanitizeText } from "./secret-sanitizer.js";
@@ -72,6 +72,69 @@ describe("Qnector config first-run migration", () => {
       await writeFile(file, JSON.stringify(legacy), "utf8");
       const loaded = await loadConfig({ file, persist: false });
       expect(loaded.shell.powershellPath).toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("loads a UTF-8 BOM config without regenerating device or tunnel credentials", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-bom-config-"));
+    try {
+      const file = path.join(root, "config.json");
+      const original = defaultConfig(root);
+      original.deviceId = "device-preserve-me";
+      original.ui.setupCompleted = true;
+      original.transport.openaiTunnelId = "tunnel-preserve-me";
+      original.transport.openaiRuntimeApiKey = "runtime-preserve-me";
+      const text = `\uFEFF${JSON.stringify(original, null, 2)}\n`;
+      await writeFile(file, text, "utf8");
+
+      const loaded = await loadConfig({ file });
+      expect(loaded.deviceId).toBe("device-preserve-me");
+      expect(loaded.transport.openaiTunnelId).toBe("tunnel-preserve-me");
+      expect(loaded.transport.openaiRuntimeApiKey).toBe("runtime-preserve-me");
+      expect(await readFile(file, "utf8")).toBe(text);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not overwrite an existing invalid config with fresh defaults", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-invalid-config-"));
+    try {
+      const file = path.join(root, "config.json");
+      const invalid = "{ definitely-not-json }\n";
+      await writeFile(file, invalid, "utf8");
+
+      await expect(loadConfig({ file })).rejects.toThrow("CONFIG_LOAD_FAILED");
+      expect(await readFile(file, "utf8")).toBe(invalid);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a last-known-good config backup and recovers from a damaged primary", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-config-backup-"));
+    try {
+      const file = path.join(root, "config.json");
+      const first = defaultConfig(root);
+      first.deviceId = "device-first";
+      first.ui.setupCompleted = true;
+      first.transport.openaiTunnelId = "tunnel-first";
+      first.transport.openaiRuntimeApiKey = "runtime-first";
+      await saveConfig(first, file);
+
+      const second = { ...first, machineName: "second-save" };
+      await saveConfig(second, file);
+      const backup = JSON.parse(await readFile(`${file}.bak`, "utf8"));
+      expect(backup.deviceId).toBe("device-first");
+      expect(backup.transport.openaiRuntimeApiKey).toBe("runtime-first");
+
+      await writeFile(file, "{ broken", "utf8");
+      const recovered = await loadConfig({ file });
+      expect(recovered.deviceId).toBe("device-first");
+      expect(recovered.transport.openaiTunnelId).toBe("tunnel-first");
+      expect(recovered.transport.openaiRuntimeApiKey).toBe("runtime-first");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
