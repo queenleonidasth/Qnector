@@ -462,6 +462,8 @@ function App(): React.ReactElement {
   const memoryRefreshTimerRef = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [matrixFrozenAfterDisconnect, setMatrixFrozenAfterDisconnect] =
+    useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [copied, setCopied] = useState(false);
@@ -726,7 +728,14 @@ function App(): React.ReactElement {
     };
   }, []);
 
+  useEffect(() => {
+    if (bridge.state === "connected" || bridge.state === "connecting") {
+      setMatrixFrozenAfterDisconnect(false);
+    }
+  }, [bridge.state]);
+
   const connect = async (): Promise<void> => {
+    setMatrixFrozenAfterDisconnect(false);
     setBusy(true);
     setError(undefined);
     try {
@@ -746,6 +755,7 @@ function App(): React.ReactElement {
     setError(undefined);
     try {
       await window.qnector.disconnect();
+      setMatrixFrozenAfterDisconnect(true);
       setBridge(fallbackBridge);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -1068,7 +1078,7 @@ function App(): React.ReactElement {
   const isConnecting = bridge.state === "connecting";
   const disconnectRingActive = isHolding || isDisconnecting;
   const disconnectRingProgress = isDisconnecting ? 1 : holdProgress;
-  const matrixDisconnectProgress = isConnected ? disconnectRingProgress : 1;
+  const matrixDisconnectProgress = disconnectRingProgress;
 
   const effectiveUrl =
     bridge.publicUrl ?? (isConnected ? status?.localUrl : undefined);
@@ -1264,6 +1274,7 @@ function App(): React.ReactElement {
           <GoldMatrixRain
             isConnected={isConnected}
             disconnectProgress={matrixDisconnectProgress}
+            frozen={matrixFrozenAfterDisconnect}
           />
           <div className="orb-stage">
             <svg

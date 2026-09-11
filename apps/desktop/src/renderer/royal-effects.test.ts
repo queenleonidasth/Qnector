@@ -166,11 +166,16 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     const matrixText = await matrix();
 
     expect(text).toContain("disconnectProgress={matrixDisconnectProgress}");
+    expect(text).toContain("frozen={matrixFrozenAfterDisconnect}");
     expect(text).toContain(
-      "const matrixDisconnectProgress = isConnected ? disconnectRingProgress : 1;",
+      "const matrixDisconnectProgress = disconnectRingProgress;",
     );
+    expect(text).toContain("setMatrixFrozenAfterDisconnect(true)");
+    expect(text).toContain("setMatrixFrozenAfterDisconnect(false)");
     expect(matrixText).toContain("disconnectProgress?: number");
+    expect(matrixText).toContain("frozen?: boolean");
     expect(matrixText).toContain("matrixDisconnectSpeedScale");
+    expect(matrixText).toContain("matrixContinuousMotionEnabled");
     expect(matrixText).toContain("disconnectProgressRef.current");
   });
 
@@ -193,6 +198,6 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(text).toContain('"(prefers-reduced-motion: reduce)"');
     expect(text).toContain('document.addEventListener("visibilitychange"');
     expect(text).toContain("cancelAnimationFrame");
-    expect(text).toContain("reducedMotion ||");
+    expect(text).toContain("matrixContinuousMotionEnabled");
   });
 });
