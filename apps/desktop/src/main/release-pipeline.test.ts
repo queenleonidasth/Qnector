@@ -26,6 +26,7 @@ describe("GitHub release pipeline", () => {
       "utf8",
     );
     expect(script).toContain("apps/desktop/src/renderer/skill-manager.test.ts");
+    expect(script).toContain("apps/desktop/src/renderer/royal-effects.test.ts");
     expect(script).toContain(
       "apps/desktop/src/renderer/scroll-completeness.test.ts",
     );

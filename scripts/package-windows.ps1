@@ -20,7 +20,7 @@ foreach ($lib in @("lib.d.ts", "lib.es2022.d.ts", "lib.dom.d.ts")) {
 # Use pnpm.cmd directly: invoking pnpm through npx makes npm warnings on stderr fatal
 # under Windows PowerShell when $ErrorActionPreference is Stop.
 $pnpm = (Get-Command "pnpm.cmd" -ErrorAction Stop).Source
-& $pnpm vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts apps/desktop/src/main/startup-splash.test.ts apps/desktop/src/main/release-pipeline.test.ts apps/desktop/src/renderer/styles.test.ts apps/desktop/src/renderer/scroll-completeness.test.ts apps/desktop/src/renderer/qc-regressions.test.ts apps/desktop/src/renderer/skill-manager.test.ts apps/desktop/src/renderer/activity-feed.test.ts
+& $pnpm vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts apps/desktop/src/main/startup-splash.test.ts apps/desktop/src/main/release-pipeline.test.ts apps/desktop/src/renderer/styles.test.ts apps/desktop/src/renderer/royal-effects.test.ts apps/desktop/src/renderer/scroll-completeness.test.ts apps/desktop/src/renderer/qc-regressions.test.ts apps/desktop/src/renderer/skill-manager.test.ts apps/desktop/src/renderer/activity-feed.test.ts
 if ($LASTEXITCODE -ne 0) { throw "Desktop release regression gate failed; refusing to package" }
 & (Join-Path $PSScriptRoot "accept-skill-layout.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Skill discovery layout gate failed; refusing to package" }

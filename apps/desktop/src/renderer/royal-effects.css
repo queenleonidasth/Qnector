@@ -113,6 +113,44 @@
   content: none !important;
 }
 
+/* Royal Gold Matrix Background Stream inside the Hero Glass Section */
+.gold-matrix-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: inherit;
+  transition: opacity 0.3s ease;
+  contain: paint;
+}
+
+.gold-matrix-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.gold-matrix-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at 50% 48%,
+    rgba(14, 15, 20, 0.58) 0%,
+    rgba(14, 15, 20, 0.28) 42%,
+    transparent 75%
+  );
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.45);
+}
+
+.hero-glass-section > *:not(.gold-matrix-layer) {
+  position: relative;
+  z-index: 3;
+}
+
 .glass-sphere-enclosure {
   animation: royalOrbShell 4.6s ease-in-out infinite;
 }
@@ -563,5 +601,9 @@
 
   .floating-glass-dock::after {
     transition-duration: 1ms !important;
+  }
+
+  .gold-matrix-layer {
+    transition: none !important;
   }
 }

@@ -24,6 +24,7 @@ import {
 import { useModalFocusTrap } from "./modal-accessibility.js";
 import { SkillManager } from "./skill-manager.js";
 import "./royal-effects.css";
+import { GoldMatrixRain } from "./gold-matrix-rain.js";
 
 const fallbackBridge: TransportSnapshot = {
   state: "disconnected",
@@ -1259,6 +1260,7 @@ function App(): React.ReactElement {
 
       <main className="app-main">
         <section className="glass-card hero-glass-section">
+          <GoldMatrixRain isConnected={isConnected} />
           <div className="orb-stage">
             <svg
               className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}

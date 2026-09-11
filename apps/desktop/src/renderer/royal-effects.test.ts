@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const rendererUrl = new URL("./renderer.tsx", import.meta.url);
 const effectsUrl = new URL("./royal-effects.css", import.meta.url);
+const matrixUrl = new URL("./gold-matrix-rain.tsx", import.meta.url);
 
 async function source(): Promise<string> {
   return readFile(rendererUrl, "utf8");
@@ -10,6 +11,10 @@ async function source(): Promise<string> {
 
 async function effects(): Promise<string> {
   return readFile(effectsUrl, "utf8");
+}
+
+async function matrix(): Promise<string> {
+  return readFile(matrixUrl, "utf8");
 }
 
 describe("Royal motion effects on the classic Qnector theme", () => {
@@ -127,5 +132,42 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(css).toMatch(
       /\.btn-gold-copy,[\s\S]*?display:\s*inline-flex;[\s\S]*?align-items:\s*center;[\s\S]*?justify-content:\s*center;[\s\S]*?text-align:\s*center;/,
     );
+  });
+
+  it("embeds the Royal Gold Matrix digital rain background inside the hero card behind the golden orb", async () => {
+    const css = await effects();
+    const text = await source();
+
+    expect(text).toContain("<GoldMatrixRain isConnected={isConnected} />");
+    expect(css).toContain(".gold-matrix-layer {");
+    expect(css).toContain(".gold-matrix-canvas {");
+    expect(css).toContain(".gold-matrix-vignette {");
+    expect(css).toContain(".hero-glass-section > *:not(.gold-matrix-layer) {");
+    expect(css).toContain("z-index: 3;");
+  });
+
+  it("uses the Royal Sovereign motion profile with Classic Matrix Kana 0-9 glyphs", async () => {
+    const text = await matrix();
+
+    expect(text).toContain("ROYAL_SOVEREIGN");
+    expect(text).toContain("flowSpeed: 0.58");
+    expect(text).toContain("opacity: 0.5");
+    expect(text).toContain("columnSpacing: 14");
+    expect(text).toContain('bloom: "royal-glow"');
+    expect(text).toContain("CLASSIC_MATRIX_KANA_0_9");
+    expect(text).toContain("ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺ");
+    expect(text).toContain("1234567890:・.=+-*");
+    expect(text).not.toContain("QNECTORBRIDGE");
+  });
+
+  it("targets 165fps while fully stopping continuous motion for reduced-motion or hidden windows", async () => {
+    const text = await matrix();
+
+    expect(text).toContain("TARGET_FPS = 165");
+    expect(text).toContain("FRAME_INTERVAL_MS = 1000 / TARGET_FPS");
+    expect(text).toContain('"(prefers-reduced-motion: reduce)"');
+    expect(text).toContain('document.addEventListener("visibilitychange"');
+    expect(text).toContain("cancelAnimationFrame");
+    expect(text).toContain("if (reducedMotion)");
   });
 });
