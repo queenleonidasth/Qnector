@@ -17,6 +17,18 @@ const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
 const DORMANT_SPEED_MULTIPLIER = 0.45;
 const MAX_DEVICE_PIXEL_RATIO = 2;
 
+function normalizeDisconnectProgress(progress: number): number {
+  if (!Number.isFinite(progress)) return 0;
+  return Math.min(1, Math.max(0, progress));
+}
+
+export function matrixDisconnectSpeedScale(progress: number): number {
+  const normalized = normalizeDisconnectProgress(progress);
+  // Smoothstep deceleration starts gently, becomes progressively slower, and
+  // reaches an exact zero at the end of the 3-second hold gesture.
+  return 1 - normalized * normalized * (3 - 2 * normalized);
+}
+
 function randomGlyph(): string {
   const index = Math.floor(Math.random() * CLASSIC_MATRIX_KANA_0_9.length);
   return CLASSIC_MATRIX_KANA_0_9.charAt(index) || "0";
@@ -24,6 +36,7 @@ function randomGlyph(): string {
 
 interface GoldMatrixRainProps {
   isConnected?: boolean;
+  disconnectProgress?: number;
   opacity?: number;
 }
 
@@ -40,9 +53,19 @@ interface MatrixColumn {
 
 export function GoldMatrixRain({
   isConnected = true,
+  disconnectProgress = 0,
   opacity = ROYAL_SOVEREIGN.opacity,
 }: GoldMatrixRainProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const disconnectProgressRef = useRef(
+    normalizeDisconnectProgress(disconnectProgress),
+  );
+  const startAnimationRef = useRef<(() => void) | null>(null);
+  const stopAnimationRef = useRef<(() => void) | null>(null);
+  const drawStaticFrameRef = useRef<(() => void) | null>(null);
+
+  disconnectProgressRef.current =
+    normalizeDisconnectProgress(disconnectProgress);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -115,11 +138,14 @@ export function GoldMatrixRain({
       // Convert movement to elapsed time so 165 Hz looks smoother without
       // making the rain travel faster than the selected slow profile.
       const frameScale = Math.max(0.25, Math.min(3, deltaMs / (1000 / 60)));
-      const speedMultiplier = connectionSpeed();
+      const disconnectSpeedScale = matrixDisconnectSpeedScale(
+        disconnectProgressRef.current,
+      );
+      const speedMultiplier = connectionSpeed() * disconnectSpeedScale;
 
       for (const column of columns) {
         if (animate) {
-          column.mutationElapsedMs += deltaMs;
+          column.mutationElapsedMs += deltaMs * disconnectSpeedScale;
           if (column.mutationElapsedMs >= column.mutationIntervalMs) {
             column.mutationElapsedMs = 0;
             column.mutationIntervalMs =
@@ -184,6 +210,12 @@ export function GoldMatrixRain({
     const render = (timestamp: number): void => {
       if (destroyed || document.hidden || reducedMotion) return;
 
+      if (matrixDisconnectSpeedScale(disconnectProgressRef.current) === 0) {
+        drawFrame(1000 / 60, false);
+        animationFrameId = undefined;
+        return;
+      }
+
       if (lastFrameAt === 0) lastFrameAt = timestamp;
       const elapsed = timestamp - lastFrameAt;
       if (elapsed >= FRAME_INTERVAL_MS) {
@@ -215,7 +247,10 @@ export function GoldMatrixRain({
     const refreshMotionState = (): void => {
       reducedMotion = motionQuery.matches;
       stopAnimation();
-      if (reducedMotion) {
+      if (
+        reducedMotion ||
+        matrixDisconnectSpeedScale(disconnectProgressRef.current) === 0
+      ) {
         drawFrame(1000 / 60, false);
       } else {
         startAnimation();
@@ -224,11 +259,24 @@ export function GoldMatrixRain({
 
     const handleVisibilityChange = (): void => {
       stopAnimation();
-      if (!document.hidden && !reducedMotion) startAnimation();
+      if (
+        !document.hidden &&
+        !reducedMotion &&
+        matrixDisconnectSpeedScale(disconnectProgressRef.current) > 0
+      ) {
+        startAnimation();
+      }
     };
 
+    startAnimationRef.current = startAnimation;
+    stopAnimationRef.current = stopAnimation;
+    drawStaticFrameRef.current = () => drawFrame(1000 / 60, false);
+
     resizeCanvas();
-    if (reducedMotion) {
+    if (
+      reducedMotion ||
+      matrixDisconnectSpeedScale(disconnectProgressRef.current) === 0
+    ) {
       drawFrame(1000 / 60, false);
     } else {
       startAnimation();
@@ -236,7 +284,12 @@ export function GoldMatrixRain({
 
     const resizeObserver = new ResizeObserver(() => {
       resizeCanvas();
-      if (reducedMotion) drawFrame(1000 / 60, false);
+      if (
+        reducedMotion ||
+        matrixDisconnectSpeedScale(disconnectProgressRef.current) === 0
+      ) {
+        drawFrame(1000 / 60, false);
+      }
     });
     if (canvas.parentElement) resizeObserver.observe(canvas.parentElement);
 
@@ -246,11 +299,26 @@ export function GoldMatrixRain({
     return () => {
       destroyed = true;
       stopAnimation();
+      startAnimationRef.current = null;
+      stopAnimationRef.current = null;
+      drawStaticFrameRef.current = null;
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       motionQuery.removeEventListener("change", refreshMotionState);
     };
   }, [isConnected]);
+
+  useEffect(() => {
+    disconnectProgressRef.current =
+      normalizeDisconnectProgress(disconnectProgress);
+    const stopped = matrixDisconnectSpeedScale(disconnectProgress) === 0;
+    if (stopped) {
+      stopAnimationRef.current?.();
+      drawStaticFrameRef.current?.();
+    } else {
+      startAnimationRef.current?.();
+    }
+  }, [disconnectProgress]);
 
   return (
     <div className="gold-matrix-layer" style={{ opacity }} aria-hidden="true">

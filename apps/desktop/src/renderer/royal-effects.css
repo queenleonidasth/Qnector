@@ -292,6 +292,21 @@
   z-index: 3;
 }
 
+.floating-glass-dock.dashboard-dock .dock-pill-btn {
+  min-height: 36px;
+  padding: 9px 4px;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.floating-glass-dock.dashboard-dock .dock-pill-btn > span:first-child {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  font-size: 15px;
+}
+
 .floating-glass-dock.dashboard-dock .dock-pill-btn > span:last-child {
   color: var(--text-gold);
 }

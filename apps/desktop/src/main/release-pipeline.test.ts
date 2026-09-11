@@ -28,6 +28,9 @@ describe("GitHub release pipeline", () => {
     expect(script).toContain("apps/desktop/src/renderer/skill-manager.test.ts");
     expect(script).toContain("apps/desktop/src/renderer/royal-effects.test.ts");
     expect(script).toContain(
+      "apps/desktop/src/renderer/gold-matrix-rain.test.ts",
+    );
+    expect(script).toContain(
       "apps/desktop/src/renderer/scroll-completeness.test.ts",
     );
     expect(script).toContain("accept-skill-layout.ps1");

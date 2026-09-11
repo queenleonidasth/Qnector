@@ -1068,6 +1068,7 @@ function App(): React.ReactElement {
   const isConnecting = bridge.state === "connecting";
   const disconnectRingActive = isHolding || isDisconnecting;
   const disconnectRingProgress = isDisconnecting ? 1 : holdProgress;
+  const matrixDisconnectProgress = isConnected ? disconnectRingProgress : 1;
 
   const effectiveUrl =
     bridge.publicUrl ?? (isConnected ? status?.localUrl : undefined);
@@ -1260,7 +1261,10 @@ function App(): React.ReactElement {
 
       <main className="app-main">
         <section className="glass-card hero-glass-section">
-          <GoldMatrixRain isConnected={isConnected} />
+          <GoldMatrixRain
+            isConnected={isConnected}
+            disconnectProgress={matrixDisconnectProgress}
+          />
           <div className="orb-stage">
             <svg
               className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}

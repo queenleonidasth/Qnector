@@ -138,7 +138,8 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     const css = await effects();
     const text = await source();
 
-    expect(text).toContain("<GoldMatrixRain isConnected={isConnected} />");
+    expect(text).toContain("<GoldMatrixRain");
+    expect(text).toContain("isConnected={isConnected}");
     expect(css).toContain(".gold-matrix-layer {");
     expect(css).toContain(".gold-matrix-canvas {");
     expect(css).toContain(".gold-matrix-vignette {");
@@ -160,6 +161,30 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(text).not.toContain("QNECTORBRIDGE");
   });
 
+  it("binds Matrix deceleration to the 3-second orb disconnect gesture", async () => {
+    const text = await source();
+    const matrixText = await matrix();
+
+    expect(text).toContain("disconnectProgress={matrixDisconnectProgress}");
+    expect(text).toContain(
+      "const matrixDisconnectProgress = isConnected ? disconnectRingProgress : 1;",
+    );
+    expect(matrixText).toContain("disconnectProgress?: number");
+    expect(matrixText).toContain("matrixDisconnectSpeedScale");
+    expect(matrixText).toContain("disconnectProgressRef.current");
+  });
+
+  it("enlarges all four dashboard dock menu labels and icons without changing drawer sizing", async () => {
+    const css = await effects();
+
+    expect(css).toMatch(
+      /\.floating-glass-dock\.dashboard-dock \.dock-pill-btn \{[\s\S]*?padding:\s*9px 4px;[\s\S]*?font-size:\s*12px;/,
+    );
+    expect(css).toMatch(
+      /\.floating-glass-dock\.dashboard-dock \.dock-pill-btn > span:first-child \{[\s\S]*?width:\s*16px;[\s\S]*?height:\s*16px;[\s\S]*?flex:\s*0 0 16px;[\s\S]*?font-size:\s*15px;/,
+    );
+  });
+
   it("targets 165fps while fully stopping continuous motion for reduced-motion or hidden windows", async () => {
     const text = await matrix();
 
@@ -168,6 +193,6 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(text).toContain('"(prefers-reduced-motion: reduce)"');
     expect(text).toContain('document.addEventListener("visibilitychange"');
     expect(text).toContain("cancelAnimationFrame");
-    expect(text).toContain("if (reducedMotion)");
+    expect(text).toContain("reducedMotion ||");
   });
 });
