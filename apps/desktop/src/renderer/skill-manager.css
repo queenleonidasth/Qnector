@@ -958,6 +958,125 @@
   height: 32px;
 }
 
+.skills-discover-modal {
+  width: min(100%, 520px);
+}
+
+.skills-discover-search {
+  margin-top: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 8px;
+  align-items: end;
+}
+
+.skills-discover-search .skills-primary {
+  min-height: 39px;
+}
+
+.skills-discover-scope {
+  margin-top: 9px;
+}
+
+.skills-discover-results {
+  max-height: min(340px, 42vh);
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.skills-discover-row {
+  min-height: 66px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.skills-discover-copy {
+  min-width: 0;
+}
+
+.skills-discover-copy strong,
+.skills-discover-copy small,
+.skills-discover-copy em {
+  display: block;
+}
+
+.skills-discover-copy strong {
+  overflow: hidden;
+  color: #e3e0d8;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-discover-copy small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #8b8880;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-discover-copy em {
+  margin-top: 3px;
+  color: #baa66d;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.skills-discover-row .skills-secondary {
+  min-width: 74px;
+  min-height: 34px;
+  padding: 0 9px;
+  font-size: 9.5px;
+}
+
+.skills-discover-results > p {
+  margin: 0;
+  padding: 20px 8px;
+  color: #77746d;
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.skills-discover-note {
+  margin-top: 10px;
+  padding: 8px 9px;
+  border: 1px solid rgba(230, 186, 80, 0.12);
+  border-radius: 8px;
+  background: rgba(230, 186, 80, 0.04);
+  color: #958d7a;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 460px) {
+  .skills-discover-search {
+    grid-template-columns: 1fr;
+  }
+
+  .skills-discover-row {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .skills-discover-row .skills-secondary {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
 .runtime-settings-launch {
   margin-top: 8px;
 }

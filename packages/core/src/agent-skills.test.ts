@@ -48,6 +48,36 @@ describe("AgentSkillService", () => {
     expect(loaded.source).toBe("test");
   });
 
+  it("parses folded YAML frontmatter used by ecosystem skills", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skills-yaml-"));
+    const directory = path.join(root, "agent-harness");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "SKILL.md"),
+      [
+        "---",
+        "name: agent-harness",
+        "description: >",
+        "  Test and evaluation harness for AI agents — scenario suites, deterministic",
+        "  replay, regression diffing, cost and latency budgets.",
+        "license: MIT",
+        "---",
+        "# Agent Harness",
+        "Use deterministic replay.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const service = new AgentSkillService({
+      roots: [{ path: root, source: "test" }],
+    });
+    const loaded = await service.get("agent-harness");
+    expect(loaded.description).toContain(
+      "scenario suites, deterministic replay",
+    );
+    expect(loaded.description).not.toBe(">");
+  });
+
   it("creates, disables, duplicates and re-enables writable skills", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skills-manage-"));
     const userRoot = path.join(root, "skills");
@@ -123,6 +153,127 @@ describe("AgentSkillService", () => {
         "utf8",
       ),
     ).toBe("reference");
+  });
+
+  it("searches skills.sh and installs a complete snapshot with provenance", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skills-remote-"));
+    const userRoot = path.join(root, "skills");
+    const requests: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      requests.push(url);
+      if (url.includes("/api/search?")) {
+        return new Response(
+          JSON.stringify({
+            skills: [
+              {
+                id: "vendor/repo/remote-skill",
+                skillId: "remote-skill",
+                name: "remote-skill",
+                source: "vendor/repo",
+                installs: 42,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/download/vendor/repo/remote-skill")) {
+        return new Response(
+          JSON.stringify({
+            files: [
+              {
+                path: "SKILL.md",
+                contents: [
+                  "---",
+                  "name: remote-skill",
+                  "description: >",
+                  "  Remote skill with a folded description for safe discovery and",
+                  "  installation testing.",
+                  "---",
+                  "# Remote Skill",
+                  "Follow the workflow.",
+                  "",
+                ].join("\n"),
+              },
+              { path: "references/guide.md", contents: "# Guide\n" },
+            ],
+            hash: "a".repeat(64),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    };
+    const service = new AgentSkillService({
+      roots: [{ path: userRoot, source: "user" }],
+      registryBaseUrl: "https://skills.example.test",
+      fetchImpl,
+    });
+
+    const found = await service.searchRemote({ query: "remote skill" });
+    expect(found).toEqual([
+      expect.objectContaining({
+        id: "vendor/repo/remote-skill",
+        name: "remote-skill",
+        source: "vendor/repo",
+        installs: 42,
+        installable: true,
+        installed: false,
+      }),
+    ]);
+
+    const installed = await service.installRemote(
+      "vendor/repo/remote-skill",
+      "user",
+    );
+    expect(installed.description).toContain("folded description");
+    expect(installed.origin).toMatchObject({
+      registry: "skills.sh",
+      id: "vendor/repo/remote-skill",
+      source: "vendor/repo",
+      skillId: "remote-skill",
+      registryHash: "a".repeat(64),
+      contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(
+      await readFile(
+        path.join(userRoot, "remote-skill", "references", "guide.md"),
+        "utf8",
+      ),
+    ).toContain("Guide");
+    expect(requests.some((url) => url.includes("/api/search?"))).toBe(true);
+    expect(
+      (await service.searchRemote({ query: "remote skill" }))[0]?.installed,
+    ).toBe(true);
+  });
+
+  it("rejects unsafe paths from remote skill snapshots", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skills-unsafe-"));
+    const service = new AgentSkillService({
+      roots: [{ path: path.join(root, "skills"), source: "user" }],
+      registryBaseUrl: "https://skills.example.test",
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            files: [
+              {
+                path: "SKILL.md",
+                contents:
+                  "---\\nname: unsafe-skill\\ndescription: Unsafe fixture.\\n---\\n# Unsafe\\n",
+              },
+              { path: "../escape.txt", contents: "nope" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    });
+    await expect(
+      service.installRemote("vendor/repo/unsafe-skill", "user"),
+    ).rejects.toThrow("unsafe snapshot path");
+    await expect(
+      readFile(path.join(root, "escape.txt"), "utf8"),
+    ).rejects.toThrow();
   });
 
   it("ignores malformed skills instead of breaking discovery", async () => {

@@ -28,7 +28,7 @@ const execFileAsync = promisify(execFile);
 export const systemDefinition: ToolDefinition = {
   name: "system",
   description:
-    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
+    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. When the user asks to discover or install new Agent Skills, use skills_search_remote and skill_install_remote for the public skills.sh catalog; never install a remote skill without user intent. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
   inputSchema: {
     type: "object",
     properties: {
@@ -53,6 +53,8 @@ export const systemDefinition: ToolDefinition = {
           "skills_list",
           "skills_match",
           "skills_route",
+          "skills_search_remote",
+          "skill_install_remote",
           "skill_get",
           "skill_create",
           "skill_update",
@@ -136,6 +138,14 @@ export const systemDefinition: ToolDefinition = {
       },
       enabled: { type: "boolean" },
       sourcePath: { type: "string" },
+      remoteId: {
+        type: "string",
+        description: "skills.sh registry id in owner/repo/skill form",
+      },
+      owner: {
+        type: "string",
+        description: "Optional GitHub owner filter for skills.sh search",
+      },
       query: {
         type: "string",
         description:
@@ -469,6 +479,39 @@ export async function executeSystem(
               ? `Activated ${skills.length} Agent Skill(s): ${skills.map((skill) => skill.name).join(", ")}`
               : `No Agent Skills matched '${query}'`,
           data: { query, skills },
+        };
+      }
+      if (action === "skills_search_remote") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const query = stringInput(object, "query", true)!;
+        const skills = await context.agentSkills.searchRemote({
+          query,
+          limit: numberInput(object, "maxResults", 20),
+          ...(stringInput(object, "owner")
+            ? { owner: stringInput(object, "owner") }
+            : {}),
+        });
+        return {
+          summary: `skills.sh search returned ${skills.length} result(s) for '${query}'`,
+          data: { query, skills },
+        };
+      }
+      if (action === "skill_install_remote") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const remoteId = stringInput(object, "remoteId", true)!;
+        const skill = await context.agentSkills.installRemote(
+          remoteId,
+          requiredSkillScope(object),
+        );
+        return {
+          summary: `Installed Agent Skill ${skill.name} from skills.sh`,
+          data: skill,
         };
       }
       if (action === "skill_get") {

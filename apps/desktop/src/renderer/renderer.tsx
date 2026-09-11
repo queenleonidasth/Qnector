@@ -808,6 +808,22 @@ function App(): React.ReactElement {
     }
   };
 
+  const handleOrbKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ): void => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    if (event.repeat || busy || isConnecting || isDisconnecting) return;
+    if (isConnected) startHold();
+    else void connect();
+  };
+
+  const handleOrbKeyUp = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    if (isConnected) cancelHold();
+  };
+
   const chooseWorkspace = async (): Promise<void> => {
     const next = await window.qnector.chooseWorkspace();
     setStatus((current) => (current ? { ...current, ...next } : current));
@@ -1280,6 +1296,15 @@ function App(): React.ReactElement {
 
             <div
               className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-label={
+                isDisconnecting
+                  ? "Disconnecting from ChatGPT"
+                  : isConnected
+                    ? "Hold for 3 seconds to disconnect"
+                    : "Connect to ChatGPT"
+              }
               title={
                 isDisconnecting
                   ? "Disconnecting from ChatGPT"
@@ -1294,6 +1319,8 @@ function App(): React.ReactElement {
               onTouchStart={startHold}
               onTouchEnd={cancelHold}
               onTouchCancel={cancelHold}
+              onKeyDown={handleOrbKeyDown}
+              onKeyUp={handleOrbKeyUp}
             >
               <div
                 className={`liquid-gold-core ${
@@ -1357,25 +1384,14 @@ function App(): React.ReactElement {
           </div>
 
           {isConnected ? (
-            <div className="bridge-connected-actions">
-              <button
-                className="btn-liquid-action"
-                type="button"
-                disabled={isDisconnecting}
-                onClick={() => void openChatGPT()}
-              >
-                <span>↗ Open in ChatGPT</span>
-              </button>
-              <button
-                className="btn-liquid-action disconnect"
-                type="button"
-                disabled={busy || isDisconnecting}
-                aria-busy={isDisconnecting}
-                onClick={() => void disconnect()}
-              >
-                <span>{isDisconnecting ? "Disconnecting…" : "Disconnect"}</span>
-              </button>
-            </div>
+            <button
+              className="btn-liquid-action"
+              type="button"
+              disabled={isDisconnecting}
+              onClick={() => void openChatGPT()}
+            >
+              <span>↗ Open in ChatGPT</span>
+            </button>
           ) : (
             <button
               className="btn-liquid-action"

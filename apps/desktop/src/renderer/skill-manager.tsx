@@ -17,7 +17,29 @@ interface SkillSummary {
   license?: string;
   compatibility?: string;
   allowedTools?: string[];
+  origin?: {
+    registry: "skills.sh";
+    id: string;
+    source: string;
+    skillId: string;
+    url: string;
+    registryHash?: string;
+    contentHash?: string;
+    installs?: number;
+    installedAt: string;
+  };
   enabled: boolean;
+}
+
+interface RemoteSkillSummary {
+  id: string;
+  name: string;
+  skillId: string;
+  source: string;
+  installs: number;
+  url: string;
+  installable: boolean;
+  installed: boolean;
 }
 
 interface SkillDocument extends SkillSummary {
@@ -95,7 +117,8 @@ function readSkillDraft(workspaceKey?: string): SkillDraft | undefined {
     const raw = window.sessionStorage.getItem(skillDraftKey(workspaceKey));
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<SkillDraft>;
-    if (parsed.editor !== "create" && parsed.editor !== "edit") return undefined;
+    if (parsed.editor !== "create" && parsed.editor !== "edit")
+      return undefined;
     if (!parsed.form || typeof parsed.form !== "object") return undefined;
     return parsed as SkillDraft;
   } catch {
@@ -118,7 +141,10 @@ export function SkillManager({
 }: {
   workspaceKey?: string;
 }): React.ReactElement {
-  const initialDraft = useMemo(() => readSkillDraft(workspaceKey), [workspaceKey]);
+  const initialDraft = useMemo(
+    () => readSkillDraft(workspaceKey),
+    [workspaceKey],
+  );
   const [status, setStatus] = useState<SkillStatus>();
   const [filter, setFilter] = useState<SkillFilter>("all");
   const [query, setQuery] = useState("");
@@ -130,16 +156,26 @@ export function SkillManager({
   const [editor, setEditor] = useState<"create" | "edit" | undefined>(
     initialDraft?.editor,
   );
-  const [form, setForm] = useState<SkillForm>(() => initialDraft?.form ?? emptyForm());
+  const [form, setForm] = useState<SkillForm>(
+    () => initialDraft?.form ?? emptyForm(),
+  );
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [triggerQuery, setTriggerQuery] = useState("");
   const [triggerMatches, setTriggerMatches] = useState<SkillSummary[]>([]);
   const [triggerHasRun, setTriggerHasRun] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport>();
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [discoverQuery, setDiscoverQuery] = useState("");
+  const [remoteResults, setRemoteResults] = useState<RemoteSkillSummary[]>([]);
+  const [discoverHasRun, setDiscoverHasRun] = useState(false);
+  const [discoverBusy, setDiscoverBusy] = useState(false);
+  const [discoverScope, setDiscoverScope] = useState<SkillScope>("user");
+  const [remoteInstallingId, setRemoteInstallingId] = useState<string>();
   const triggerDialogRef = useRef<HTMLElement | null>(null);
   const duplicateDialogRef = useRef<HTMLElement | null>(null);
   const importDialogRef = useRef<HTMLElement | null>(null);
+  const discoverDialogRef = useRef<HTMLElement | null>(null);
 
   const refresh = async (): Promise<void> => {
     setBusy(true);
@@ -160,18 +196,24 @@ export function SkillManager({
   useEffect(() => {
     const key = skillDraftKey(workspaceKey);
     if (editor) {
-      window.sessionStorage.setItem(key, JSON.stringify({ editor, form } satisfies SkillDraft));
+      window.sessionStorage.setItem(
+        key,
+        JSON.stringify({ editor, form } satisfies SkillDraft),
+      );
     } else {
       window.sessionStorage.removeItem(key);
     }
   }, [editor, form, workspaceKey]);
 
   useModalFocusTrap(triggerOpen, triggerDialogRef, () => setTriggerOpen(false));
-  useModalFocusTrap(duplicateOpen, duplicateDialogRef, () => setDuplicateOpen(false));
-  useModalFocusTrap(
-    Boolean(pendingImport),
-    importDialogRef,
-    () => setPendingImport(undefined),
+  useModalFocusTrap(duplicateOpen, duplicateDialogRef, () =>
+    setDuplicateOpen(false),
+  );
+  useModalFocusTrap(Boolean(pendingImport), importDialogRef, () =>
+    setPendingImport(undefined),
+  );
+  useModalFocusTrap(discoverOpen, discoverDialogRef, () =>
+    setDiscoverOpen(false),
   );
 
   const skills = useMemo(() => {
@@ -277,6 +319,68 @@ export function SkillManager({
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
       setBusy(false);
+    }
+  };
+
+  const openDiscover = (): void => {
+    setAddOpen(false);
+    setError(undefined);
+    setDiscoverQuery("");
+    setRemoteResults([]);
+    setDiscoverHasRun(false);
+    setDiscoverOpen(true);
+  };
+
+  const searchRemoteSkills = async (): Promise<void> => {
+    const searchQuery = discoverQuery.trim();
+    if (searchQuery.length < 2) return;
+    setDiscoverBusy(true);
+    setError(undefined);
+    try {
+      const result = unwrap<{ skills: RemoteSkillSummary[] }>(
+        await system({
+          action: "skills_search_remote",
+          query: searchQuery,
+          maxResults: 20,
+        }),
+      );
+      setRemoteResults(result.skills);
+      setDiscoverHasRun(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setDiscoverBusy(false);
+    }
+  };
+
+  const installRemoteSkill = async (
+    skill: RemoteSkillSummary,
+  ): Promise<void> => {
+    if (!skill.installable || skill.installed) return;
+    setRemoteInstallingId(skill.id);
+    setError(undefined);
+    try {
+      const installed = unwrap<SkillDocument>(
+        await system({
+          action: "skill_install_remote",
+          remoteId: skill.id,
+          scope: discoverScope,
+        }),
+      );
+      setRemoteResults((current) =>
+        current.map((entry) =>
+          entry.name.toLowerCase() === installed.name.toLowerCase()
+            ? { ...entry, installed: true }
+            : entry,
+        ),
+      );
+      await refresh();
+      setDiscoverOpen(false);
+      await openSkill(installed.name);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setRemoteInstallingId(undefined);
     }
   };
 
@@ -428,7 +532,9 @@ export function SkillManager({
                   <span>{index + 1}</span>
                   <div>
                     <strong>{skill.name}</strong>
-                    <small>{index === 0 ? "Best match" : skill.description}</small>
+                    <small>
+                      {index === 0 ? "Best match" : skill.description}
+                    </small>
                   </div>
                   <em>›</em>
                 </button>
@@ -476,7 +582,10 @@ export function SkillManager({
                 ×
               </button>
             </div>
-            <div className="skills-import-source" title={pendingImport.sourcePath}>
+            <div
+              className="skills-import-source"
+              title={pendingImport.sourcePath}
+            >
               {pendingImport.sourcePath}
             </div>
             <label className="skill-field">
@@ -492,7 +601,9 @@ export function SkillManager({
                   )
                 }
               >
-                <option value="workspace">Workspace · current project only</option>
+                <option value="workspace">
+                  Workspace · current project only
+                </option>
                 <option value="user">User · all workspaces</option>
               </select>
             </label>
@@ -514,6 +625,141 @@ export function SkillManager({
                 {busy ? "Importing…" : "Import"}
               </button>
             </div>
+          </section>
+        </div>,
+        document.body,
+      )
+    : null;
+
+  const discoverModal = discoverOpen
+    ? createPortal(
+        <div
+          className="skills-modal-backdrop"
+          onClick={() =>
+            !discoverBusy && !remoteInstallingId && setDiscoverOpen(false)
+          }
+        >
+          <section
+            ref={discoverDialogRef}
+            className="skills-modal skills-discover-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Discover skills.sh"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="skills-modal-head">
+              <div>
+                <strong>Discover skills.sh</strong>
+                <small>
+                  Search the public Agent Skills catalog, then install a
+                  reviewed skill.
+                </small>
+              </div>
+              <button
+                type="button"
+                aria-label="Close skills.sh discovery"
+                disabled={discoverBusy || Boolean(remoteInstallingId)}
+                onClick={() => setDiscoverOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <form
+              className="skills-discover-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void searchRemoteSkills();
+              }}
+            >
+              <label className="skill-field">
+                <span>Search skills.sh</span>
+                <input
+                  autoFocus
+                  value={discoverQuery}
+                  onChange={(event) => setDiscoverQuery(event.target.value)}
+                  placeholder="e.g. debugging, UI design, agent eval"
+                />
+              </label>
+              <button
+                type="submit"
+                className="skills-primary"
+                disabled={discoverBusy || discoverQuery.trim().length < 2}
+              >
+                {discoverBusy ? "Searching…" : "Search"}
+              </button>
+            </form>
+            <label className="skill-field skills-discover-scope">
+              <span>Install scope</span>
+              <select
+                value={discoverScope}
+                disabled={Boolean(remoteInstallingId)}
+                onChange={(event) =>
+                  setDiscoverScope(event.target.value as SkillScope)
+                }
+              >
+                <option value="user">User · all workspaces</option>
+                <option value="workspace">
+                  Workspace · current project only
+                </option>
+              </select>
+            </label>
+            <div className="skills-discover-results" aria-live="polite">
+              {remoteResults.map((skill) => (
+                <div className="skills-discover-row" key={skill.id}>
+                  <span className="skill-row-icon">{initials(skill.name)}</span>
+                  <span className="skills-discover-copy">
+                    <strong>{skill.name}</strong>
+                    <small>{skill.source || skill.id}</small>
+                    <em>{formatInstallCount(skill.installs)}</em>
+                  </span>
+                  <button
+                    type="button"
+                    className="skills-secondary"
+                    disabled={
+                      Boolean(remoteInstallingId) ||
+                      !skill.installable ||
+                      skill.installed
+                    }
+                    title={
+                      skill.installable
+                        ? undefined
+                        : "This catalog entry is not backed by an installable GitHub owner/repo source."
+                    }
+                    onClick={() => void installRemoteSkill(skill)}
+                  >
+                    {skill.installed
+                      ? "Installed"
+                      : remoteInstallingId === skill.id
+                        ? "Installing…"
+                        : skill.installable
+                          ? "Install"
+                          : "Web only"}
+                  </button>
+                </div>
+              ))}
+              {!discoverBusy &&
+                discoverHasRun &&
+                remoteResults.length === 0 && (
+                  <p>
+                    No skills found. Try a broader capability or technology
+                    name.
+                  </p>
+                )}
+              {!discoverHasRun && remoteResults.length === 0 && (
+                <p>
+                  Search by capability. Qnector keeps local and remote search
+                  separate.
+                </p>
+              )}
+            </div>
+            <div className="skills-discover-note">
+              Third-party skills can contain scripts and external instructions.
+              Qnector validates snapshot paths and size limits, records
+              registry/content hashes and provenance, and never executes skill
+              scripts during installation. Review details before sensitive use.
+            </div>
+            {error && <div className="skills-error">{error}</div>}
           </section>
         </div>,
         document.body,
@@ -790,6 +1036,14 @@ export function SkillManager({
               <span>Location</span>
               <strong title={detail.path}>{detail.path}</strong>
             </div>
+            {detail.origin && (
+              <div>
+                <span>Registry</span>
+                <strong title={detail.origin.url}>
+                  skills.sh · {detail.origin.source}@{detail.origin.skillId}
+                </strong>
+              </div>
+            )}
           </section>
           {writable && (
             <button
@@ -832,6 +1086,10 @@ export function SkillManager({
               <button type="button" onClick={startCreate}>
                 <strong>Create Skill</strong>
                 <small>Start from a guided template</small>
+              </button>
+              <button type="button" onClick={openDiscover}>
+                <strong>Discover skills.sh</strong>
+                <small>Search and install from the public catalog</small>
               </button>
               <button type="button" onClick={() => void importSkill("file")}>
                 <strong>Import File / ZIP</strong>
@@ -936,6 +1194,7 @@ export function SkillManager({
       </div>
 
       {importModal}
+      {discoverModal}
       {triggerModal}
 
       {duplicateOpen &&
@@ -990,6 +1249,14 @@ export function SkillManager({
         )}
     </div>
   );
+}
+
+function formatInstallCount(value: number): string {
+  if (value >= 1_000_000)
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M installs`;
+  if (value >= 1_000)
+    return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K installs`;
+  return `${value} install${value === 1 ? "" : "s"}`;
 }
 
 function initials(name: string): string {

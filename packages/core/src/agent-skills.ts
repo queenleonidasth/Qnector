@@ -1,18 +1,29 @@
 import AdmZip from "adm-zip";
+import { createHash, randomUUID } from "node:crypto";
 import {
   cp,
   mkdir,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 
 const MAX_SKILL_BYTES = 256 * 1024;
 const MAX_SKILLS = 500;
+const MAX_REMOTE_SKILL_FILES = 300;
+const MAX_REMOTE_SKILL_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_REMOTE_SKILL_TOTAL_BYTES = 32 * 1024 * 1024;
+const REMOTE_FETCH_TIMEOUT_MS = 15_000;
+const DEFAULT_SKILL_REGISTRY = "https://skills.sh";
+const SKILL_ORIGIN_FILE = ".qnector-origin.json";
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const GITHUB_OWNER_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,38})$/i;
+const GITHUB_REPO_PATTERN = /^[a-z0-9._-]+$/i;
 const KNOWN_TOOLS = new Set([
   "system",
   "workspace",
@@ -38,7 +49,31 @@ export interface AgentSkillSummary {
   license?: string;
   compatibility?: string;
   allowedTools?: string[];
+  origin?: AgentSkillOrigin;
   enabled: boolean;
+}
+
+export interface AgentSkillOrigin {
+  registry: "skills.sh";
+  id: string;
+  source: string;
+  skillId: string;
+  url: string;
+  registryHash?: string;
+  contentHash?: string;
+  installs?: number;
+  installedAt: string;
+}
+
+export interface RemoteAgentSkillSummary {
+  id: string;
+  name: string;
+  skillId: string;
+  source: string;
+  installs: number;
+  url: string;
+  installable: boolean;
+  installed: boolean;
 }
 
 export interface AgentSkillDocument extends AgentSkillSummary {
@@ -57,6 +92,8 @@ export interface AgentSkillStatus {
 export interface AgentSkillServiceOptions {
   roots?: AgentSkillRoot[];
   workspaceRoot?: () => string | undefined;
+  registryBaseUrl?: string;
+  fetchImpl?: typeof fetch;
 }
 
 export interface AgentSkillWriteInput {
@@ -75,6 +112,130 @@ interface SkillStateFile {
 
 export class AgentSkillService {
   public constructor(private readonly options: AgentSkillServiceOptions = {}) {}
+
+  public async searchRemote(input: {
+    query: string;
+    limit?: number;
+    owner?: string;
+  }): Promise<RemoteAgentSkillSummary[]> {
+    const query = input.query.trim();
+    if (query.length < 2)
+      throw new Error(
+        "INVALID_INPUT: skills.sh search query must be at least 2 characters",
+      );
+    const owner = input.owner?.trim().toLowerCase();
+    if (owner && !GITHUB_OWNER_PATTERN.test(owner))
+      throw new Error("INVALID_INPUT: owner must be a valid GitHub owner");
+    const limit = clamp(input.limit ?? 20, 1, 50);
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    if (owner) params.set("owner", owner);
+    const response = await this.registryFetch(
+      `/api/search?${params.toString()}`,
+    );
+    if (!response.ok)
+      throw new Error(
+        `SKILLS_REGISTRY_ERROR: skills.sh search returned HTTP ${response.status}`,
+      );
+    const payload = (await response.json()) as { skills?: unknown };
+    if (!Array.isArray(payload.skills))
+      throw new Error(
+        "SKILLS_REGISTRY_ERROR: skills.sh returned an invalid search payload",
+      );
+    const installed = new Set(
+      (await this.discover(true)).map((skill) => skill.name.toLowerCase()),
+    );
+    return payload.skills
+      .map((entry) => parseRemoteSearchEntry(entry, this.registryBaseUrl()))
+      .filter((entry): entry is RemoteAgentSkillSummary => Boolean(entry))
+      .slice(0, limit)
+      .map((entry) => ({
+        ...entry,
+        installed: installed.has(entry.name.toLowerCase()),
+      }));
+  }
+
+  public async installRemote(
+    remoteId: string,
+    scope: "user" | "workspace",
+  ): Promise<AgentSkillDocument> {
+    const parsedId = parseRemoteSkillId(remoteId);
+    const root = this.writableRoot(scope);
+    await mkdir(root.path, { recursive: true });
+    const response = await this.registryFetch(
+      `/api/download/${encodeURIComponent(parsedId.owner)}/${encodeURIComponent(parsedId.repo)}/${encodeURIComponent(parsedId.skillId)}`,
+    );
+    if (!response.ok)
+      throw new Error(
+        `SKILLS_REGISTRY_ERROR: skills.sh download returned HTTP ${response.status}`,
+      );
+    const payload = (await response.json()) as {
+      files?: unknown;
+      hash?: unknown;
+    };
+    const snapshot = validateRemoteSnapshot(payload.files);
+    const skillFile = snapshot.find(
+      (file) => file.path.toLowerCase() === "skill.md",
+    );
+    if (!skillFile)
+      throw new Error(
+        "SKILL_IMPORT_INVALID: skills.sh snapshot does not contain SKILL.md",
+      );
+    const parsed = parseSkill(skillFile.contents, `${remoteId}:SKILL.md`);
+    const name = parsed.frontmatter.name!.trim();
+    validateSkillName(name);
+    const destination = path.join(root.path, name);
+    if (await isDirectory(destination))
+      throw new Error(`SKILL_EXISTS: ${name}`);
+
+    const registryHash =
+      typeof payload.hash === "string" ? payload.hash.trim().toLowerCase() : "";
+    if (registryHash && !/^[a-f0-9]{64}$/.test(registryHash))
+      throw new Error(
+        `SKILLS_REGISTRY_ERROR: skills.sh returned an invalid snapshot hash for ${remoteId}`,
+      );
+    // skills.sh treats its download hash as registry metadata; the official CLI
+    // does not recompute and compare it for a full snapshot. Keep that value for
+    // provenance and also compute a Qnector-owned content digest over the exact
+    // files we write so the installed snapshot can be identified deterministically.
+    const contentHash = hashRemoteSnapshot(snapshot);
+
+    const staging = path.join(root.path, `.qnector-install-${randomUUID()}`);
+    const origin: AgentSkillOrigin = {
+      registry: "skills.sh",
+      id: remoteId,
+      source: `${parsedId.owner}/${parsedId.repo}`,
+      skillId: parsedId.skillId,
+      url: `${this.registryBaseUrl()}/${remoteId}`,
+      ...(registryHash ? { registryHash } : {}),
+      contentHash,
+      installedAt: new Date().toISOString(),
+    };
+    try {
+      await mkdir(staging, { recursive: true });
+      for (const file of snapshot) {
+        const target = path.resolve(staging, ...file.path.split("/"));
+        if (!isWithin(staging, target))
+          throw new Error(
+            `SKILL_IMPORT_INVALID: unsafe snapshot path ${file.path}`,
+          );
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, file.contents, "utf8");
+      }
+      await writeFile(
+        path.join(staging, SKILL_ORIGIN_FILE),
+        `${JSON.stringify(origin, null, 2)}\n`,
+        "utf8",
+      );
+      await rename(staging, destination);
+    } catch (error) {
+      await rm(staging, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
+      throw error;
+    }
+    await this.setEnabled(name, true);
+    return this.get(name, { includeDisabled: true });
+  }
 
   public async status(): Promise<AgentSkillStatus> {
     const roots = this.roots();
@@ -420,6 +581,21 @@ export class AgentSkillService {
     return root;
   }
 
+  private registryBaseUrl(): string {
+    return (this.options.registryBaseUrl ?? DEFAULT_SKILL_REGISTRY).replace(
+      /\/+$/,
+      "",
+    );
+  }
+
+  private registryFetch(relativeUrl: string): Promise<Response> {
+    const fetchImpl = this.options.fetchImpl ?? fetch;
+    return fetchImpl(`${this.registryBaseUrl()}${relativeUrl}`, {
+      headers: { "User-Agent": "Qnector Agent Skills" },
+      signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS),
+    });
+  }
+
   private statePath(): string {
     const userRoot = this.roots().find((entry) => entry.source === "user");
     if (userRoot)
@@ -486,6 +662,7 @@ export class AgentSkillService {
           if (!name || !description) continue;
           const key = name.toLowerCase();
           const enabled = !disabled.has(key);
+          const origin = await readSkillOrigin(directory);
           byName.set(key, {
             name,
             description,
@@ -502,6 +679,7 @@ export class AgentSkillService {
             ...(parsed.frontmatter.allowedTools?.length
               ? { allowedTools: parsed.frontmatter.allowedTools }
               : {}),
+            ...(origin ? { origin } : {}),
           });
         } catch {
           // A malformed skill must never prevent Qnector from loading other skills.
@@ -536,27 +714,33 @@ function parseSkill(content: string, file: string): ParsedSkill {
     throw new Error(`SKILL_INVALID: ${file} has unterminated YAML frontmatter`);
   const yaml = normalized.slice(4, end);
   const body = normalized.slice(end + 5).trim();
-  const frontmatter: ParsedSkill["frontmatter"] = {};
-  for (const rawLine of yaml.split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const separator = line.indexOf(":");
-    if (separator <= 0) continue;
-    const key = line.slice(0, separator).trim().toLowerCase();
-    const value = unquote(line.slice(separator + 1).trim());
-    if (key === "name") frontmatter.name = value;
-    else if (key === "description") frontmatter.description = value;
-    else if (key === "license") frontmatter.license = value;
-    else if (key === "compatibility") frontmatter.compatibility = value;
-    else if (key === "allowed-tools" || key === "allowed_tools") {
-      frontmatter.allowedTools = value
-        .replace(/^\[/, "")
-        .replace(/\]$/, "")
-        .split(/[ ,]+/)
-        .map((entry) => unquote(entry.trim()))
-        .filter(Boolean);
-    }
+  let data: Record<string, unknown>;
+  try {
+    const value = parseYaml(yaml);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("frontmatter must be an object");
+    data = value as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(
+      `SKILL_INVALID: ${file} has invalid YAML frontmatter: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
+  const frontmatter: ParsedSkill["frontmatter"] = {
+    ...(stringMetadata(data.name) ? { name: stringMetadata(data.name) } : {}),
+    ...(stringMetadata(data.description)
+      ? { description: stringMetadata(data.description) }
+      : {}),
+    ...(stringMetadata(data.license)
+      ? { license: stringMetadata(data.license) }
+      : {}),
+    ...(stringMetadata(data.compatibility)
+      ? { compatibility: stringMetadata(data.compatibility) }
+      : {}),
+  };
+  const allowedTools = stringListMetadata(
+    data["allowed-tools"] ?? data.allowed_tools,
+  );
+  if (allowedTools.length) frontmatter.allowedTools = allowedTools;
   if (!frontmatter.name || !frontmatter.description)
     throw new Error(`SKILL_INVALID: ${file} requires name and description`);
   return { frontmatter, body };
@@ -647,14 +831,176 @@ function tokenize(value: string): string[] {
   ];
 }
 
-function unquote(value: string): string {
+function stringMetadata(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function stringListMetadata(value: unknown): string[] {
+  if (Array.isArray(value))
+    return value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[ ,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+type RemoteSnapshotFile = { path: string; contents: string };
+
+function validateRemoteSnapshot(value: unknown): RemoteSnapshotFile[] {
+  if (!Array.isArray(value) || value.length === 0)
+    throw new Error("SKILL_IMPORT_INVALID: skills.sh snapshot has no files");
+  if (value.length > MAX_REMOTE_SKILL_FILES)
+    throw new Error(
+      `SKILL_TOO_LARGE: skills.sh snapshot exceeds ${MAX_REMOTE_SKILL_FILES} files`,
+    );
+  let totalBytes = 0;
+  const files: RemoteSnapshotFile[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object")
+      throw new Error("SKILL_IMPORT_INVALID: invalid skills.sh snapshot entry");
+    const record = raw as Record<string, unknown>;
+    if (typeof record.path !== "string" || typeof record.contents !== "string")
+      throw new Error(
+        "SKILL_IMPORT_INVALID: snapshot entries require path and contents",
+      );
+    const safePath = validateRemotePath(record.path);
+    const key =
+      process.platform === "win32" ? safePath.toLowerCase() : safePath;
+    if (seen.has(key))
+      throw new Error(
+        `SKILL_IMPORT_INVALID: duplicate snapshot path ${safePath}`,
+      );
+    seen.add(key);
+    const bytes = Buffer.byteLength(record.contents, "utf8");
+    if (bytes > MAX_REMOTE_SKILL_FILE_BYTES)
+      throw new Error(
+        `SKILL_TOO_LARGE: ${safePath} exceeds ${MAX_REMOTE_SKILL_FILE_BYTES} bytes`,
+      );
+    totalBytes += bytes;
+    if (totalBytes > MAX_REMOTE_SKILL_TOTAL_BYTES)
+      throw new Error(
+        `SKILL_TOO_LARGE: skills.sh snapshot exceeds ${MAX_REMOTE_SKILL_TOTAL_BYTES} bytes`,
+      );
+    files.push({ path: safePath, contents: record.contents });
+  }
+  return files;
+}
+
+function validateRemotePath(value: string): string {
   if (
-    value.length >= 2 &&
-    ((value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'")))
+    !value ||
+    value.includes("\\") ||
+    value.includes("\0") ||
+    value.startsWith("/")
   )
-    return value.slice(1, -1);
-  return value;
+    throw new Error(`SKILL_IMPORT_INVALID: unsafe snapshot path ${value}`);
+  const normalized = path.posix.normalize(value);
+  if (
+    normalized !== value ||
+    normalized === "." ||
+    normalized.startsWith("../")
+  )
+    throw new Error(`SKILL_IMPORT_INVALID: unsafe snapshot path ${value}`);
+  for (const segment of normalized.split("/")) {
+    if (
+      !segment ||
+      segment === "." ||
+      segment === ".." ||
+      /[<>:"|?*\x00-\x1f]/.test(segment) ||
+      /[. ]$/.test(segment) ||
+      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment)
+    )
+      throw new Error(`SKILL_IMPORT_INVALID: unsafe snapshot path ${value}`);
+  }
+  return normalized;
+}
+
+function hashRemoteSnapshot(files: RemoteSnapshotFile[]): string {
+  const hash = createHash("sha256");
+  for (const file of [...files].sort((a, b) =>
+    a.path === b.path ? 0 : a.path < b.path ? -1 : 1,
+  )) {
+    hash.update(file.path);
+    hash.update(file.contents);
+  }
+  return hash.digest("hex");
+}
+
+function parseRemoteSkillId(remoteId: string): {
+  owner: string;
+  repo: string;
+  skillId: string;
+} {
+  const parts = remoteId.trim().split("/");
+  if (
+    parts.length !== 3 ||
+    !GITHUB_OWNER_PATTERN.test(parts[0] ?? "") ||
+    !GITHUB_REPO_PATTERN.test(parts[1] ?? "") ||
+    !SKILL_NAME_PATTERN.test(parts[2] ?? "")
+  )
+    throw new Error(
+      "SKILL_REMOTE_UNSUPPORTED: install currently requires a GitHub-backed skills.sh id (owner/repo/skill)",
+    );
+  return { owner: parts[0]!, repo: parts[1]!, skillId: parts[2]! };
+}
+
+function parseRemoteSearchEntry(
+  value: unknown,
+  registryBaseUrl: string,
+): RemoteAgentSkillSummary | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const id = stringMetadata(record.id);
+  const name = stringMetadata(record.name);
+  const skillId = stringMetadata(record.skillId) ?? name;
+  const source = stringMetadata(record.source) ?? "";
+  if (!id || !name || !skillId) return undefined;
+  const sourceParts = source.split("/");
+  const installable =
+    sourceParts.length === 2 &&
+    GITHUB_OWNER_PATTERN.test(sourceParts[0] ?? "") &&
+    GITHUB_REPO_PATTERN.test(sourceParts[1] ?? "") &&
+    SKILL_NAME_PATTERN.test(skillId);
+  return {
+    id,
+    name,
+    skillId,
+    source,
+    installs:
+      typeof record.installs === "number" && Number.isFinite(record.installs)
+        ? Math.max(0, Math.floor(record.installs))
+        : 0,
+    url: `${registryBaseUrl.replace(/\/+$/, "")}/${id}`,
+    installable,
+    installed: false,
+  };
+}
+
+async function readSkillOrigin(
+  directory: string,
+): Promise<AgentSkillOrigin | undefined> {
+  try {
+    const parsed = JSON.parse(
+      await readFile(path.join(directory, SKILL_ORIGIN_FILE), "utf8"),
+    ) as Partial<AgentSkillOrigin>;
+    if (
+      parsed.registry !== "skills.sh" ||
+      !parsed.id ||
+      !parsed.source ||
+      !parsed.skillId ||
+      !parsed.url ||
+      !parsed.installedAt
+    )
+      return undefined;
+    return parsed as AgentSkillOrigin;
+  } catch {
+    return undefined;
+  }
 }
 
 async function isDirectory(value: string): Promise<boolean> {

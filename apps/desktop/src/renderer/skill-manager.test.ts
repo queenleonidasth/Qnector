@@ -13,7 +13,9 @@ describe("desktop Skill Manager", () => {
     expect(source).toContain('onClick={() => toggleDrawer("skills")}');
     expect(source).toContain("<span>Skills</span>");
     expect(source).toContain("Runtime & Diagnostics");
-    expect(source).toContain("<SkillManager workspaceKey={status?.activeWorkspace} />");
+    expect(source).toContain(
+      "<SkillManager workspaceKey={status?.activeWorkspace} />",
+    );
   });
 
   it("uses explicit import scope confirmation and shared trigger portals", async () => {
@@ -21,7 +23,12 @@ describe("desktop Skill Manager", () => {
     expect(source).toContain("＋ Add Skill");
     expect(source).toContain("Import File / ZIP");
     expect(source).toContain("Import Folder");
-    expect(source).toContain("setPendingImport({ sourcePath, kind, scope: \"workspace\" })");
+    expect(source).toContain("Discover skills.sh");
+    expect(source).toContain('action: "skills_search_remote"');
+    expect(source).toContain('action: "skill_install_remote"');
+    expect(source).toContain(
+      'setPendingImport({ sourcePath, kind, scope: "workspace" })',
+    );
     expect(source).toContain("const confirmImport = async");
     expect(source).not.toContain("OK = Workspace");
     expect(source).toContain("const triggerModal = triggerOpen");
@@ -34,7 +41,9 @@ describe("desktop Skill Manager", () => {
     expect(source).toContain("window.sessionStorage.setItem");
     expect(source).toContain("skillDraftKey(workspaceKey)");
     expect(source).toContain("setTriggerHasRun(true)");
-    expect(source).toContain("No matching skills. Try a more specific task description.");
+    expect(source).toContain(
+      "No matching skills. Try a more specific task description.",
+    );
   });
 
   it("keeps Skill Manager text readable and its list scrollable", async () => {

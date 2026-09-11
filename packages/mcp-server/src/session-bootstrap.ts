@@ -26,9 +26,10 @@ export function buildSessionBootstrapInstructions(
   if (skills.length > 0) {
     lines.push(
       "",
-      `Agent Skills: ${skills.length} skill(s) are available. AUTOMATIC ROUTING: for every substantive user task, call system.skills_route with the complete task description before acting. Do not wait for the user to name or request a skill. For non-English tasks, append a short English intent/technology hint to the route query. Skip routing only for trivial conversation or a response that requires no Qnector work.`,
-      "Use only the returned relevant skills and follow their instructions for the current task; combining multiple returned skills is allowed when the work spans domains. UI/UX rule: for any non-trivial interface, layout, styling, loading/motion, responsiveness, or usability task, activate the relevant UI/UX/design skill before editing, then visually verify the real surface with browser/computer tools when available.",
-      "COMPLETION DISCLOSURE: at the end of every final answer that completes work, add a concise 'Skills used: <comma-separated activated skill names>' line. If no skill was activated, write 'Skills used: none'. Never claim a skill that was not actually loaded/used in that answer.",
+      `Agent Skills: ${skills.length} available. AUTOMATIC ROUTING: for substantive tasks call system.skills_route with the full task; for non-English tasks add a short English intent/technology hint. Skip only trivial or no-Qnector work.`,
+      "Follow only returned relevant skills. UI/UX work must activate a relevant design skill before editing and be visually verified when browser/computer tools are available.",
+      "SKILL DISCOVERY: only with explicit user intent, search skills.sh via system.skills_search_remote and install selected results via system.skill_install_remote; never silently install third-party skills.",
+      "COMPLETION DISCLOSURE: end completed work with 'Skills used: <activated names|none>'; list only skills actually loaded/used.",
       "Available skill catalog:",
     );
     for (const skill of skills.slice(0, 20)) {

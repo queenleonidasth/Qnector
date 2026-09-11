@@ -107,6 +107,8 @@ describe("session memory bootstrap", () => {
     ]);
     expect(result).toContain("AUTOMATIC ROUTING");
     expect(result).toContain("system.skills_route");
+    expect(result).toContain("system.skills_search_remote");
+    expect(result).toContain("system.skill_install_remote");
     expect(result).toContain("English intent/technology hint");
     expect(result).toContain("Skills used:");
     expect(result).toContain("typescript-best-practices");
