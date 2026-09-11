@@ -69,11 +69,13 @@ describe("drawer navigation and content completeness UX", () => {
     expect(styles).toContain(".unified-drawer-card .btn-update-primary");
   });
 
-  it("prevents the desktop window from shrinking below a usable menu height", () => {
-    expect(mainSource).toContain("width: 451,");
-    expect(mainSource).toContain("height: 978,");
-    expect(mainSource).toContain("minWidth: 451,");
-    expect(mainSource).toContain("minHeight: 978,");
+  it("clamps desktop size to the display work area and keeps a compact usable minimum", () => {
+    expect(mainSource).toContain("screen.getPrimaryDisplay().workAreaSize");
+    expect(mainSource).toContain("const width = Math.min(451, workArea.width);");
+    expect(mainSource).toContain("const height = Math.min(978, workArea.height);");
+    expect(mainSource).toContain("const minWidth = Math.min(420, workArea.width);");
+    expect(mainSource).toContain("const minHeight = Math.min(620, workArea.height);");
+    expect(mainSource).not.toContain("minHeight: 978");
   });
 
   it("launches the Workspace terminal through a real Windows terminal window and surfaces failures", () => {

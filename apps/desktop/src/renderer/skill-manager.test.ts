@@ -13,19 +13,28 @@ describe("desktop Skill Manager", () => {
     expect(source).toContain('onClick={() => toggleDrawer("skills")}');
     expect(source).toContain("<span>Skills</span>");
     expect(source).toContain("Runtime & Diagnostics");
-    expect(source).toContain("<SkillManager />");
+    expect(source).toContain("<SkillManager workspaceKey={status?.activeWorkspace} />");
   });
 
-  it("uses one Add Skill menu for create and import flows", async () => {
+  it("uses explicit import scope confirmation and shared trigger portals", async () => {
     const source = await readFile(skillUrl, "utf8");
     expect(source).toContain("＋ Add Skill");
-    expect(source).toContain("Create Skill");
     expect(source).toContain("Import File / ZIP");
     expect(source).toContain("Import Folder");
-    expect(source).toContain("Duplicate Existing");
-    expect(source).toContain("Test Trigger");
-    expect(source).toContain("createPortal(");
-    expect(source).toContain("document.body");
+    expect(source).toContain("setPendingImport({ sourcePath, kind, scope: \"workspace\" })");
+    expect(source).toContain("const confirmImport = async");
+    expect(source).not.toContain("OK = Workspace");
+    expect(source).toContain("const triggerModal = triggerOpen");
+    expect(source).toContain("{triggerModal}");
+    expect(source).toContain("useModalFocusTrap");
+  });
+
+  it("persists editor drafts and distinguishes zero matcher results", async () => {
+    const source = await readFile(skillUrl, "utf8");
+    expect(source).toContain("window.sessionStorage.setItem");
+    expect(source).toContain("skillDraftKey(workspaceKey)");
+    expect(source).toContain("setTriggerHasRun(true)");
+    expect(source).toContain("No matching skills. Try a more specific task description.");
   });
 
   it("keeps Skill Manager text readable and its list scrollable", async () => {

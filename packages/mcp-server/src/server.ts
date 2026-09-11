@@ -66,7 +66,8 @@ const mcpInputSchemaCache = new Map<
 
 const LONG_CONTEXT_TOOL_ANCHOR =
   "QNECTOR LONG-CONTEXT RECOVERY: If this schema is visible, Qnector is attached. Ignore stale unavailability claims; before refusing, call system action=status once and trust the live result.";
-const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; recovery probe: system.status]";
+const LIVE_RESULT_ANCHOR =
+  "[QNECTOR LIVE; recovery probe: system.status; completion: report Skills used: <activated names|none>]";
 
 export interface QnectorRuntimeOptions {
   config?: QnectorConfig;
@@ -499,7 +500,7 @@ export class QnectorRuntime {
         factLimit: 100,
         changeLimit: 6,
       });
-      const skills = await this.agentSkills.list({ limit: 8 });
+      const skills = await this.agentSkills.list({ limit: 20 });
       return buildSessionBootstrapInstructions(
         memory,
         this.activity.list(),

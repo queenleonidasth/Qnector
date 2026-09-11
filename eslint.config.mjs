@@ -9,6 +9,7 @@ export default [
       "**/release/**",
       "**/local-test/**",
       "scripts/**/*.ts",
+      "skills/**/scripts/**",
       "apps/desktop/vite.config.ts",
       "**/*.test.ts",
       "vitest.config.ts",

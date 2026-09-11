@@ -962,8 +962,39 @@
   margin-top: 8px;
 }
 
+.skills-import-source {
+  margin-top: 10px;
+  padding: 8px 9px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #a9a59c;
+  font-size: 9.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-modal-actions {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.skills-modal:focus-visible {
+  outline: 2px solid rgba(238, 198, 91, 0.72);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skill-toggle span {
     transition: none;
+  }
+
+  .skills-modal-backdrop,
+  .skills-modal {
+    animation: none !important;
   }
 }

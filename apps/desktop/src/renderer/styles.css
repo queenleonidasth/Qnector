@@ -774,6 +774,19 @@ body {
   box-shadow: 0 6px 22px var(--error-glow);
 }
 
+.bridge-connected-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 8px;
+}
+
+.bridge-connected-actions .btn-liquid-action {
+  min-width: 0;
+  padding-inline: 10px;
+  letter-spacing: 0.02em;
+}
+
 /* Live Activity Section */
 .activity-glass-card {
   display: flex;
@@ -2043,6 +2056,8 @@ body {
 
 .setting-toggle-card {
   display: flex;
+  flex: 0 0 auto;
+  min-height: 56px;
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
@@ -4184,11 +4199,32 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .plasma-aura,
+  .plasma-aura.active,
+  .liquid-gold-core,
+  .liquid-gold-core.charging,
+  .liquid-gold-core.connecting,
+  .liquid-gold-core.disconnecting,
+  .orbit-spark,
+  .live-beacon,
+  .status-dot,
   .update-settings-card.ux-busy .update-card-icon,
   .update-status-panel.ux-busy .update-status-panel-icon,
   .update-settings-card.ux-busy .btn-update-primary,
   .update-restart-spinner,
   .update-restart-track span {
-    animation-duration: 2.4s;
+    animation: none !important;
+  }
+}
+
+/* Settings rows must never become nested vertical scrollers. The drawer owns Y overflow. */
+.setting-toggle-card {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+@media (max-width: 430px) {
+  .bridge-connected-actions {
+    grid-template-columns: 1fr;
   }
 }

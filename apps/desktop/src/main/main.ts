@@ -7,6 +7,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  screen,
   shell,
   Tray,
 } from "electron";
@@ -243,11 +244,17 @@ function createWindow(options?: {
   const startupProbe = process.env.QNECTOR_STARTUP_PROBE === "1";
   const showWhenReady = options?.showWhenReady ?? !startupProbe;
 
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.min(451, workArea.width);
+  const height = Math.min(978, workArea.height);
+  const minWidth = Math.min(420, workArea.width);
+  const minHeight = Math.min(620, workArea.height);
+
   mainWindow = new BrowserWindow({
-    width: 451,
-    height: 978,
-    minWidth: 451,
-    minHeight: 978,
+    width,
+    height,
+    minWidth,
+    minHeight,
     backgroundColor: "#121316",
     title: "Qnector",
     icon: windowIcon,
@@ -460,9 +467,13 @@ function registerIpc(): void {
     "skills:choose-import",
     (_event, kind: "file" | "folder" = "file") => chooseSkillImport(kind),
   );
-  ipcMain.handle("system:open-path", (_event, target: string) =>
-    shell.openPath(path.resolve(target)),
-  );
+  ipcMain.handle("system:open-path", async (_event, target: string) => {
+    const resolved = path.resolve(target);
+    const openError = await shell.openPath(resolved);
+    if (openError) {
+      throw new Error(`OPEN_PATH_FAILED: ${openError}`);
+    }
+  });
   ipcMain.handle("system:open-terminal", (_event, target: string) =>
     openTerminalWindow(
       path.resolve(target),

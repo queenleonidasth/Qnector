@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ToolResult } from "../preload/api.js";
+import { useModalFocusTrap } from "./modal-accessibility.js";
 import "./skill-manager.css";
 
 type SkillScope = "user" | "workspace";
@@ -52,6 +53,17 @@ interface SkillForm {
   allowedTools: string[];
 }
 
+interface SkillDraft {
+  editor: "create" | "edit";
+  form: SkillForm;
+}
+
+interface PendingImport {
+  sourcePath: string;
+  kind: "file" | "folder";
+  scope: SkillScope;
+}
+
 const TOOL_NAMES = [
   "system",
   "workspace",
@@ -74,6 +86,23 @@ const emptyForm = (): SkillForm => ({
   allowedTools: ["system", "workspace", "files", "process"],
 });
 
+function skillDraftKey(workspaceKey?: string): string {
+  return `qnector:skill-draft:${workspaceKey?.trim() || "global"}`;
+}
+
+function readSkillDraft(workspaceKey?: string): SkillDraft | undefined {
+  try {
+    const raw = window.sessionStorage.getItem(skillDraftKey(workspaceKey));
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as Partial<SkillDraft>;
+    if (parsed.editor !== "create" && parsed.editor !== "edit") return undefined;
+    if (!parsed.form || typeof parsed.form !== "object") return undefined;
+    return parsed as SkillDraft;
+  } catch {
+    return undefined;
+  }
+}
+
 function unwrap<T>(result: ToolResult): T {
   if (!result.ok) throw new Error(result.error?.message ?? result.summary);
   const outer = result.data as { data?: unknown } | undefined;
@@ -84,7 +113,12 @@ async function system(input: Record<string, unknown>): Promise<ToolResult> {
   return window.qnector.callTool("system", input);
 }
 
-export function SkillManager(): React.ReactElement {
+export function SkillManager({
+  workspaceKey,
+}: {
+  workspaceKey?: string;
+}): React.ReactElement {
+  const initialDraft = useMemo(() => readSkillDraft(workspaceKey), [workspaceKey]);
   const [status, setStatus] = useState<SkillStatus>();
   const [filter, setFilter] = useState<SkillFilter>("all");
   const [query, setQuery] = useState("");
@@ -93,12 +127,19 @@ export function SkillManager(): React.ReactElement {
   const [addOpen, setAddOpen] = useState(false);
   const [detail, setDetail] = useState<SkillDocument>();
   const [validation, setValidation] = useState<SkillValidation>();
-  const [editor, setEditor] = useState<"create" | "edit">();
-  const [form, setForm] = useState<SkillForm>(emptyForm);
+  const [editor, setEditor] = useState<"create" | "edit" | undefined>(
+    initialDraft?.editor,
+  );
+  const [form, setForm] = useState<SkillForm>(() => initialDraft?.form ?? emptyForm());
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [triggerQuery, setTriggerQuery] = useState("");
   const [triggerMatches, setTriggerMatches] = useState<SkillSummary[]>([]);
+  const [triggerHasRun, setTriggerHasRun] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<PendingImport>();
+  const triggerDialogRef = useRef<HTMLElement | null>(null);
+  const duplicateDialogRef = useRef<HTMLElement | null>(null);
+  const importDialogRef = useRef<HTMLElement | null>(null);
 
   const refresh = async (): Promise<void> => {
     setBusy(true);
@@ -115,6 +156,23 @@ export function SkillManager(): React.ReactElement {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    const key = skillDraftKey(workspaceKey);
+    if (editor) {
+      window.sessionStorage.setItem(key, JSON.stringify({ editor, form } satisfies SkillDraft));
+    } else {
+      window.sessionStorage.removeItem(key);
+    }
+  }, [editor, form, workspaceKey]);
+
+  useModalFocusTrap(triggerOpen, triggerDialogRef, () => setTriggerOpen(false));
+  useModalFocusTrap(duplicateOpen, duplicateDialogRef, () => setDuplicateOpen(false));
+  useModalFocusTrap(
+    Boolean(pendingImport),
+    importDialogRef,
+    () => setPendingImport(undefined),
+  );
 
   const skills = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -198,17 +256,22 @@ export function SkillManager(): React.ReactElement {
     setAddOpen(false);
     const sourcePath = await window.qnector.chooseSkillImport(kind);
     if (!sourcePath) return;
-    const scope = window.confirm(
-      "Import only for this workspace?\n\nOK = Workspace\nCancel = User (all workspaces)",
-    )
-      ? "workspace"
-      : "user";
+    setPendingImport({ sourcePath, kind, scope: "workspace" });
+  };
+
+  const confirmImport = async (): Promise<void> => {
+    if (!pendingImport) return;
     setBusy(true);
     setError(undefined);
     try {
       const imported = unwrap<SkillDocument>(
-        await system({ action: "skill_import", sourcePath, scope }),
+        await system({
+          action: "skill_import",
+          sourcePath: pendingImport.sourcePath,
+          scope: pendingImport.scope,
+        }),
       );
+      setPendingImport(undefined);
       await refresh();
       await openSkill(imported.name);
     } catch (reason) {
@@ -279,6 +342,13 @@ export function SkillManager(): React.ReactElement {
     }
   };
 
+  const openTrigger = (initialQuery = ""): void => {
+    setTriggerQuery(initialQuery);
+    setTriggerMatches([]);
+    setTriggerHasRun(false);
+    setTriggerOpen(true);
+  };
+
   const testTrigger = async (): Promise<void> => {
     if (!triggerQuery.trim()) return;
     setBusy(true);
@@ -292,12 +362,163 @@ export function SkillManager(): React.ReactElement {
         }),
       );
       setTriggerMatches(result.skills);
+      setTriggerHasRun(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setBusy(false);
     }
   };
+
+  const triggerModal = triggerOpen
+    ? createPortal(
+        <div
+          className="skills-modal-backdrop"
+          onClick={() => setTriggerOpen(false)}
+        >
+          <section
+            ref={triggerDialogRef}
+            className="skills-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Test Trigger"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="skills-modal-head">
+              <div>
+                <strong>Test Trigger</strong>
+                <small>See which active skills Qnector would match.</small>
+              </div>
+              <button
+                type="button"
+                aria-label="Close Test Trigger"
+                onClick={() => setTriggerOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <label className="skill-field">
+              <span>Prompt or task</span>
+              <textarea
+                rows={4}
+                value={triggerQuery}
+                onChange={(e) => setTriggerQuery(e.target.value)}
+                placeholder="ช่วยออกแบบหน้า settings ให้ใช้ง่ายขึ้น"
+              />
+            </label>
+            <button
+              className="skills-primary skills-test-button"
+              type="button"
+              onClick={() => void testTrigger()}
+              disabled={busy || !triggerQuery.trim()}
+            >
+              {busy ? "Testing…" : "Run Matcher"}
+            </button>
+            <div className="trigger-results">
+              {triggerMatches.map((skill, index) => (
+                <button
+                  type="button"
+                  key={skill.name}
+                  onClick={() => {
+                    setTriggerOpen(false);
+                    void openSkill(skill.name);
+                  }}
+                >
+                  <span>{index + 1}</span>
+                  <div>
+                    <strong>{skill.name}</strong>
+                    <small>{index === 0 ? "Best match" : skill.description}</small>
+                  </div>
+                  <em>›</em>
+                </button>
+              ))}
+              {triggerMatches.length === 0 && (
+                <p>
+                  {triggerHasRun
+                    ? "No matching skills. Try a more specific task description."
+                    : "Run the matcher to see ranked results."}
+                </p>
+              )}
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )
+    : null;
+
+  const importModal = pendingImport
+    ? createPortal(
+        <div
+          className="skills-modal-backdrop"
+          onClick={() => !busy && setPendingImport(undefined)}
+        >
+          <section
+            ref={importDialogRef}
+            className="skills-modal skills-import-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Import Skill"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="skills-modal-head">
+              <div>
+                <strong>Import Skill</strong>
+                <small>Choose where this skill should be available.</small>
+              </div>
+              <button
+                type="button"
+                aria-label="Cancel skill import"
+                disabled={busy}
+                onClick={() => setPendingImport(undefined)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="skills-import-source" title={pendingImport.sourcePath}>
+              {pendingImport.sourcePath}
+            </div>
+            <label className="skill-field">
+              <span>Install scope</span>
+              <select
+                value={pendingImport.scope}
+                disabled={busy}
+                onChange={(event) =>
+                  setPendingImport((current) =>
+                    current
+                      ? { ...current, scope: event.target.value as SkillScope }
+                      : current,
+                  )
+                }
+              >
+                <option value="workspace">Workspace · current project only</option>
+                <option value="user">User · all workspaces</option>
+              </select>
+            </label>
+            <div className="skills-modal-actions">
+              <button
+                type="button"
+                className="skills-secondary"
+                disabled={busy}
+                onClick={() => setPendingImport(undefined)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="skills-primary"
+                disabled={busy}
+                onClick={() => void confirmImport()}
+              >
+                {busy ? "Importing…" : "Import"}
+              </button>
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )
+    : null;
 
   if (editor) {
     return (
@@ -512,10 +733,7 @@ export function SkillManager(): React.ReactElement {
             <button
               className="skills-secondary"
               type="button"
-              onClick={() => {
-                setTriggerOpen(true);
-                setTriggerQuery(detail.name);
-              }}
+              onClick={() => openTrigger(detail.name)}
             >
               Test Trigger
             </button>
@@ -585,6 +803,7 @@ export function SkillManager(): React.ReactElement {
           )}
           {error && <div className="skills-error">{error}</div>}
         </div>
+        {triggerModal}
       </div>
     );
   }
@@ -711,77 +930,13 @@ export function SkillManager(): React.ReactElement {
         <span>
           <i /> Skill runtime ready
         </span>
-        <button type="button" onClick={() => setTriggerOpen(true)}>
+        <button type="button" onClick={() => openTrigger()}>
           ⌁ Test Trigger
         </button>
       </div>
 
-      {triggerOpen &&
-        createPortal(
-          <div
-            className="skills-modal-backdrop"
-            onClick={() => setTriggerOpen(false)}
-          >
-            <section
-              className="skills-modal"
-              role="dialog"
-              aria-modal="true"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="skills-modal-head">
-                <div>
-                  <strong>Test Trigger</strong>
-                  <small>See which active skills Qnector would match.</small>
-                </div>
-                <button type="button" onClick={() => setTriggerOpen(false)}>
-                  ×
-                </button>
-              </div>
-              <label className="skill-field">
-                <span>Prompt or task</span>
-                <textarea
-                  rows={4}
-                  value={triggerQuery}
-                  onChange={(e) => setTriggerQuery(e.target.value)}
-                  placeholder="ช่วยออกแบบหน้า settings ให้ใช้ง่ายขึ้น"
-                />
-              </label>
-              <button
-                className="skills-primary skills-test-button"
-                type="button"
-                onClick={() => void testTrigger()}
-                disabled={busy || !triggerQuery.trim()}
-              >
-                {busy ? "Testing…" : "Run Matcher"}
-              </button>
-              <div className="trigger-results">
-                {triggerMatches.map((skill, index) => (
-                  <button
-                    type="button"
-                    key={skill.name}
-                    onClick={() => {
-                      setTriggerOpen(false);
-                      void openSkill(skill.name);
-                    }}
-                  >
-                    <span>{index + 1}</span>
-                    <div>
-                      <strong>{skill.name}</strong>
-                      <small>
-                        {index === 0 ? "Best match" : skill.description}
-                      </small>
-                    </div>
-                    <em>›</em>
-                  </button>
-                ))}
-                {triggerMatches.length === 0 && (
-                  <p>Run the matcher to see ranked results.</p>
-                )}
-              </div>
-            </section>
-          </div>,
-          document.body,
-        )}
+      {importModal}
+      {triggerModal}
 
       {duplicateOpen &&
         createPortal(
@@ -790,9 +945,12 @@ export function SkillManager(): React.ReactElement {
             onClick={() => setDuplicateOpen(false)}
           >
             <section
+              ref={duplicateDialogRef}
               className="skills-modal duplicate-modal"
               role="dialog"
               aria-modal="true"
+              aria-label="Duplicate Existing Skill"
+              tabIndex={-1}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="skills-modal-head">
@@ -800,7 +958,11 @@ export function SkillManager(): React.ReactElement {
                   <strong>Duplicate Existing</strong>
                   <small>Creates a User copy named &lt;skill&gt;-copy.</small>
                 </div>
-                <button type="button" onClick={() => setDuplicateOpen(false)}>
+                <button
+                  type="button"
+                  aria-label="Close duplicate skill dialog"
+                  onClick={() => setDuplicateOpen(false)}
+                >
                   ×
                 </button>
               </div>

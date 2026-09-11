@@ -74,6 +74,44 @@ describe("session memory bootstrap", () => {
     expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(6_000);
   });
 
+  it("requires automatic skill routing and completion disclosure when skills exist", () => {
+    const memory: MemoryRecall = {
+      available: false,
+      workspaceId: "skill-routing",
+      workspacePath: "C:/work/skill-routing",
+      updatedAt: "2026-09-11T00:00:00.000Z",
+      state: {
+        version: 1,
+        workspaceId: "skill-routing",
+        workspacePath: "C:/work/skill-routing",
+        createdAt: "2026-09-11T00:00:00.000Z",
+        updatedAt: "2026-09-11T00:00:00.000Z",
+        active: null,
+        facts: [],
+        recentChanges: [],
+      },
+      checkpoints: [],
+      counts: { facts: 0, checkpoints: 0, recentChanges: 0 },
+      truncated: false,
+      sanitized: false,
+    };
+    const result = buildSessionBootstrapInstructions(memory, [], undefined, [
+      {
+        name: "typescript-best-practices",
+        description: "Type-safe TypeScript development",
+        path: "C:/skills/typescript-best-practices/SKILL.md",
+        directory: "C:/skills/typescript-best-practices",
+        source: "project",
+        enabled: true,
+      },
+    ]);
+    expect(result).toContain("AUTOMATIC ROUTING");
+    expect(result).toContain("system.skills_route");
+    expect(result).toContain("English intent/technology hint");
+    expect(result).toContain("Skills used:");
+    expect(result).toContain("typescript-best-practices");
+  });
+
   it("reports empty memory and non-fatal memory errors clearly", () => {
     const now = "2026-08-29T14:30:00.000Z";
     const empty: MemoryRecall = {

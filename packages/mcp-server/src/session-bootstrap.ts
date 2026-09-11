@@ -26,12 +26,13 @@ export function buildSessionBootstrapInstructions(
   if (skills.length > 0) {
     lines.push(
       "",
-      `Agent Skills: ${skills.length} skill(s) are available. For specialized or multi-step work, call system.skills_match with the task description, then system.skill_get for the best match before acting.`,
-      "UI/UX rule: for any non-trivial interface, layout, styling, loading/motion, responsiveness, or usability task, match and activate the relevant UI/UX skill before editing, then visually verify the real surface with browser/computer tools when available.",
+      `Agent Skills: ${skills.length} skill(s) are available. AUTOMATIC ROUTING: for every substantive user task, call system.skills_route with the complete task description before acting. Do not wait for the user to name or request a skill. For non-English tasks, append a short English intent/technology hint to the route query. Skip routing only for trivial conversation or a response that requires no Qnector work.`,
+      "Use only the returned relevant skills and follow their instructions for the current task; combining multiple returned skills is allowed when the work spans domains. UI/UX rule: for any non-trivial interface, layout, styling, loading/motion, responsiveness, or usability task, activate the relevant UI/UX/design skill before editing, then visually verify the real surface with browser/computer tools when available.",
+      "COMPLETION DISCLOSURE: at the end of every final answer that completes work, add a concise 'Skills used: <comma-separated activated skill names>' line. If no skill was activated, write 'Skills used: none'. Never claim a skill that was not actually loaded/used in that answer.",
       "Available skill catalog:",
     );
-    for (const skill of skills.slice(0, 12)) {
-      lines.push(`- ${clip(skill.name, 100)}: ${clip(skill.description, 120)}`);
+    for (const skill of skills.slice(0, 20)) {
+      lines.push(`- ${clip(skill.name, 100)}: ${clip(skill.description, 18)}`);
     }
   }
 

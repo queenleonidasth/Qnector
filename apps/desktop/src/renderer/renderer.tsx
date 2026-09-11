@@ -21,6 +21,7 @@ import {
   mergeActivityEntry,
   sameActivityCall,
 } from "./activity-feed.js";
+import { useModalFocusTrap } from "./modal-accessibility.js";
 import { SkillManager } from "./skill-manager.js";
 import "./royal-effects.css";
 
@@ -180,6 +181,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
   const [visibleRows, setVisibleRows] = useState(4);
   const [scrollTop, setScrollTop] = useState(0);
   const streamRef = useRef<HTMLDivElement | null>(null);
+  const detailDialogRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setActivity((current) =>
@@ -253,14 +255,12 @@ const ActivityPanel = React.memo(function ActivityPanel({
     };
   }, []);
 
-  useEffect(() => {
-    if (!selectedActivity) return;
-    const closeOnEscape = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") setSelectedActivity(undefined);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [selectedActivity]);
+  useModalFocusTrap(
+    Boolean(selectedActivity),
+    detailDialogRef,
+    () => setSelectedActivity(undefined),
+    true,
+  );
 
   const rowHeight = 50;
   const overscan = 3;
@@ -343,10 +343,12 @@ const ActivityPanel = React.memo(function ActivityPanel({
           onClick={() => setSelectedActivity(undefined)}
         >
           <section
+            ref={detailDialogRef}
             className="activity-detail-card"
             role="dialog"
             aria-modal="true"
             aria-label={`${selectedActivity.tool}.${selectedActivity.action} tool call details`}
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="activity-detail-header">
@@ -480,17 +482,19 @@ function App(): React.ReactElement {
   const [setupError, setSetupError] = useState<string>();
   const [updateState, setUpdateState] = useState<DesktopUpdateState>();
   const [updateUxPhase, setUpdateUxPhase] = useState<UpdateUxPhase>("idle");
+  const setupDialogRef = useRef<HTMLElement | null>(null);
+  const drawerDialogRef = useRef<HTMLDivElement | null>(null);
 
   // Live Activity owns its own subscription/render state to avoid rerendering App.
 
-  useEffect(() => {
-    if (!setupOpen || setupBusy) return;
-    const closeSetupOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSetupOpen(false);
-    };
-    window.addEventListener("keydown", closeSetupOnEscape);
-    return () => window.removeEventListener("keydown", closeSetupOnEscape);
-  }, [setupOpen, setupBusy]);
+  useModalFocusTrap(
+    setupOpen,
+    setupDialogRef,
+    () => {
+      if (!setupBusy) setSetupOpen(false);
+    },
+    !setupBusy,
+  );
 
   const clearDrawerSwitchTimer = (): void => {
     if (drawerSwitchTimeoutRef.current !== null) {
@@ -522,6 +526,8 @@ function App(): React.ReactElement {
     // Keep a generous fallback for reduced-motion / renderer edge cases.
     drawerCloseFallbackRef.current = window.setTimeout(finishDrawerClose, 600);
   };
+
+  useModalFocusTrap(Boolean(activeDrawer), drawerDialogRef, closeDrawer, true);
 
   const onDrawerAnimationEnd = (
     event: React.AnimationEvent<HTMLDivElement>,
@@ -828,12 +834,29 @@ function App(): React.ReactElement {
 
   const openMemoryFile = async (): Promise<void> => {
     if (!status?.activeWorkspace) return;
+    setMemoryBusy(true);
+    setError(undefined);
     try {
-      await window.qnector.exportMemory("markdown");
       const memoryMdPath = `${status.activeWorkspace}/.qnector/MEMORY.md`;
       await window.qnector.openPath(memoryMdPath);
-    } catch {
-      await window.qnector.exportMemory("markdown");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setMemoryBusy(false);
+    }
+  };
+
+  const exportMemoryFile = async (): Promise<void> => {
+    setMemoryBusy(true);
+    setError(undefined);
+    try {
+      const exportedPath = await window.qnector.exportMemory("markdown");
+      if (!exportedPath) return;
+      await window.qnector.openPath(exportedPath);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setMemoryBusy(false);
     }
   };
 
@@ -1334,13 +1357,25 @@ function App(): React.ReactElement {
           </div>
 
           {isConnected ? (
-            <button
-              className="btn-liquid-action"
-              disabled={isDisconnecting}
-              onClick={() => void openChatGPT()}
-            >
-              <span>↗ Open in ChatGPT</span>
-            </button>
+            <div className="bridge-connected-actions">
+              <button
+                className="btn-liquid-action"
+                type="button"
+                disabled={isDisconnecting}
+                onClick={() => void openChatGPT()}
+              >
+                <span>↗ Open in ChatGPT</span>
+              </button>
+              <button
+                className="btn-liquid-action disconnect"
+                type="button"
+                disabled={busy || isDisconnecting}
+                aria-busy={isDisconnecting}
+                onClick={() => void disconnect()}
+              >
+                <span>{isDisconnecting ? "Disconnecting…" : "Disconnect"}</span>
+              </button>
+            </div>
           ) : (
             <button
               className="btn-liquid-action"
@@ -1411,10 +1446,12 @@ function App(): React.ReactElement {
       {setupOpen && (
         <div className="setup-backdrop" onClick={() => setSetupOpen(false)}>
           <section
+            ref={setupDialogRef}
             className="setup-card"
             role="dialog"
             aria-modal="true"
             aria-label="Qnector OpenAI Tunnel connection setup"
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="setup-header">
@@ -1752,13 +1789,23 @@ function App(): React.ReactElement {
           onClick={closeDrawer}
         >
           <div
+            ref={drawerDialogRef}
             className={`drawer-card unified-drawer-card ${isClosingDrawer ? "closing" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={drawerTitles[activeDrawer]}
+            tabIndex={-1}
             onAnimationEnd={onDrawerAnimationEnd}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="drawer-header">
               <span className="drawer-title">{drawerTitles[activeDrawer]}</span>
-              <button className="btn-drawer-close" onClick={closeDrawer}>
+              <button
+                className="btn-drawer-close"
+                type="button"
+                aria-label="Close drawer"
+                onClick={closeDrawer}
+              >
                 ✕
               </button>
             </div>
@@ -2023,9 +2070,17 @@ function App(): React.ReactElement {
                         className="btn-drawer-action"
                         disabled={memoryBusy}
                         onClick={() => void openMemoryFile()}
-                        title="Open or export MEMORY.md file"
+                        title="Open the workspace MEMORY.md file"
                       >
                         📄 View MEMORY.md
+                      </button>
+                      <button
+                        className="btn-drawer-action"
+                        disabled={memoryBusy}
+                        onClick={() => void exportMemoryFile()}
+                        title="Export memory to a Markdown file"
+                      >
+                        ⇩ Export Memory
                       </button>
                       <button
                         className="btn-drawer-action danger"
@@ -2039,7 +2094,9 @@ function App(): React.ReactElement {
                   </div>
                 </>
               )}
-              {activeDrawer === "skills" && <SkillManager />}
+              {activeDrawer === "skills" && (
+                <SkillManager workspaceKey={status?.activeWorkspace} />
+              )}
               {activeDrawer === "runtime" && (
                 <>
                   <div className="runtime-scroll" data-testid="runtime-scroll">

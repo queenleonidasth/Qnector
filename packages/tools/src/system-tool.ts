@@ -28,7 +28,7 @@ const execFileAsync = promisify(execFile);
 export const systemDefinition: ToolDefinition = {
   name: "system",
   description:
-    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For specialized or multi-step work, use skills_match followed by skill_get to activate a relevant local Agent Skill without loading every skill into context. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
+    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
   inputSchema: {
     type: "object",
     properties: {
@@ -52,6 +52,7 @@ export const systemDefinition: ToolDefinition = {
           "skills_status",
           "skills_list",
           "skills_match",
+          "skills_route",
           "skill_get",
           "skill_create",
           "skill_update",
@@ -446,6 +447,27 @@ export async function executeSystem(
         );
         return {
           summary: `Matched ${skills.length} Agent Skill(s) for '${query}'`,
+          data: { query, skills },
+        };
+      }
+      if (action === "skills_route") {
+        if (!context.agentSkills)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+          );
+        const query = stringInput(object, "query", true)!;
+        const matched = await context.agentSkills.match(
+          query,
+          numberInput(object, "maxResults", 3),
+        );
+        const skills = await Promise.all(
+          matched.map((skill) => context.agentSkills!.get(skill.name)),
+        );
+        return {
+          summary:
+            skills.length > 0
+              ? `Activated ${skills.length} Agent Skill(s): ${skills.map((skill) => skill.name).join(", ")}`
+              : `No Agent Skills matched '${query}'`,
           data: { query, skills },
         };
       }

@@ -17,9 +17,13 @@ foreach ($lib in @("lib.d.ts", "lib.es2022.d.ts", "lib.dom.d.ts")) {
 }
 # Release gate: updater helper scripts are generated dynamically, so validate them
 # with the real Windows PowerShell parser and updater E2E tests before packaging.
-npx pnpm@10.15.0 vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts
+# Use pnpm.cmd directly: invoking pnpm through npx makes npm warnings on stderr fatal
+# under Windows PowerShell when $ErrorActionPreference is Stop.
+$pnpm = (Get-Command "pnpm.cmd" -ErrorAction Stop).Source
+& $pnpm vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts
 if ($LASTEXITCODE -ne 0) { throw "Updater release gate failed; refusing to package a self-update that was not validated" }
-npx pnpm@10.15.0 build:clean
+& $pnpm build:clean
+if ($LASTEXITCODE -ne 0) { throw "Qnector clean build failed; refusing to package" }
 $releaseDir = Join-Path $projectRoot "apps\desktop\release"
 if (Test-Path -LiteralPath $releaseDir) {
   try {
