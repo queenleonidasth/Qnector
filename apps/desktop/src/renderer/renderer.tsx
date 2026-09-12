@@ -314,6 +314,14 @@ const ActivityPanel = React.memo(function ActivityPanel({
                     <div className="item-args">{item.argsSummary || "—"}</div>
                   </div>
                   <div className="item-right">
+                    {item.skillTrace && item.skillTrace.skills.length > 0 && (
+                      <span
+                        className="activity-skill-badge"
+                        title={`Skill context: ${item.skillTrace.skills.join(", ")}`}
+                      >
+                        SKILL {item.skillTrace.skills.length}
+                      </span>
+                    )}
                     {item.status === "running" ? (
                       <span className="activity-processing-label">
                         PROCESSING…
@@ -396,6 +404,32 @@ const ActivityPanel = React.memo(function ActivityPanel({
                 </strong>
               </div>
             </div>
+            {selectedActivity.skillTrace &&
+              selectedActivity.skillTrace.skills.length > 0 && (
+                <div className="activity-detail-section activity-skill-trace">
+                  <span className="activity-detail-label">
+                    {selectedActivity.skillTrace.evidence === "activated"
+                      ? "SKILLS ACTIVATED"
+                      : "SKILL CONTEXT"}
+                  </span>
+                  <div className="activity-skill-chips">
+                    {selectedActivity.skillTrace.skills.map((skill) => (
+                      <span className="activity-skill-chip" key={skill}>
+                        ◇ {skill}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="activity-skill-proof">
+                    {selectedActivity.skillTrace.evidence === "activated"
+                      ? "Runtime evidence: this routing call loaded these Skill documents into the model context."
+                      : "Runtime evidence: these Skill documents were activated before this tool call, and their allowed-tools scope includes or does not restrict this tool."}
+                  </div>
+                  <div className="activity-skill-route">
+                    Route {shortActivityId(selectedActivity.skillTrace.routeId)}{" "}
+                    · {selectedActivity.skillTrace.query}
+                  </div>
+                </div>
+              )}
             <div className="activity-detail-section">
               <span className="activity-detail-label">REQUEST / ARGUMENTS</span>
               <pre className="activity-detail-code">

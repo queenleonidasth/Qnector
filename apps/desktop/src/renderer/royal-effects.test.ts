@@ -179,6 +179,17 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(matrixText).toContain("disconnectProgressRef.current");
   });
 
+  it("preserves Matrix stream state across disconnect, reconnect, and hero resize", async () => {
+    const text = await matrix();
+
+    expect(text).toContain("const isConnectedRef = useRef(isConnected)");
+    expect(text).toContain("isConnectedRef.current = isConnected");
+    expect(text).toContain("const syncColumns = (): void => {");
+    expect(text).toContain("const existing = columns[columnIndex]");
+    expect(text).toContain("existing.x = x");
+    expect(text).not.toContain("const createColumns = (): void => {");
+    expect(text).not.toContain("}, [isConnected]);");
+  });
   it("enlarges all four dashboard dock menu labels and icons without changing drawer sizing", async () => {
     const css = await effects();
 

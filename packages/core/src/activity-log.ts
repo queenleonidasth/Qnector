@@ -137,6 +137,12 @@ export class ActivityLogger {
       ...(input.error === undefined
         ? {}
         : { error: sanitizeValue(input.error).value as ToolError }),
+      ...(input.skillTrace === undefined
+        ? {}
+        : {
+            skillTrace: sanitizeValue(input.skillTrace)
+              .value as ActivityEntry["skillTrace"],
+          }),
     };
     this.entries.push(entry);
     while (this.entries.length > this.maxEntries) this.entries.shift();
@@ -178,6 +184,12 @@ export class ActivityLogger {
       ...(input.error === undefined
         ? {}
         : { error: sanitizeValue(input.error).value as ToolError }),
+      ...(input.skillTrace === undefined
+        ? {}
+        : {
+            skillTrace: sanitizeValue(input.skillTrace)
+              .value as ActivityEntry["skillTrace"],
+          }),
     };
     this.entries.push(entry);
     while (this.entries.length > this.maxEntries) this.entries.shift();

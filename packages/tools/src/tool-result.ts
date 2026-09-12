@@ -19,6 +19,7 @@ import type {
   AgentSkillService,
 } from "@qnector/core";
 import type {
+  ActivitySkillTrace,
   QnectorConfig,
   ToolError,
   ToolMeta,
@@ -50,8 +51,53 @@ export interface ToolContext {
   memoryTaskId?: string;
   platform?: PlatformServices;
   activity: ActivityLogger;
+  skillTrace?: SkillTraceState;
+  skillTraceStore?: SkillTraceStore;
   getConfig(): QnectorConfig;
   setConfig(config: QnectorConfig): Promise<void>;
+}
+
+export interface SkillTraceState {
+  routeId?: string;
+  query?: string;
+  activatedAt?: string;
+  skills: Array<{
+    name: string;
+    allowedTools?: string[];
+  }>;
+}
+
+export interface SkillTraceStore {
+  default: SkillTraceState;
+  byTaskId: Map<string, SkillTraceState>;
+}
+
+function activitySkillTrace(
+  context: ToolContext,
+  tool: string,
+  action: string,
+): ActivitySkillTrace | undefined {
+  const trace = context.skillTrace;
+  if (!trace?.routeId || !trace.query || !trace.activatedAt) return undefined;
+
+  const activatingRoute = tool === "system" && action === "skills_route";
+  const skills = trace.skills
+    .filter(
+      (skill) =>
+        activatingRoute ||
+        !skill.allowedTools?.length ||
+        skill.allowedTools.includes(tool),
+    )
+    .map((skill) => skill.name);
+  if (skills.length === 0) return undefined;
+
+  return {
+    routeId: trace.routeId,
+    query: trace.query,
+    activatedAt: trace.activatedAt,
+    skills,
+    evidence: activatingRoute ? "activated" : "in_context",
+  };
 }
 
 export function argsSummary(input: unknown): string {
@@ -195,12 +241,17 @@ export async function runWithActivity<T>(
   work: () => Promise<T>,
 ): Promise<ToolResult<T>> {
   const startedAt = Date.now();
+  const runningSkillTrace =
+    action === "skills_route"
+      ? undefined
+      : activitySkillTrace(context, tool, action);
   if (context.activity.nonBlockingWrites)
     context.activity.recordBuffered({
       tool,
       action,
       argsSummary: argsSummary(input),
       status: "running",
+      ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
     });
   else
     await context.activity.record({
@@ -208,6 +259,7 @@ export async function runWithActivity<T>(
       action,
       argsSummary: argsSummary(input),
       status: "running",
+      ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
     });
   try {
     const result = await work();
@@ -227,6 +279,7 @@ export async function runWithActivity<T>(
         ? output.summary
         : `${tool}.${action} completed`;
     const summary = sanitizeText(rawSummary).value;
+    const completedSkillTrace = activitySkillTrace(context, tool, action);
     if (context.activity.nonBlockingWrites)
       context.activity.recordBuffered({
         tool,
@@ -236,6 +289,7 @@ export async function runWithActivity<T>(
         durationMs: Date.now() - startedAt,
         outputSize: JSON.stringify(result).length,
         summary,
+        ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
       });
     else
       await context.activity.record({
@@ -246,6 +300,7 @@ export async function runWithActivity<T>(
         durationMs: Date.now() - startedAt,
         outputSize: JSON.stringify(result).length,
         summary,
+        ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
       });
     recordMemoryV2Event(context, tool, action, input, "success", summary);
     const response = success(
@@ -274,22 +329,30 @@ export async function runWithActivity<T>(
       Date.now() - startedAt,
     );
     const parsed = errorFromUnknown(error);
+    const failedSkillTrace =
+      action === "skills_route"
+        ? undefined
+        : activitySkillTrace(context, tool, action);
     if (context.activity.nonBlockingWrites)
-      context.activity.errorBuffered(
+      context.activity.recordBuffered({
         tool,
         action,
-        argsSummary(input),
-        parsed,
-        Date.now() - startedAt,
-      );
+        argsSummary: argsSummary(input),
+        status: "error",
+        error: parsed,
+        durationMs: Date.now() - startedAt,
+        ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
+      });
     else
-      await context.activity.error(
+      await context.activity.record({
         tool,
         action,
-        argsSummary(input),
-        parsed,
-        Date.now() - startedAt,
-      );
+        argsSummary: argsSummary(input),
+        status: "error",
+        error: parsed,
+        durationMs: Date.now() - startedAt,
+        ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
+      });
     recordMemoryV2Event(
       context,
       tool,

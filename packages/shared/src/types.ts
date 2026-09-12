@@ -70,6 +70,15 @@ export interface ActivityEntry {
   outputSize?: number;
   summary?: string;
   error?: ToolError;
+  skillTrace?: ActivitySkillTrace;
+}
+
+export interface ActivitySkillTrace {
+  routeId: string;
+  query: string;
+  activatedAt: string;
+  skills: string[];
+  evidence: "activated" | "in_context";
 }
 
 export type MemoryCategory = "fact" | "decision" | "rule" | "note";

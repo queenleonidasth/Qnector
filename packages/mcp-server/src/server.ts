@@ -52,7 +52,7 @@ import type {
 } from "@qnector/shared";
 import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry } from "@qnector/tools";
-import type { ToolContext } from "@qnector/tools";
+import type { SkillTraceStore, ToolContext } from "@qnector/tools";
 import {
   buildSessionBootstrapError,
   buildSessionBootstrapInstructions,
@@ -120,6 +120,10 @@ export class QnectorRuntime {
   private config: QnectorConfig;
   private readonly mcpHandler: ReturnType<typeof createMcpHandler>;
   private readonly mcpNodeHandler: ReturnType<typeof toNodeHandler>;
+  private readonly skillTraceStore: SkillTraceStore = {
+    default: { skills: [] },
+    byTaskId: new Map(),
+  };
   private startedAt = new Date().toISOString();
   private state: ServerStatus["state"] = "disconnected";
   private listening = false;
@@ -280,6 +284,7 @@ export class QnectorRuntime {
       memoryV2: this.memoryV2,
       platform: this.platform,
       activity: this.activity,
+      skillTraceStore: this.skillTraceStore,
       getConfig: () => this.config,
       setConfig: (config) => this.setConfig(config),
     };

@@ -78,6 +78,13 @@ describe("desktop UI overflow guards", () => {
     expect(css).toMatch(
       /\.activity-detail-summary \{[\s\S]*?font-size:\s*11px;/,
     );
+    expect(css).toMatch(
+      /\.activity-skill-badge \{[\s\S]*?border-radius:\s*999px;[\s\S]*?font-size:\s*9px;/,
+    );
+    expect(css).toMatch(/\.activity-skill-chips \{[\s\S]*?flex-wrap:\s*wrap;/);
+    expect(css).toMatch(
+      /\.activity-skill-route \{[\s\S]*?overflow-wrap:\s*anywhere;/,
+    );
   });
 
   it("keeps the setup wizard readable and touch-friendly", async () => {

@@ -1,6 +1,9 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import type { ActivityEntry } from "@qnector/shared";
 import { coalesceActivity, mergeActivityEntry } from "./activity-feed.js";
+
+const rendererUrl = new URL("./renderer.tsx", import.meta.url);
 
 function activity(
   id: string,
@@ -56,5 +59,46 @@ describe("activity feed coalescing", () => {
 
     expect(merged.map((entry) => entry.id)).toEqual(["new", "old"]);
     expect(merged[0]?.summary).toBe("Updated result");
+  });
+
+  it("keeps completed Skill trace evidence when a running row is coalesced", () => {
+    const running = activity(
+      "run-skill",
+      "running",
+      "2026-09-12T08:00:00.000Z",
+    );
+    const success = activity(
+      "done-skill",
+      "success",
+      "2026-09-12T08:00:00.100Z",
+      {
+        skillTrace: {
+          routeId: "route-1",
+          query: "fix smooth animation",
+          activatedAt: "2026-09-12T07:59:59.000Z",
+          skills: ["ui-ux-design"],
+          evidence: "in_context",
+        },
+      },
+    );
+
+    const [merged] = coalesceActivity([running, success]);
+    expect(merged?.id).toBe("run-skill");
+    expect(merged?.skillTrace?.skills).toEqual(["ui-ux-design"]);
+    expect(merged?.skillTrace?.evidence).toBe("in_context");
+  });
+
+  it("surfaces Skill context evidence in Live Activity rows and details", async () => {
+    const source = await readFile(rendererUrl, "utf8");
+    expect(source).toContain("activity-skill-badge");
+    expect(source).toContain('"SKILLS ACTIVATED"');
+    expect(source).toContain('"SKILL CONTEXT"');
+    expect(source).toContain(
+      "Runtime evidence: this routing call loaded these Skill documents",
+    );
+    expect(source).toContain(
+      "allowed-tools scope includes or does not restrict this tool",
+    );
+    expect(source).toContain("selectedActivity.skillTrace.routeId");
   });
 });

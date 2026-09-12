@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -473,6 +474,17 @@ export async function executeSystem(
         const skills = await Promise.all(
           matched.map((skill) => context.agentSkills!.get(skill.name)),
         );
+        if (context.skillTrace) {
+          context.skillTrace.routeId = randomUUID();
+          context.skillTrace.query = query;
+          context.skillTrace.activatedAt = new Date().toISOString();
+          context.skillTrace.skills = skills.map((skill) => ({
+            name: skill.name,
+            ...(skill.allowedTools?.length
+              ? { allowedTools: [...skill.allowedTools] }
+              : {}),
+          }));
+        }
         return {
           summary:
             skills.length > 0

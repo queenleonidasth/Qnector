@@ -13,6 +13,7 @@ import { WebSocketServer } from "ws";
 import AdmZip from "adm-zip";
 import { describe, expect, it, afterEach } from "vitest";
 import { ActivityLogger } from "../../core/src/activity-log.js";
+import { AgentSkillService } from "../../core/src/agent-skills.js";
 import { TypeScriptCodeIntelligence } from "../../core/src/code-intelligence.js";
 import { DocumentIntelligenceService } from "../../core/src/document-intelligence.js";
 import { FileWatchService } from "../../core/src/file-watch.js";
@@ -88,6 +89,94 @@ describe("Qnector grouped tools", () => {
     expect(await readFile(path.join(root, "added.txt"), "utf8")).toBe(
       "added\n",
     );
+  });
+
+  it("records task-scoped Skill activation and tool-call context in Live Activity", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skill-activity-"));
+    const config = defaultConfig(root);
+    const context = makeContext(config);
+    const skillsRoot = path.join(root, "skills");
+    const skillDirectory = path.join(skillsRoot, "ui-animation-check");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      [
+        "---",
+        "name: ui-animation-check",
+        'description: "Fix frontend UI animation smoothness and interaction continuity."',
+        "allowed-tools: [files]",
+        "---",
+        "# UI Animation Check",
+        "Preserve interaction state across transitions.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    context.agentSkills = new AgentSkillService({
+      roots: [{ path: skillsRoot, source: "test" }],
+    });
+    context.skillTraceStore = {
+      default: { skills: [] },
+      byTaskId: new Map(),
+    };
+    const registry = new ToolRegistry();
+    const memoryTaskId = "task_skill_trace";
+
+    const routed = await registry.call("system", context, {
+      action: "skills_route",
+      query: "fix frontend ui animation smoothness",
+      memoryTaskId,
+    });
+    expect(routed.ok).toBe(true);
+    await writeFile(path.join(root, "trace.txt"), "trace\n", "utf8");
+    const read = await registry.call("files", context, {
+      action: "read",
+      path: "trace.txt",
+      memoryTaskId,
+    });
+    expect(read.ok).toBe(true);
+    const workspace = await registry.call("workspace", context, {
+      action: "summary",
+      memoryTaskId,
+    });
+    expect(workspace.ok).toBe(true);
+
+    const entries = context.activity.list();
+    const routeEntry = [...entries]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.tool === "system" &&
+          entry.action === "skills_route" &&
+          entry.status === "success",
+      );
+    expect(routeEntry?.skillTrace).toMatchObject({
+      query: "fix frontend ui animation smoothness",
+      skills: ["ui-animation-check"],
+      evidence: "activated",
+    });
+    expect(routeEntry?.skillTrace?.routeId).toBeTruthy();
+
+    const fileEntry = [...entries]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.tool === "files" &&
+          entry.action === "read" &&
+          entry.status === "success",
+      );
+    expect(fileEntry?.skillTrace).toMatchObject({
+      routeId: routeEntry?.skillTrace?.routeId,
+      skills: ["ui-animation-check"],
+      evidence: "in_context",
+    });
+
+    const workspaceEntry = [...entries]
+      .reverse()
+      .find(
+        (entry) => entry.tool === "workspace" && entry.status === "success",
+      );
+    expect(workspaceEntry?.skillTrace).toBeUndefined();
   });
 
   it("replaces exact text inside DOCX and PPTX OOXML packages", async () => {

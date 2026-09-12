@@ -7,6 +7,8 @@ import {
   objectInput,
   runWithActivity,
   type ToolContext,
+  type SkillTraceState,
+  type SkillTraceStore,
 } from "./tool-result.js";
 import { executeSystem, systemDefinition } from "./system-tool.js";
 import { executeWorkspace, workspaceDefinition } from "./workspace-tool.js";
@@ -56,8 +58,18 @@ export class ToolRegistry {
     context: ToolContext,
     input: unknown,
   ): Promise<ToolResult> {
-    const memoryTaskId = memoryTaskIdFromInput(input);
-    const scopedContext = memoryTaskId ? { ...context, memoryTaskId } : context;
+    const memoryTaskId = memoryTaskIdFromInput(input) ?? context.memoryTaskId;
+    const skillTrace =
+      skillTraceForTask(context.skillTraceStore, memoryTaskId) ??
+      context.skillTrace;
+    const scopedContext =
+      memoryTaskId || skillTrace
+        ? {
+            ...context,
+            ...(memoryTaskId ? { memoryTaskId } : {}),
+            ...(skillTrace ? { skillTrace } : {}),
+          }
+        : context;
     if (name === "system" && isParallelRequest(input)) {
       return this.callParallel(scopedContext, input);
     }
@@ -240,6 +252,26 @@ function memoryTaskIdFromInput(input: unknown): string | undefined {
     return undefined;
   const value = (input as { memoryTaskId?: unknown }).memoryTaskId;
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function skillTraceForTask(
+  store: SkillTraceStore | undefined,
+  memoryTaskId: string | undefined,
+): SkillTraceState | undefined {
+  if (!store) return undefined;
+  if (!memoryTaskId) return store.default;
+
+  let trace = store.byTaskId.get(memoryTaskId);
+  if (!trace) {
+    trace = { skills: [] };
+    store.byTaskId.set(memoryTaskId, trace);
+    while (store.byTaskId.size > 100) {
+      const oldest = store.byTaskId.keys().next().value as string | undefined;
+      if (!oldest) break;
+      store.byTaskId.delete(oldest);
+    }
+  }
+  return trace;
 }
 
 function withTaskIdSchema(

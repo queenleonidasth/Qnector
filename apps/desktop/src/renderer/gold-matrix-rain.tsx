@@ -74,6 +74,7 @@ export function GoldMatrixRain({
   const disconnectProgressRef = useRef(
     normalizeDisconnectProgress(disconnectProgress),
   );
+  const isConnectedRef = useRef(isConnected);
   const frozenRef = useRef(frozen);
   const startAnimationRef = useRef<(() => void) | null>(null);
   const stopAnimationRef = useRef<(() => void) | null>(null);
@@ -81,6 +82,7 @@ export function GoldMatrixRain({
 
   disconnectProgressRef.current =
     normalizeDisconnectProgress(disconnectProgress);
+  isConnectedRef.current = isConnected;
   frozenRef.current = frozen;
 
   useEffect(() => {
@@ -100,21 +102,32 @@ export function GoldMatrixRain({
     let columns: MatrixColumn[] = [];
 
     const connectionSpeed = (): number =>
-      isConnected ? ROYAL_SOVEREIGN.flowSpeed : DORMANT_SPEED_MULTIPLIER;
+      isConnectedRef.current
+        ? ROYAL_SOVEREIGN.flowSpeed
+        : DORMANT_SPEED_MULTIPLIER;
 
-    const createColumns = (): void => {
+    const syncColumns = (): void => {
       const count = Math.max(
         1,
         Math.floor(width / ROYAL_SOVEREIGN.columnSpacing),
       );
-      columns = [];
+      if (columns.length > count) columns = columns.slice(0, count);
 
       for (let columnIndex = 0; columnIndex < count; columnIndex++) {
+        const x =
+          columnIndex * ROYAL_SOVEREIGN.columnSpacing +
+          Math.floor(ROYAL_SOVEREIGN.columnSpacing / 2);
+        const existing = columns[columnIndex];
+        if (existing) {
+          // Resize/connection UI changes must not randomize an existing stream.
+          // Preserve glyphs, position, velocity and mutation timing exactly.
+          existing.x = x;
+          continue;
+        }
+
         const length = Math.floor(Math.random() * 12) + 12;
         columns.push({
-          x:
-            columnIndex * ROYAL_SOVEREIGN.columnSpacing +
-            Math.floor(ROYAL_SOVEREIGN.columnSpacing / 2),
+          x,
           y: Math.random() * (height + 150) - 50,
           speed: Math.random() * 1.2 + 0.9,
           length,
@@ -143,7 +156,7 @@ export function GoldMatrixRain({
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      createColumns();
+      syncColumns();
     };
 
     const drawFrame = (deltaMs: number, animate: boolean): void => {
@@ -350,7 +363,7 @@ export function GoldMatrixRain({
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       motionQuery.removeEventListener("change", refreshMotionState);
     };
-  }, [isConnected]);
+  }, []);
 
   useEffect(() => {
     disconnectProgressRef.current =

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import net from "node:net";
@@ -7,6 +7,7 @@ import {
   Client,
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
+import { AgentSkillService } from "../../core/src/agent-skills.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { Phase0Server } from "./phase0.js";
 import { QnectorRuntime } from "./server.js";
@@ -25,9 +26,29 @@ describe("Qnector MCP runtime", () => {
   it("serves legacy stateless and modern 2026-07-28 MCP traffic", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-mcp-"));
     const port = await freePort();
+    const skillsRoot = path.join(root, "skills");
+    const skillDirectory = path.join(skillsRoot, "activity-trace-skill");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      [
+        "---",
+        "name: activity-trace-skill",
+        'description: "Trace frontend UI animation edits through file tool calls."',
+        "allowed-tools: [files]",
+        "---",
+        "# Activity Trace Skill",
+        "Use the files tool for source edits.",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
     runtime = new QnectorRuntime({
       config: { ...defaultConfig(root), localPort: port },
       configFile: path.join(root, "config.json"),
+      agentSkills: new AgentSkillService({
+        roots: [{ path: skillsRoot, source: "test" }],
+      }),
     });
     await runtime.memory.saveCheckpoint({
       currentTask: "Continue the saved Qnector task",
@@ -215,6 +236,21 @@ describe("Qnector MCP runtime", () => {
     const memoryTaskId = memoryTaskStructured?.data?.data?.taskId;
     expect(memoryTaskId).toMatch(/^task_/);
 
+    const skillRoute = await request(`http://127.0.0.1:${port}/mcp`, {
+      jsonrpc: "2.0",
+      id: 204,
+      method: "tools/call",
+      params: {
+        name: "system",
+        arguments: {
+          action: "skills_route",
+          query: "trace frontend ui animation edits",
+          memoryTaskId,
+        },
+      },
+    });
+    expect(skillRoute.response.ok).toBe(true);
+
     const taskFile = path.join(root, "memory-v2-e2e.txt");
     const taskWrite = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",
@@ -234,6 +270,32 @@ describe("Qnector MCP runtime", () => {
     expect(JSON.stringify(taskWrite.body)).toContain(
       "QNECTOR LIVE; recovery probe: system.status",
     );
+    const skillActivity = runtime.activity.list();
+    const routeActivity = [...skillActivity]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.tool === "system" &&
+          entry.action === "skills_route" &&
+          entry.status === "success",
+      );
+    const writeActivity = [...skillActivity]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.tool === "files" &&
+          entry.action === "write" &&
+          entry.status === "success",
+      );
+    expect(routeActivity?.skillTrace).toMatchObject({
+      skills: ["activity-trace-skill"],
+      evidence: "activated",
+    });
+    expect(writeActivity?.skillTrace).toMatchObject({
+      routeId: routeActivity?.skillTrace?.routeId,
+      skills: ["activity-trace-skill"],
+      evidence: "in_context",
+    });
 
     const memorySnapshot = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",
