@@ -14,7 +14,10 @@ import AdmZip from "adm-zip";
 import { describe, expect, it, afterEach } from "vitest";
 import { ActivityLogger } from "../../core/src/activity-log.js";
 import { TypeScriptCodeIntelligence } from "../../core/src/code-intelligence.js";
+import { DocumentIntelligenceService } from "../../core/src/document-intelligence.js";
+import { FileWatchService } from "../../core/src/file-watch.js";
 import { WindowsFileSearchService } from "../../core/src/file-search.js";
+import { LocalSemanticSearchService } from "../../core/src/semantic-search.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { MemoryStore } from "../../core/src/memory-store.js";
 import type { PlatformServices } from "../../core/src/platform-services.js";
@@ -24,6 +27,7 @@ import type {
   UiAutomationWindow,
 } from "../../core/src/ui-automation.js";
 import { ProcessManager } from "../../core/src/process-manager.js";
+import { WorkflowManager } from "../../core/src/workflow-manager.js";
 import { WorkspaceState } from "../../core/src/workspace-state.js";
 import { ToolRegistry, type ToolContext } from "./index.js";
 
@@ -120,6 +124,82 @@ describe("Qnector grouped tools", () => {
     }
   });
 
+  it("runs the document-batch recipe end to end with edit, validate, and collect", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-document-batch-"));
+    const source = path.join(root, "input.docx");
+    const destination = path.join(root, "output.docx");
+    const zip = new AdmZip();
+    zip.addFile(
+      "word/document.xml",
+      Buffer.from(
+        '<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>Hello Queen</w:t></w:r></w:p><w:p><w:r><w:t>Version 1</w:t></w:r></w:p></w:body></w:document>',
+        "utf8",
+      ),
+    );
+    zip.writeZip(source);
+
+    const config = defaultConfig(root);
+    const registry = new ToolRegistry();
+    const base = makeContext(config);
+    const fileWatch = new FileWatchService();
+    let context!: ToolContext;
+    const workflowManager = new WorkflowManager(
+      base.processManager,
+      fileWatch,
+      {
+        executeTool: async (tool, input) => registry.call(tool, context, input),
+      },
+    );
+    context = {
+      ...base,
+      fileWatch,
+      workflowManager,
+      documentIntelligence: new DocumentIntelligenceService(),
+    };
+
+    const started = await registry.call("process", context, {
+      action: "workflow_document_batch",
+      workflowName: "document-batch-fixture",
+      maxConcurrency: 3,
+      documents: [
+        {
+          id: "brief",
+          path: source,
+          destination,
+          render: false,
+          replacements: [
+            { oldText: "Hello Queen", newText: "Hello Qnector" },
+            { oldText: "Version 1", newText: "Version 2" },
+          ],
+        },
+      ],
+    });
+    expect(started.ok).toBe(true);
+    const runId = (started.data as { data?: { runId?: string } } | undefined)
+      ?.data?.runId;
+    expect(runId).toMatch(/^workflow_/);
+
+    const waited = await registry.call("process", context, {
+      action: "workflow_wait",
+      runId,
+      timeoutMs: 10_000,
+    });
+    expect(waited.ok).toBe(true);
+    expect(JSON.stringify(waited.data)).toContain('"state":"succeeded"');
+
+    const output = new AdmZip(destination).readAsText("word/document.xml");
+    expect(output).toContain("Hello Qnector");
+    expect(output).toContain("Version 2");
+
+    const result = await registry.call("process", context, {
+      action: "workflow_result",
+      runId,
+    });
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.data)).toContain("brief-validate");
+    expect(JSON.stringify(result.data)).toContain("brief-edit-2");
+  });
+
   it("runs independent tool calls through one bounded parallel batch", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-"));
     await writeFile(path.join(root, "alpha.txt"), "alpha\n");
@@ -155,6 +235,48 @@ describe("Qnector grouped tools", () => {
     ]);
     expect(batch?.results?.every((entry) => entry.result.ok)).toBe(true);
     expect(JSON.stringify(result)).toContain('"maxConcurrency":3');
+  });
+
+  it("settles thrown parallel subcalls without losing sibling results", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-settle-"));
+    const context = makeContext(defaultConfig(root));
+    const registry = new ToolRegistry();
+    const internal = registry as unknown as {
+      handlers: Map<
+        string,
+        (context: ToolContext, input: unknown) => Promise<never>
+      >;
+    };
+    internal.handlers.set("git", async () => {
+      throw new Error("FIXTURE_THROW: handler exploded");
+    });
+
+    const result = await registry.call("system", context, {
+      action: "parallel",
+      calls: [
+        { id: "throws", tool: "git", input: { action: "status" } },
+        { id: "sibling", tool: "system", input: { action: "status" } },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    const batch = (
+      result.data as {
+        data?: {
+          results?: Array<{
+            id?: string;
+            result: { ok: boolean; error?: { code?: string } };
+          }>;
+          succeeded?: number;
+          failed?: number;
+        };
+      }
+    )?.data;
+    expect(batch?.results).toHaveLength(2);
+    expect(batch?.results?.[0]?.result.ok).toBe(false);
+    expect(batch?.results?.[0]?.result.error?.code).toBe("FIXTURE_THROW");
+    expect(batch?.results?.[1]?.result.ok).toBe(true);
+    expect(batch?.succeeded).toBe(1);
+    expect(batch?.failed).toBe(1);
   });
 
   it("rejects recursive parallel fan-out", async () => {
@@ -694,6 +816,57 @@ describe("Qnector grouped tools", () => {
     expect(JSON.stringify(result)).toContain("report-final.xlsx");
     expect(JSON.stringify(result)).not.toContain("report-notes.txt");
     expect(JSON.stringify(result)).toContain("bounded");
+  });
+
+  it("supports quoted Windows paths and exact filename wildcards in fallback search", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-quoted-search-"));
+    const directory = path.join(root, "Monthly Reports");
+    await mkdir(directory);
+    await writeFile(path.join(directory, "report-final.xlsx"), "sheet");
+    await writeFile(path.join(directory, "report-final.xlsx.bak"), "backup");
+    const service = new WindowsFileSearchService({
+      platform: "win32",
+      findEverythingExecutable: async () => null,
+      runExecutable: async () => {
+        throw new Error("not expected");
+      },
+      fallbackRoots: () => [root!],
+    });
+    const result = await service.search({
+      query: `path:"${directory}" report-*.xlsx`,
+      provider: "fallback",
+    });
+    expect(result.matches.map((match) => match.name)).toEqual([
+      "report-final.xlsx",
+    ]);
+    await expect(
+      service.search({ query: 'path:"unclosed', provider: "fallback" }),
+    ).rejects.toThrow("INVALID_INPUT");
+  });
+
+  it("exposes semantic search pagination and score filters through the grouped tool", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-semantic-tool-"));
+    await writeFile(path.join(root, "a.md"), "stock export");
+    await writeFile(path.join(root, "b.md"), "stock export");
+    const context = makeContext(defaultConfig(root));
+    context.semanticSearch = new LocalSemanticSearchService();
+    const registry = new ToolRegistry();
+    const input = {
+      action: "semantic_search",
+      query: "stock export",
+      maxResults: 1,
+      minScore: 0.7,
+    };
+    const first = await registry.call("workspace", context, input);
+    expect(first.ok).toBe(true);
+    expect(first.meta.nextCursor).toBe(1);
+    const next = await registry.call("workspace", context, {
+      ...input,
+      offset: first.meta.nextCursor,
+    });
+    expect(next.ok).toBe(true);
+    expect(next.meta.truncated).toBe(false);
+    expect(JSON.stringify(next.data)).toContain('"file":"b.md"');
   });
 
   it("resolves bundled ripgrep through system.which on Windows", async () => {

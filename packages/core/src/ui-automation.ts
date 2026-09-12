@@ -421,7 +421,7 @@ export class WindowsUiAutomationService implements UiAutomationService {
       ).trim();
       const cleaned = details.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
       const known = cleaned.match(
-        /(ELEMENT_STALE|UIA_WINDOW_NOT_FOUND|UIA_ACTION_UNSUPPORTED|UIA_ACCESS_DENIED|UIA_TIMEOUT|INVALID_INPUT):\s*([^'\r\n}]*)/,
+        /(ELEMENT_STALE|UIA_WINDOW_NOT_FOUND|UIA_ACTION_UNSUPPORTED|UIA_ACCESS_DENIED|UIA_TIMEOUT|UIA_OUTCOME_UNKNOWN|INVALID_INPUT):\s*([^'\r\n}]*)/,
       );
       if (known) throw new Error(`${known[1]}: ${known[2]}`);
       throw new Error(`UIA_COMMAND_FAILED: ${details}`);
@@ -445,10 +445,14 @@ export class WindowsUiAutomationService implements UiAutomationService {
     try {
       try {
         return await this.sendHelperRequest(action, input);
-      } catch {
-        // One transparent restart preserves the old exec-per-call reliability if
-        // the long-lived worker was killed or became stale between operations.
+      } catch (error) {
         this.resetHelperProcess();
+        if (!isUiAutomationReplaySafeAction(action))
+          throw new Error(
+            `UIA_OUTCOME_UNKNOWN: ${action} may have completed before the helper response was lost; the action was not replayed automatically`,
+            { cause: error },
+          );
+        // Read-only observations may be retried once after a helper restart.
         return await this.sendHelperRequest(action, input);
       }
     } finally {
@@ -727,4 +731,10 @@ elseif($action -eq 'focus'){ try{$element.SetFocus()}catch{throw 'UIA_ACCESS_DEN
 elseif($action -eq 'select'){ $p=$null; if(-not $element.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern,[ref]$p)){throw 'UIA_ACTION_UNSUPPORTED: element does not support SelectionItemPattern'}; ([System.Windows.Automation.SelectionItemPattern]$p).Select() }
 else { throw ('INVALID_INPUT: unknown UI Automation action '+$action) }
 Start-Sleep -Milliseconds 40; Row $element | ConvertTo-Json -Compress -Depth 5;`;
+}
+
+export function isUiAutomationReplaySafeAction(action: string): boolean {
+  return ["windows", "window_for_pid", "inspect", "find", "wait"].includes(
+    action,
+  );
 }

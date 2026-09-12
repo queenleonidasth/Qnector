@@ -387,16 +387,23 @@ function createFallbackMatcher(query: string): (file: string) => boolean {
 }
 
 function tokenizeQuery(query: string): string[] {
-  return (query.match(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s]+/g) ?? []).map(
-    (token) => {
-      if (
-        (token.startsWith('"') && token.endsWith('"')) ||
-        (token.startsWith("'") && token.endsWith("'"))
-      )
-        return token.slice(1, -1);
-      return token;
-    },
-  );
+  const tokens: string[] = [];
+  let token = "";
+  let quote: string | undefined;
+  for (const character of query) {
+    if (quote) {
+      if (character === quote) quote = undefined;
+      else token += character;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (/\s/.test(character)) {
+      if (token) tokens.push(token);
+      token = "";
+    } else token += character;
+  }
+  if (quote) throw new Error("INVALID_INPUT: unmatched quote in search query");
+  if (token) tokens.push(token);
+  return tokens;
 }
 
 function wildcardRegex(token: string): RegExp {
@@ -411,7 +418,10 @@ function wildcardRegex(token: string): RegExp {
           : escapeRegex(character),
     )
     .join("");
-  return new RegExp(source, "i");
+  return new RegExp(
+    `${normalized.includes("/") ? "^" : "(?:^|/)"}${source}$`,
+    "i",
+  );
 }
 
 function escapeRegex(value: string): string {

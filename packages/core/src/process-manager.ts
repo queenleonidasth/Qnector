@@ -21,6 +21,8 @@ export interface RunOptions {
   env?: Record<string, string>;
   maxChars?: number;
   outputMode?: "raw" | "smart";
+  /** Internal cancellation hook used by workflow executors. */
+  signal?: AbortSignal;
 }
 
 export interface RunResult {
@@ -124,6 +126,8 @@ export class ProcessManager {
   }
 
   public async run(options: RunOptions): Promise<RunResult> {
+    if (options.signal?.aborted)
+      throw new Error("PROCESS_CANCELED: command was canceled before start");
     const started = Date.now();
     const maxChars = Math.max(
       1,
@@ -135,6 +139,7 @@ export class ProcessManager {
     if (
       shell === "powershell" &&
       !direct &&
+      !options.signal &&
       canUsePersistentPowerShell(options.command, options.env)
     ) {
       try {
@@ -152,7 +157,12 @@ export class ProcessManager {
           maxChars,
           outputMode: options.outputMode ?? "smart",
         });
-      } catch {
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "POWERSHELL_WORKER_STOPPED"
+        )
+          throw error;
         // The worker is an optimization only. Protocol/startup failures fall
         // back to the isolated one-shot path so execution reliability wins.
       }
@@ -190,14 +200,22 @@ export class ProcessManager {
         if (settled) return;
         settled = true;
         if (timeout) clearTimeout(timeout);
+        options.signal?.removeEventListener("abort", onAbort);
         resolve(value);
       };
-      child.once("error", (error) => {
+      const fail = (error: unknown): void => {
         if (settled) return;
         settled = true;
         if (timeout) clearTimeout(timeout);
+        options.signal?.removeEventListener("abort", onAbort);
         reject(error);
-      });
+      };
+      const onAbort = (): void => {
+        void this.stopChild(child).finally(() =>
+          finish({ exitCode: null, signal: "SIGTERM" }),
+        );
+      };
+      child.once("error", fail);
       child.once("close", (exitCode, signal) => {
         if (!timedOut) finish({ exitCode, signal });
       });
@@ -207,6 +225,8 @@ export class ProcessManager {
           finish({ exitCode: null, signal: "SIGTERM" }),
         );
       }, options.timeoutMs);
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      if (options.signal?.aborted) onAbort();
     }).catch((error: unknown) => {
       throw new Error(
         `PROCESS_START_FAILED: ${error instanceof Error ? error.message : String(error)}`,

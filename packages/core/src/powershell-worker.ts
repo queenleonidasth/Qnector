@@ -24,7 +24,8 @@ interface PendingRequest {
 }
 
 const RESULT_PREFIX = "__QNECTOR_RESULT__";
-const workerCache = new Map<string, PowerShellWorker>();
+const workerCache = new Map<string, PowerShellWorker[]>();
+const MAX_WORKERS_PER_EXECUTABLE = 4;
 
 export function canUsePersistentPowerShell(
   command: string,
@@ -46,21 +47,28 @@ export async function runPersistentPowerShell(
   input: { command: string; cwd: string; timeoutMs: number },
 ): Promise<PowerShellWorkerResult> {
   const key = executable.toLowerCase();
-  let worker = workerCache.get(key);
-  if (!worker) {
+  const workers = workerCache.get(key) ?? [];
+  let worker = workers.find((entry) => entry.load === 0);
+  if (!worker && workers.length < MAX_WORKERS_PER_EXECUTABLE) {
     worker = new PowerShellWorker(executable);
-    workerCache.set(key, worker);
+    workers.push(worker);
+    workerCache.set(key, workers);
   }
+  worker ??= workers.reduce((least, entry) =>
+    entry.load < least.load ? entry : least,
+  );
   return worker.run(input);
 }
 
 export async function shutdownPowerShellWorkers(): Promise<void> {
-  const workers = [...workerCache.values()];
+  const workers = [...workerCache.values()].flat();
   workerCache.clear();
   await Promise.all(workers.map((worker) => worker.stop()));
 }
 
 class PowerShellWorker {
+  public load = 0;
+  private stopped = false;
   private child?: ChildProcessWithoutNullStreams;
   private stdoutBuffer = "";
   private stderrTail = "";
@@ -74,7 +82,15 @@ class PowerShellWorker {
     cwd: string;
     timeoutMs: number;
   }): Promise<PowerShellWorkerResult> {
-    const task = this.queue.then(() => this.execute(input));
+    this.load += 1;
+    const task = this.queue
+      .then(() => {
+        if (this.stopped) throw new Error("POWERSHELL_WORKER_STOPPED");
+        return this.execute(input);
+      })
+      .finally(() => {
+        this.load -= 1;
+      });
     this.queue = task.then(
       () => undefined,
       () => undefined,
@@ -83,6 +99,8 @@ class PowerShellWorker {
   }
 
   public async stop(): Promise<void> {
+    this.stopped = true;
+    this.failPending(new Error("POWERSHELL_WORKER_STOPPED"));
     const child = this.child;
     this.child = undefined;
     if (!child || child.exitCode !== null) return;
@@ -187,13 +205,19 @@ class PowerShellWorker {
     this.stderrTail = "";
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => this.consumeStdout(chunk));
-    child.stderr.on("data", (chunk: string) => {
-      this.stderrTail = `${this.stderrTail}${chunk}`.slice(-8_000);
+    child.stdout.on("data", (chunk: string) => {
+      if (this.child === child) this.consumeStdout(chunk);
     });
-    child.once("error", (error) => this.failPending(error));
+    child.stderr.on("data", (chunk: string) => {
+      if (this.child === child)
+        this.stderrTail = `${this.stderrTail}${chunk}`.slice(-8_000);
+    });
+    child.once("error", (error) => {
+      if (this.child === child) this.failPending(error);
+    });
     child.once("close", (code) => {
-      if (this.child === child) this.child = undefined;
+      if (this.child !== child) return;
+      this.child = undefined;
       this.failPending(
         new Error(
           `POWERSHELL_WORKER_EXITED: ${code ?? "unknown"}${

@@ -22,27 +22,35 @@ export function getBuildIdentity(): Promise<BuildIdentity> {
 }
 
 async function loadBuildIdentity(): Promise<BuildIdentity> {
+  const channel: BuildIdentity["channel"] =
+    process.env.PORTABLE_EXECUTABLE_FILE?.trim()
+      ? "portable"
+      : !process.versions.electron ||
+          (process as NodeJS.Process & { defaultApp?: boolean }).defaultApp
+        ? "development"
+        : "packaged";
   const executablePath = resolveExecutablePath();
-  const info = await stat(executablePath).catch(() => null);
+  // A Node/Electron development host is not the Qnector build payload.
+  const info =
+    channel === "development"
+      ? null
+      : await stat(executablePath).catch(() => null);
   const builtAt =
     process.env.QNECTOR_BUILD_TIME ?? info?.mtime.toISOString() ?? null;
-  const executableSha256 = existsSync(executablePath)
-    ? await hashFile(executablePath).catch(() => null)
-    : null;
+  const executableSha256 =
+    channel !== "development" && existsSync(executablePath)
+      ? await hashFile(executablePath).catch(() => null)
+      : null;
   const buildId =
     process.env.QNECTOR_BUILD_ID ??
-    [formatBuildTime(builtAt), executableSha256?.slice(0, 10) ?? "dev"]
+    [formatBuildTime(builtAt), executableSha256?.slice(0, 10)]
       .filter(Boolean)
       .join("-");
   return {
     version: QNECTOR_VERSION,
     buildId,
     builtAt,
-    channel: process.env.PORTABLE_EXECUTABLE_FILE
-      ? "portable"
-      : (process as NodeJS.Process & { defaultApp?: boolean }).defaultApp
-        ? "development"
-        : "packaged",
+    channel,
     executablePath,
     executableSha256,
     sourceRevision: process.env.QNECTOR_SOURCE_REVISION ?? null,

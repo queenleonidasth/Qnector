@@ -1178,16 +1178,17 @@ function playwrightLocatorBase(
   );
 }
 
-function playwrightLocator(
+export function playwrightLocator(
   page: Page,
   input: Record<string, unknown>,
 ): Locator {
   const base = playwrightLocatorBase(page, input);
-  return base.nth(Math.max(0, optionalInteger(input, "index") ?? 0));
+  const index = optionalInteger(input, "index");
+  return index === undefined ? base : base.nth(Math.max(0, index));
 }
 
 function locatorDescription(input: Record<string, unknown>): string {
-  const index = optionalInteger(input, "index") ?? 0;
+  const index = optionalInteger(input, "index");
   for (const key of [
     "selector",
     "role",
@@ -1197,8 +1198,8 @@ function locatorDescription(input: Record<string, unknown>): string {
     "text",
   ])
     if (typeof input[key] === "string" && input[key])
-      return `${key}=${JSON.stringify(input[key])}[${index}]`;
-  return `element[${index}]`;
+      return `${key}=${JSON.stringify(input[key])}${index === undefined ? "" : `[${index}]`}`;
+  return index === undefined ? "element" : `element[${index}]`;
 }
 
 function hasLocatorInput(input: Record<string, unknown>): boolean {

@@ -132,25 +132,50 @@ export class ToolRegistry {
           nextIndex += 1;
           if (index >= calls.length) return;
           const call = calls[index]!;
-          const result = await this.call(call.tool, context, call.input);
-          const { attachments, ...serializableResult } = result;
-          resultAttachments[index] = attachments;
-          results[index] = {
-            index,
-            ...(call.id ? { id: call.id } : {}),
-            tool: call.tool,
-            result: serializableResult,
-            ...(attachments?.length
-              ? {
-                  attachments: attachments.map((attachment) => ({
-                    type: attachment.type,
-                    mimeType: attachment.mimeType,
-                    width: attachment.width,
-                    height: attachment.height,
-                  })),
-                }
-              : {}),
-          };
+          try {
+            const result = await this.call(call.tool, context, call.input);
+            const { attachments, ...serializableResult } = result;
+            resultAttachments[index] = attachments;
+            results[index] = {
+              index,
+              ...(call.id ? { id: call.id } : {}),
+              tool: call.tool,
+              result: serializableResult,
+              ...(attachments?.length
+                ? {
+                    attachments: attachments.map((attachment) => ({
+                      type: attachment.type,
+                      mimeType: attachment.mimeType,
+                      width: attachment.width,
+                      height: attachment.height,
+                    })),
+                  }
+                : {}),
+            };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            const codeMatch = message.match(/^([A-Z][A-Z0-9_]+):/);
+            results[index] = {
+              index,
+              ...(call.id ? { id: call.id } : {}),
+              tool: call.tool,
+              result: {
+                ok: false,
+                tool: call.tool,
+                action:
+                  typeof call.input.action === "string"
+                    ? call.input.action
+                    : "unknown",
+                summary: `Parallel subcall failed: ${message}`,
+                error: {
+                  code: codeMatch?.[1] ?? "TOOL_CALL_FAILED",
+                  message,
+                },
+                meta: { durationMs: 0, truncated: false, nextCursor: null },
+              },
+            };
+          }
         }
       };
       const concurrency = Math.min(requestedConcurrency, calls.length);

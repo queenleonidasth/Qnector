@@ -65,6 +65,12 @@ export const workspaceDefinition: ToolDefinition = {
       },
       pattern: { type: "string" },
       query: { type: "string" },
+      minScore: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        description: "Minimum relevance score for semantic_search (0-1).",
+      },
       glob: { type: "string" },
       watchId: { type: "string" },
       cursor: { type: "integer", minimum: 0 },
@@ -194,11 +200,14 @@ export async function executeWorkspace(
         query: stringInput(object, "query", true)!,
         maxResults,
         maxFiles: numberInput(object, "maxFiles", 2_000),
+        offset,
+        minScore: numberInput(object, "minScore", 0),
       });
       return {
         summary: `Local semantic search returned ${result.matches.length} match(es) from ${result.indexedFiles} indexed file(s)`,
         data: result,
         truncated: result.truncated,
+        nextCursor: result.nextOffset,
       };
     }
     if (action === "lsp_status") {

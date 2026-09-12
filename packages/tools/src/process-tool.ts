@@ -12,7 +12,7 @@ import type { ProcessShell, WorkflowStep } from "@qnector/core";
 export const processDefinition: ToolDefinition = {
   name: "process",
   description:
-    "Run PowerShell, cmd, direct CLI commands, long-running processes, and interactive PTY/ConPTY terminals. Use start/output for background commands and pty_start/pty_read/pty_write for terminal programs that require interactive input.",
+    "Run PowerShell, cmd, direct CLI commands, long-running processes, interactive PTY/ConPTY terminals, and persistent workflow graphs. Use start/output for background commands and pty_start/pty_read/pty_write for terminal programs that require interactive input.",
   inputSchema: {
     type: "object",
     properties: {
@@ -43,6 +43,10 @@ export const processDefinition: ToolDefinition = {
           "workflow_list",
           "workflow_get",
           "workflow_start",
+          "workflow_run",
+          "workflow_wait",
+          "workflow_result",
+          "workflow_document_batch",
           "workflow_status",
           "workflow_runs",
           "workflow_cancel",
@@ -62,8 +66,13 @@ export const processDefinition: ToolDefinition = {
       taskId: { type: "string" },
       workflowName: { type: "string" },
       runId: { type: "string" },
+      stepId: { type: "string" },
+      mode: { type: "string", enum: ["sequential", "graph"] },
+      maxConcurrency: { type: "integer", minimum: 1, maximum: 8 },
+      replayInterrupted: { type: "boolean" },
       description: { type: "string" },
       steps: { type: "array", items: { type: "object" }, maxItems: 100 },
+      documents: { type: "array", items: { type: "object" }, maxItems: 50 },
       cursor: { type: "integer", minimum: 0 },
       text: { type: "string" },
       pattern: { type: "string" },
@@ -106,10 +115,12 @@ export async function executeProcess(
           ...(stringInput(object, "description")
             ? { description: stringInput(object, "description") }
             : {}),
+          mode: workflowModeInput(object),
+          maxConcurrency: numberInput(object, "maxConcurrency", 4),
           steps: object.steps as WorkflowStep[],
         });
         return {
-          summary: `Saved workflow ${definition.name} with ${definition.steps.length} step(s)`,
+          summary: `Saved ${definition.mode} workflow ${definition.name} with ${definition.steps.length} step(s)`,
           data: definition,
         };
       }
@@ -134,9 +145,54 @@ export async function executeProcess(
         const run = await context.workflowManager.start(
           workspace,
           stringInput(object, "workflowName", true)!,
+          context.memoryTaskId,
         );
         return {
           summary: `Started workflow ${run.workflow} as ${run.runId}`,
+          data: run,
+        };
+      }
+      if (action === "workflow_run") {
+        if (!Array.isArray(object.steps))
+          throw new Error("INVALID_INPUT: steps must be an array");
+        const run = await context.workflowManager.run(workspace, {
+          name: stringInput(object, "workflowName", true)!,
+          ...(stringInput(object, "description")
+            ? { description: stringInput(object, "description") }
+            : {}),
+          mode: workflowModeInput(object, "graph"),
+          maxConcurrency: numberInput(object, "maxConcurrency", 4),
+          steps: object.steps as WorkflowStep[],
+          ...(context.memoryTaskId
+            ? { memoryTaskId: context.memoryTaskId }
+            : {}),
+        });
+        return {
+          summary: `Started ${run.mode} workflow ${run.workflow} as ${run.runId}`,
+          data: run,
+        };
+      }
+      if (action === "workflow_document_batch") {
+        if (!Array.isArray(object.documents))
+          throw new Error("INVALID_INPUT: documents must be an array");
+        const steps = buildDocumentBatchSteps(object.documents);
+        const run = await context.workflowManager.run(workspace, {
+          name: stringInput(object, "workflowName") ?? "document-batch",
+          ...(stringInput(object, "description")
+            ? { description: stringInput(object, "description") }
+            : {
+                description:
+                  "Prepare, edit, validate, render, and collect a document batch",
+              }),
+          mode: "graph",
+          maxConcurrency: numberInput(object, "maxConcurrency", 4),
+          steps,
+          ...(context.memoryTaskId
+            ? { memoryTaskId: context.memoryTaskId }
+            : {}),
+        });
+        return {
+          summary: `Started document batch ${run.runId} with ${object.documents.length} document(s) and ${steps.length} workflow step(s)`,
           data: run,
         };
       }
@@ -158,6 +214,32 @@ export async function executeProcess(
           data: run,
         };
       }
+      if (action === "workflow_wait") {
+        const result = await context.workflowManager.wait(
+          workspace,
+          runId,
+          numberInput(object, "timeoutMs", 120_000),
+        );
+        return {
+          summary: result.timedOut
+            ? `Workflow ${result.run.workflow} is still ${result.run.state} after the wait timeout`
+            : `Workflow ${result.run.workflow} reached ${result.run.state}`,
+          data: result,
+        };
+      }
+      if (action === "workflow_result") {
+        const result = await context.workflowManager.result(
+          workspace,
+          runId,
+          stringInput(object, "stepId"),
+        );
+        return {
+          summary: stringInput(object, "stepId")
+            ? `Read full result for workflow step ${stringInput(object, "stepId")}`
+            : `Read workflow result index for ${runId}`,
+          data: result,
+        };
+      }
       if (action === "workflow_cancel") {
         const run = await context.workflowManager.cancel(workspace, runId);
         return {
@@ -166,7 +248,9 @@ export async function executeProcess(
         };
       }
       if (action === "workflow_resume") {
-        const run = await context.workflowManager.resume(workspace, runId);
+        const run = await context.workflowManager.resume(workspace, runId, {
+          replayInterrupted: booleanInput(object, "replayInterrupted", false),
+        });
         return {
           summary: `Resumed workflow ${run.workflow} as ${run.runId}`,
           data: run,
@@ -490,4 +574,141 @@ function environmentInput(
     }
   }
   return env;
+}
+
+function workflowModeInput(
+  object: Record<string, unknown>,
+  fallback: "sequential" | "graph" = "sequential",
+): "sequential" | "graph" {
+  const value = stringInput(object, "mode");
+  if (!value) return fallback;
+  if (value !== "sequential" && value !== "graph")
+    throw new Error("INVALID_INPUT: mode must be sequential or graph");
+  return value;
+}
+
+function buildDocumentBatchSteps(documents: unknown[]): WorkflowStep[] {
+  if (documents.length === 0 || documents.length > 50)
+    throw new Error("INVALID_INPUT: documents must contain 1-50 items");
+  const steps: WorkflowStep[] = [];
+  const collectorDependencies: string[] = [];
+  const collectorOutputs: string[] = [];
+  const destinations = new Set<string>();
+  const ids = new Set<string>();
+
+  documents.forEach((raw, index) => {
+    const document = objectInput(raw);
+    const source = stringInput(document, "path", true)!;
+    const destination = stringInput(document, "destination") ?? source;
+    const rawId = stringInput(document, "id") ?? `document-${index + 1}`;
+    const id = workflowStepId(rawId, index);
+    if (ids.has(id))
+      throw new Error(`INVALID_INPUT: duplicate document id '${id}'`);
+    ids.add(id);
+    const destinationKey = destination.trim().toLowerCase();
+    if (destinations.has(destinationKey))
+      throw new Error(
+        `INVALID_INPUT: document batch has duplicate destination '${destination}'`,
+      );
+    destinations.add(destinationKey);
+
+    if (
+      !Array.isArray(document.replacements) ||
+      document.replacements.length === 0
+    )
+      throw new Error(
+        `INVALID_INPUT: documents[${index}].replacements must contain at least one replacement`,
+      );
+    if (document.replacements.length > 20)
+      throw new Error(
+        `INVALID_INPUT: documents[${index}].replacements supports at most 20 replacements`,
+      );
+
+    const prepareId = `${id}-prepare`;
+    steps.push({
+      id: prepareId,
+      type: "tool",
+      tool: "files",
+      input: { action: "inspect", path: source },
+      replay: "safe",
+    });
+
+    let previousId = prepareId;
+    const expectedText: string[] = [];
+    document.replacements.forEach((replacementRaw, replacementIndex) => {
+      const replacement = objectInput(replacementRaw);
+      const oldText = stringInput(replacement, "oldText", true)!;
+      const newText = stringInput(replacement, "newText", true)!;
+      const editId = `${id}-edit-${replacementIndex + 1}`;
+      steps.push({
+        id: editId,
+        type: "tool",
+        tool: "files",
+        input: {
+          action: "document_replace_text",
+          path: replacementIndex === 0 ? source : destination,
+          destination,
+          oldText,
+          newText,
+          replaceAll: booleanInput(replacement, "replaceAll", false),
+        },
+        dependsOn: [previousId],
+        resourcePaths: [destination],
+        outputs: [destination],
+        replay: "manual",
+      });
+      previousId = editId;
+      expectedText.push(newText);
+    });
+
+    const validateId = `${id}-validate`;
+    steps.push({
+      id: validateId,
+      type: "tool",
+      tool: "files",
+      input: { action: "extract_text", path: destination, maxChars: 250_000 },
+      dependsOn: [previousId],
+      outputs: [destination],
+      expect: { contains: [...new Set(expectedText)] },
+      replay: "safe",
+    });
+    previousId = validateId;
+
+    if (document.render === true) {
+      const renderId = `${id}-render`;
+      steps.push({
+        id: renderId,
+        type: "tool",
+        tool: "files",
+        input: { action: "render", path: destination, page: 1, maxWidth: 2048 },
+        dependsOn: [validateId],
+        outputs: [destination],
+        replay: "safe",
+      });
+      previousId = renderId;
+    }
+
+    collectorDependencies.push(previousId);
+    collectorOutputs.push(destination);
+  });
+
+  steps.push({
+    id: "collect",
+    type: "delay",
+    delayMs: 0,
+    dependsOn: collectorDependencies,
+    outputs: collectorOutputs,
+    replay: "safe",
+  });
+  return steps;
+}
+
+function workflowStepId(value: string, index: number): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 70);
+  return normalized || `document-${index + 1}`;
 }

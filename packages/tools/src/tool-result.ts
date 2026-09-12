@@ -115,6 +115,8 @@ function hintForCode(code: string): string | undefined {
     return "Inspect the control and use an action supported by its Windows UI Automation pattern.";
   if (code === "UIA_TIMEOUT")
     return "Inspect the current UI state or increase timeoutMs within the bounded limit.";
+  if (code === "UIA_OUTCOME_UNKNOWN")
+    return "Inspect the current UI state before retrying; the mutation may already have completed and Qnector intentionally did not replay it automatically.";
   if (code === "BROWSER_NODE_NOT_FOUND")
     return "Run browser.query again because DOM node identities can change after reload or navigation.";
   if (code === "BROWSER_TARGET_GONE")
@@ -131,6 +133,14 @@ function hintForCode(code: string): string | undefined {
     return "Narrow the expression result or increase maxChars within the bounded limit.";
   if (code === "BROWSER_SCREENSHOT_TOO_LARGE")
     return "Lower maxWidth or set fullPage to false and retry the screenshot.";
+  if (code === "AGENT_PROVIDER_UNAVAILABLE")
+    return "Install or restore the configured agent CLI, then check process.agent_status before retrying.";
+  if (code === "AGENT_WORKER_FAILED")
+    return "Inspect the agent result/stdout/stderr and retry only after correcting the worker failure.";
+  if (code === "WORKFLOW_OWNERSHIP_CONFLICT")
+    return "Give coding workers disjoint ownedPaths; parent/child path ownership cannot overlap.";
+  if (code === "WORKFLOW_OWNERSHIP_VIOLATION")
+    return "Inspect the isolated worktree diff. The worker changed a path outside its declared ownership.";
   return undefined;
 }
 

@@ -227,6 +227,8 @@ npx pnpm@10.15.0 accept:p1-p10
 npx pnpm@10.15.0 accept:p11-p18
 npx pnpm@10.15.0 accept:p23
 npx pnpm@10.15.0 accept:performance
+npx pnpm@10.15.0 accept:search-performance
+npx pnpm@10.15.0 accept:shell-parallel
 npx pnpm@10.15.0 accept:startup
 npx pnpm@10.15.0 accept:browser
 ```

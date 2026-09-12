@@ -169,7 +169,30 @@ export class QnectorRuntime {
       options.documentIntelligence ?? new DocumentIntelligenceService();
     this.workflowManager =
       options.workflowManager ??
-      new WorkflowManager(this.processManager, this.fileWatch);
+      new WorkflowManager(this.processManager, this.fileWatch, {
+        executeTool: async (tool, input, workflowContext) => {
+          const scopedConfig = {
+            ...this.config,
+            activeWorkspace: workflowContext.workspace,
+          };
+          const scopedContext: ToolContext = {
+            ...this.context(),
+            workspace: new WorkspaceState(scopedConfig),
+            getConfig: () => scopedConfig,
+            setConfig: async () => {
+              throw new Error(
+                "WORKFLOW_WORKSPACE_PINNED: tool steps cannot change the active workspace for a running workflow",
+              );
+            },
+          };
+          return this.registry.call(tool, scopedContext, {
+            ...input,
+            ...(workflowContext.memoryTaskId
+              ? { memoryTaskId: workflowContext.memoryTaskId }
+              : {}),
+          });
+        },
+      });
     this.ptyManager =
       options.ptyManager ?? new PtyManager(this.config.shell.windows);
     this.agentSkills =
