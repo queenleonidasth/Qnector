@@ -456,9 +456,10 @@ export async function executeSystem(
           query,
           numberInput(object, "maxResults", 5),
         );
+        const wouldActivate = await context.agentSkills.route(query, 5);
         return {
-          summary: `Matched ${skills.length} Agent Skill(s) for '${query}'`,
-          data: { query, skills },
+          summary: `Matched ${skills.length} Agent Skill(s); runtime would activate ${wouldActivate.length}`,
+          data: { query, skills, wouldActivate },
         };
       }
       if (action === "skills_route") {
@@ -467,9 +468,9 @@ export async function executeSystem(
             "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
           );
         const query = stringInput(object, "query", true)!;
-        const matched = await context.agentSkills.match(
+        const matched = await context.agentSkills.route(
           query,
-          numberInput(object, "maxResults", 3),
+          numberInput(object, "maxResults", 5),
         );
         const skills = await Promise.all(
           matched.map((skill) => context.agentSkills!.get(skill.name)),

@@ -48,6 +48,58 @@ describe("AgentSkillService", () => {
     expect(loaded.source).toBe("test");
   });
 
+  it("plans dynamic runtime activation and drops weak lexical false positives", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skills-route-"));
+    const definitions = [
+      [
+        "ui-ux-design",
+        "Design beautiful frontend interfaces with animation and polished interaction.",
+      ],
+      [
+        "loading-motion-design",
+        "Design interface animation, transition, loading, and motion behavior.",
+      ],
+      [
+        "ui-ux-audit",
+        "Audit frontend design quality, usability, layout, and visual polish.",
+      ],
+      [
+        "archive-workflows",
+        "Create ZIP archives for frontend build artifacts.",
+      ],
+    ] as const;
+    for (const [name, description] of definitions) {
+      const directory = path.join(root, name);
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        path.join(directory, "SKILL.md"),
+        [
+          "---",
+          `name: ${name}`,
+          `description: "${description}"`,
+          "---",
+          `# ${name}`,
+          "Test instructions.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+    }
+
+    const service = new AgentSkillService({
+      roots: [{ path: root, source: "test" }],
+    });
+    const matched = await service.match("design animation frontend", 5);
+    const activated = await service.route("design animation frontend", 5);
+
+    expect(matched.map((skill) => skill.name)).toContain("archive-workflows");
+    expect(activated.map((skill) => skill.name)).toEqual([
+      "ui-ux-design",
+      "loading-motion-design",
+      "ui-ux-audit",
+    ]);
+  });
+
   it("parses folded YAML frontmatter used by ecosystem skills", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skills-yaml-"));
     const directory = path.join(root, "agent-harness");

@@ -881,7 +881,55 @@
   gap: 5px;
 }
 
-.trigger-results > button,
+.trigger-result-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.trigger-result-group + .trigger-result-group {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.trigger-result-label {
+  color: #9d988d;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.trigger-activate-group {
+  padding: 9px;
+  border: 1px solid rgba(230, 186, 80, 0.18);
+  border-radius: 9px;
+  background: rgba(230, 186, 80, 0.045);
+}
+
+.trigger-activate-group > small {
+  color: #817d74;
+  font-size: 8.5px;
+}
+
+.trigger-activation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.trigger-activation-chips > button {
+  min-height: 26px;
+  padding: 4px 7px;
+  border: 1px solid rgba(230, 186, 80, 0.2);
+  border-radius: 999px;
+  background: rgba(230, 186, 80, 0.07);
+  color: #e5cf92;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.trigger-results .trigger-result-group > button,
 .duplicate-list > button {
   width: 100%;
   min-height: 50px;
@@ -897,11 +945,11 @@
   cursor: pointer;
 }
 
-.trigger-results > button {
+.trigger-results .trigger-result-group > button {
   grid-template-columns: 25px minmax(0, 1fr) 15px;
 }
 
-.trigger-results > button > span {
+.trigger-results .trigger-result-group > button > span {
   width: 25px;
   height: 25px;
   display: grid;
@@ -1136,4 +1184,18 @@
   .skills-modal {
     animation: none !important;
   }
+}
+
+.trigger-results .will-activate {
+  border-color: rgba(230, 186, 80, 0.16);
+  background: rgba(230, 186, 80, 0.035);
+}
+
+.trigger-results .match-only {
+  opacity: 0.72;
+}
+
+.trigger-results .trigger-result-group > button > em {
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
 }

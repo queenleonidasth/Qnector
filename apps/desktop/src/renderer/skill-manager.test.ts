@@ -41,6 +41,12 @@ describe("desktop Skill Manager", () => {
     expect(source).toContain("window.sessionStorage.setItem");
     expect(source).toContain("skillDraftKey(workspaceKey)");
     expect(source).toContain("setTriggerHasRun(true)");
+    expect(source).toContain("setTriggerActivations(result.wouldActivate)");
+    expect(source).toContain("WOULD ACTIVATE");
+    expect(source).toContain("MATCHED SKILLS");
+    expect(source).toContain(
+      "Same dynamic selector used by the live Skills runtime.",
+    );
     expect(source).toContain(
       "No matching skills. Try a more specific task description.",
     );

@@ -162,6 +162,9 @@ export function SkillManager({
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [triggerQuery, setTriggerQuery] = useState("");
   const [triggerMatches, setTriggerMatches] = useState<SkillSummary[]>([]);
+  const [triggerActivations, setTriggerActivations] = useState<SkillSummary[]>(
+    [],
+  );
   const [triggerHasRun, setTriggerHasRun] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport>();
@@ -449,6 +452,7 @@ export function SkillManager({
   const openTrigger = (initialQuery = ""): void => {
     setTriggerQuery(initialQuery);
     setTriggerMatches([]);
+    setTriggerActivations([]);
     setTriggerHasRun(false);
     setTriggerOpen(true);
   };
@@ -458,7 +462,10 @@ export function SkillManager({
     setBusy(true);
     setError(undefined);
     try {
-      const result = unwrap<{ skills: SkillSummary[] }>(
+      const result = unwrap<{
+        skills: SkillSummary[];
+        wouldActivate: SkillSummary[];
+      }>(
         await system({
           action: "skills_match",
           query: triggerQuery.trim(),
@@ -466,6 +473,7 @@ export function SkillManager({
         }),
       );
       setTriggerMatches(result.skills);
+      setTriggerActivations(result.wouldActivate);
       setTriggerHasRun(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -492,7 +500,9 @@ export function SkillManager({
             <div className="skills-modal-head">
               <div>
                 <strong>Test Trigger</strong>
-                <small>See which active skills Qnector would match.</small>
+                <small>
+                  Compare broad matches with the live runtime activation plan.
+                </small>
               </div>
               <button
                 type="button"
@@ -520,25 +530,70 @@ export function SkillManager({
               {busy ? "Testing…" : "Run Matcher"}
             </button>
             <div className="trigger-results">
-              {triggerMatches.map((skill, index) => (
-                <button
-                  type="button"
-                  key={skill.name}
-                  onClick={() => {
-                    setTriggerOpen(false);
-                    void openSkill(skill.name);
-                  }}
-                >
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{skill.name}</strong>
+              {triggerHasRun && (
+                <div className="trigger-result-group trigger-activate-group">
+                  <span className="trigger-result-label">WOULD ACTIVATE</span>
+                  {triggerActivations.length > 0 ? (
+                    <div className="trigger-activation-chips">
+                      {triggerActivations.map((skill) => (
+                        <button
+                          type="button"
+                          key={skill.name}
+                          onClick={() => {
+                            setTriggerOpen(false);
+                            void openSkill(skill.name);
+                          }}
+                        >
+                          ACTIVE {skill.name}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
                     <small>
-                      {index === 0 ? "Best match" : skill.description}
+                      No match is strong enough for runtime activation.
                     </small>
-                  </div>
-                  <em>›</em>
-                </button>
-              ))}
+                  )}
+                  {triggerActivations.length > 0 && (
+                    <small>
+                      Same dynamic selector used by the live Skills runtime.
+                    </small>
+                  )}
+                </div>
+              )}
+              {triggerMatches.length > 0 && (
+                <div className="trigger-result-group">
+                  <span className="trigger-result-label">MATCHED SKILLS</span>
+                  {triggerMatches.map((skill, index) => {
+                    const activates = triggerActivations.some(
+                      (entry) => entry.name === skill.name,
+                    );
+                    return (
+                      <button
+                        type="button"
+                        key={skill.name}
+                        className={activates ? "will-activate" : "match-only"}
+                        onClick={() => {
+                          setTriggerOpen(false);
+                          void openSkill(skill.name);
+                        }}
+                      >
+                        <span>{index + 1}</span>
+                        <div>
+                          <strong>{skill.name}</strong>
+                          <small>
+                            {activates
+                              ? "Selected for runtime context"
+                              : index === 0
+                                ? "Best match"
+                                : skill.description}
+                          </small>
+                        </div>
+                        <em>{activates ? "ACTIVE" : "MATCH"}</em>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {triggerMatches.length === 0 && (
                 <p>
                   {triggerHasRun

@@ -272,10 +272,33 @@ export class AgentSkillService {
   }
 
   public async match(query: string, limit = 5): Promise<AgentSkillSummary[]> {
+    const scored = await this.rankMatches(query);
+    return scored.slice(0, clamp(limit, 1, 20)).map((entry) => entry.skill);
+  }
+
+  public async route(query: string, limit = 5): Promise<AgentSkillSummary[]> {
+    const scored = await this.rankMatches(query);
+    if (scored.length === 0) return [];
+
+    // Runtime activation is intentionally stricter than discovery. Test Trigger may
+    // show weak lexical matches, but loading them all wastes context and can inject
+    // unrelated procedures. Keep candidates that are materially close to the best
+    // match, with a small absolute floor so a single generic token is not enough.
+    const maxActivated = clamp(limit, 1, 5);
+    const threshold = Math.max(6, Math.ceil(scored[0]!.score * 0.35));
+    return scored
+      .filter((entry) => entry.score >= threshold)
+      .slice(0, maxActivated)
+      .map((entry) => entry.skill);
+  }
+
+  private async rankMatches(
+    query: string,
+  ): Promise<Array<{ skill: AgentSkillSummary; score: number }>> {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return [];
     const terms = tokenize(normalized);
-    const scored = (await this.discover(false))
+    return (await this.discover(false))
       .map((skill) => ({
         skill,
         score: scoreSkill(skill, normalized, terms),
@@ -288,7 +311,6 @@ export class AgentSkillService {
             sensitivity: "base",
           }),
       );
-    return scored.slice(0, clamp(limit, 1, 20)).map((entry) => entry.skill);
   }
 
   public async get(
