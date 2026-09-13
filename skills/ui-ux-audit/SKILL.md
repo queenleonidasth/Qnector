@@ -4,6 +4,31 @@ description: Audit an existing desktop/web UI for usability, hierarchy, layout, 
 license: MIT
 compatibility: Qnector 0.4.9+; browser/computer screenshot and DOM inspection recommended
 allowed-tools: system workspace files process browser computer
+routing:
+  positive-triggers:
+    - "ui audit"
+    - "audit ui"
+    - "check ui"
+    - "qc ui"
+    - "qc dashboard"
+    - "qc หน้า"
+    - "visual bug"
+    - "clipping"
+    - "scroll issue"
+    - "accessibility issue"
+    - "looks bad"
+    - "ใช้งานยาก"
+    - "ui เพี้ยน"
+    - "เช็ค ui"
+    - "ตรวจ ui"
+    - "ตรวจ ux"
+    - "ดูไม่สวย"
+  negative-triggers:
+    - "xlsx"
+    - "spreadsheet"
+    - "archive"
+  capabilities:
+    - "ui-audit"
 ---
 
 # UI/UX Audit

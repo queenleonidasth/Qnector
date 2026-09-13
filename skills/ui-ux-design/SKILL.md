@@ -4,6 +4,37 @@ description: Design, redesign, and implement polished production UI/UX for deskt
 license: MIT
 compatibility: Qnector 0.4.9+; managed browser and screenshots improve visual verification
 allowed-tools: system workspace files process browser computer
+routing:
+  positive-triggers:
+    - "ui"
+    - "ux"
+    - "frontend"
+    - "interface"
+    - "login page"
+    - "หน้า login"
+    - "dashboard"
+    - "layout"
+    - "responsive"
+    - "styling"
+    - "interactive"
+    - "interact"
+    - "make it beautiful"
+    - "visual polish"
+    - "ออกแบบหน้า"
+    - "ออกแบบเว็บ"
+    - "ทำให้สวย"
+    - "ดูไม่สวย"
+    - "ดีไซน์"
+    - "หน้าตา"
+  negative-triggers:
+    - "xlsx"
+    - "spreadsheet"
+    - "zip"
+    - "archive"
+    - "system architecture"
+    - "backend architecture"
+  capabilities:
+    - "ui-design"
 ---
 
 # Qnector UI/UX Design

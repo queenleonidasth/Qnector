@@ -4,6 +4,29 @@ description: "Analyze, compare, clean, and structure-preservingly edit XLSX/XLS/
 license: MIT
 compatibility: "Qnector 0.4.9+; openpyxl/pandas recommended for structure-aware edits"
 allowed-tools: [system, files, process, workspace]
+routing:
+  positive-triggers:
+    - "xlsx"
+    - "xls"
+    - "xlsm"
+    - "excel"
+    - "spreadsheet"
+    - "workbook"
+    - "csv"
+    - "tsv"
+    - "formula"
+    - "formulas"
+    - "sheet"
+    - "sheets"
+    - "สูตร excel"
+    - "ชีต"
+  negative-triggers:
+    - "html report"
+    - "word document"
+    - "login page"
+    - "ui design"
+  capabilities:
+    - "spreadsheet"
 ---
 
 # Spreadsheet Workflows

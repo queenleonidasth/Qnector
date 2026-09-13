@@ -4,6 +4,25 @@ description: Inspect, test, extract, create, compare, and troubleshoot ZIP, 7z, 
 license: MIT
 compatibility: Qnector 0.4.9+; 7-Zip CLI recommended and detected with system.which
 allowed-tools: system files process workspace
+routing:
+  positive-triggers:
+    - "zip"
+    - "unzip"
+    - "rar"
+    - "7z"
+    - "archive"
+    - "archives"
+    - "extract"
+    - "compress"
+    - "แตกไฟล์"
+    - "บีบอัด"
+  negative-triggers:
+    - "frontend build"
+    - "ui design"
+    - "animation"
+    - "spreadsheet"
+  capabilities:
+    - "archive"
 ---
 
 # Archive Workflows

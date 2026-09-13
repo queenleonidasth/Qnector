@@ -9,6 +9,21 @@ metadata:
   cluster: software
   type: diagnostic
   mode: assistive
+routing:
+  positive-triggers:
+    - "system design"
+    - "architecture"
+    - "architect"
+    - "service boundaries"
+    - "architecture tradeoffs"
+    - "ออกแบบระบบ"
+    - "วาง architecture"
+  negative-triggers:
+    - "ui design"
+    - "design system"
+    - "visual design"
+  capabilities:
+    - "architecture"
 ---
 
 # System Design: From Validated Needs to Architecture

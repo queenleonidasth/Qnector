@@ -428,6 +428,34 @@ const ActivityPanel = React.memo(function ActivityPanel({
                     Route {shortActivityId(selectedActivity.skillTrace.routeId)}{" "}
                     · {selectedActivity.skillTrace.query}
                   </div>
+                  {selectedActivity.skillTrace.evidence === "activated" &&
+                    selectedActivity.skillTrace.routingDecisions &&
+                    selectedActivity.skillTrace.routingDecisions.length > 0 && (
+                      <div className="activity-routing-decisions">
+                        <span className="activity-detail-label">
+                          ROUTING DECISION
+                        </span>
+                        {selectedActivity.skillTrace.routingDecisions
+                          .slice(0, 8)
+                          .map((decision) => (
+                            <div
+                              className={`activity-routing-row ${decision.selected ? "selected" : "rejected"}`}
+                              key={decision.name}
+                            >
+                              <strong>{decision.name}</strong>
+                              <span>
+                                {decision.score} ·{" "}
+                                {decision.confidence.toUpperCase()} ·{" "}
+                                {decision.outcome.toUpperCase()}
+                              </span>
+                              <small>
+                                {decision.reasons[0] ??
+                                  "No routing reason recorded"}
+                              </small>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                 </div>
               )}
             <div className="activity-detail-section">

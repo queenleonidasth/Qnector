@@ -100,5 +100,7 @@ describe("activity feed coalescing", () => {
       "allowed-tools scope includes or does not restrict this tool",
     );
     expect(source).toContain("selectedActivity.skillTrace.routeId");
+    expect(source).toContain("ROUTING DECISION");
+    expect(source).toContain("selectedActivity.skillTrace.routingDecisions");
   });
 });

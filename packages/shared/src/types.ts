@@ -73,12 +73,23 @@ export interface ActivityEntry {
   skillTrace?: ActivitySkillTrace;
 }
 
+export interface ActivitySkillRoutingDecision {
+  name: string;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  selected: boolean;
+  outcome: "selected" | "negative" | "overlap" | "below-threshold" | "limit";
+  reasons: string[];
+  capabilities: string[];
+}
+
 export interface ActivitySkillTrace {
   routeId: string;
   query: string;
   activatedAt: string;
   skills: string[];
   evidence: "activated" | "in_context";
+  routingDecisions?: ActivitySkillRoutingDecision[];
 }
 
 export type MemoryCategory = "fact" | "decision" | "rule" | "note";

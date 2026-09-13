@@ -157,6 +157,12 @@ describe("Qnector grouped tools", () => {
     });
     expect(routeEntry?.skillTrace?.routeId).toBeTruthy();
 
+    expect(routeEntry?.skillTrace?.routingDecisions?.[0]).toMatchObject({
+      name: "ui-animation-check",
+      selected: true,
+      outcome: "selected",
+    });
+
     const fileEntry = [...entries]
       .reverse()
       .find(
@@ -170,6 +176,7 @@ describe("Qnector grouped tools", () => {
       skills: ["ui-animation-check"],
       evidence: "in_context",
     });
+    expect(fileEntry?.skillTrace?.routingDecisions).toBeUndefined();
 
     const workspaceEntry = [...entries]
       .reverse()

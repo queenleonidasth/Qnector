@@ -65,6 +65,7 @@ export interface SkillTraceState {
     name: string;
     allowedTools?: string[];
   }>;
+  routingDecisions?: ActivitySkillTrace["routingDecisions"];
 }
 
 export interface SkillTraceStore {
@@ -97,6 +98,9 @@ function activitySkillTrace(
     activatedAt: trace.activatedAt,
     skills,
     evidence: activatingRoute ? "activated" : "in_context",
+    ...(activatingRoute && trace.routingDecisions?.length
+      ? { routingDecisions: trace.routingDecisions }
+      : {}),
   };
 }
 

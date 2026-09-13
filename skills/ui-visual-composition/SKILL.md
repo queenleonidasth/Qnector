@@ -4,6 +4,19 @@ description: "Use when creating, critiquing, or refining visual UI, including hi
 license: MIT
 metadata:
   author: hueyexe
+routing:
+  positive-triggers:
+    - "visual composition"
+    - "visual hierarchy"
+    - "typography hierarchy"
+    - "color depth"
+    - "imagery"
+    - "spacing composition"
+  negative-triggers:
+    - "system architecture"
+    - "spreadsheet"
+  capabilities:
+    - "ui-design"
 ---
 
 # UI Visual Composition

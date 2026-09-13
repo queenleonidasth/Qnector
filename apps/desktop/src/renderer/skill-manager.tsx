@@ -55,6 +55,16 @@ interface SkillStatus {
   skills: SkillSummary[];
 }
 
+interface SkillRoutingDecision {
+  name: string;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  selected: boolean;
+  outcome: "selected" | "negative" | "overlap" | "below-threshold" | "limit";
+  reasons: string[];
+  capabilities: string[];
+}
+
 interface SkillValidation {
   name: string;
   healthy: boolean;
@@ -165,6 +175,9 @@ export function SkillManager({
   const [triggerActivations, setTriggerActivations] = useState<SkillSummary[]>(
     [],
   );
+  const [triggerDecisions, setTriggerDecisions] = useState<
+    SkillRoutingDecision[]
+  >([]);
   const [triggerHasRun, setTriggerHasRun] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImport>();
@@ -453,6 +466,7 @@ export function SkillManager({
     setTriggerQuery(initialQuery);
     setTriggerMatches([]);
     setTriggerActivations([]);
+    setTriggerDecisions([]);
     setTriggerHasRun(false);
     setTriggerOpen(true);
   };
@@ -465,6 +479,7 @@ export function SkillManager({
       const result = unwrap<{
         skills: SkillSummary[];
         wouldActivate: SkillSummary[];
+        decisions: SkillRoutingDecision[];
       }>(
         await system({
           action: "skills_match",
@@ -474,6 +489,7 @@ export function SkillManager({
       );
       setTriggerMatches(result.skills);
       setTriggerActivations(result.wouldActivate);
+      setTriggerDecisions(result.decisions);
       setTriggerHasRun(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -567,6 +583,9 @@ export function SkillManager({
                     const activates = triggerActivations.some(
                       (entry) => entry.name === skill.name,
                     );
+                    const decision = triggerDecisions.find(
+                      (entry) => entry.name === skill.name,
+                    );
                     return (
                       <button
                         type="button"
@@ -580,12 +599,18 @@ export function SkillManager({
                         <span>{index + 1}</span>
                         <div>
                           <strong>{skill.name}</strong>
+                          {decision && (
+                            <small className="trigger-routing-score">
+                              ROUTING SCORE {decision.score} ·{" "}
+                              {decision.confidence.toUpperCase()} ·{" "}
+                              {decision.outcome.toUpperCase()}
+                            </small>
+                          )}
                           <small>
-                            {activates
-                              ? "Selected for runtime context"
-                              : index === 0
-                                ? "Best match"
-                                : skill.description}
+                            {decision?.reasons[0] ??
+                              (index === 0
+                                ? "Best lexical match"
+                                : skill.description)}
                           </small>
                         </div>
                         <em>{activates ? "ACTIVE" : "MATCH"}</em>

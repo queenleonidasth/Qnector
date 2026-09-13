@@ -96,8 +96,153 @@ describe("AgentSkillService", () => {
     expect(activated.map((skill) => skill.name)).toEqual([
       "ui-ux-design",
       "loading-motion-design",
+    ]);
+  });
+
+  it("uses routing metadata, suppresses generic dev terms, and explains selection", async () => {
+    root = await mkdtemp(
+      path.join(tmpdir(), "qnector-skills-routing-metadata-"),
+    );
+    const definitions = [
+      {
+        name: "ui-ux-design",
+        description: "Design and implement polished user interfaces.",
+        routing: [
+          "  positive-triggers: [ui, ux, frontend, interact, interactive, make it beautiful, ทำให้สวย, ดูไม่สวย]",
+          "  negative-triggers: [spreadsheet, xlsx]",
+          "  capabilities: [ui-design]",
+        ],
+      },
+      {
+        name: "loading-motion-design",
+        description: "Design loading states and interface motion.",
+        routing: [
+          "  positive-triggers: [animation, motion, transition, แอนิเมชัน]",
+          "  capabilities: [motion]",
+        ],
+      },
+      {
+        name: "ui-ux-audit",
+        description:
+          "Audit an existing interface for visual and usability defects.",
+        routing: [
+          "  positive-triggers: [audit ui, check ui, looks bad, ดูไม่สวย]",
+          "  capabilities: [ui-audit]",
+        ],
+      },
+      {
+        name: "test-driven-development",
+        description: "Use TDD when implementing features and bug fixes.",
+        routing: [
+          "  positive-triggers: [tdd, test driven, write tests first, เขียนเทสต์ก่อน]",
+          "  capabilities: [testing]",
+        ],
+      },
+      {
+        name: "archive-workflows",
+        description: "Create and extract archives and ZIP files.",
+        routing: [
+          "  positive-triggers: [zip, unzip, archive, extract]",
+          "  negative-triggers: [frontend, ui, animation]",
+          "  capabilities: [archive]",
+        ],
+      },
+    ];
+    for (const definition of definitions) {
+      const directory = path.join(root, definition.name);
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        path.join(directory, "SKILL.md"),
+        [
+          "---",
+          `name: ${definition.name}`,
+          `description: "${definition.description}"`,
+          "routing:",
+          ...definition.routing,
+          "---",
+          `# ${definition.name}`,
+          "Test instructions.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+    }
+
+    const service = new AgentSkillService({
+      roots: [{ path: root, source: "test" }],
+    });
+    const plan = await service.plan(
+      "มันดูไม่สวย อยากได้ animation แบบ interact ได้ ลอง dev ให้หน่อย",
+      5,
+    );
+
+    expect(plan.selected.map((skill) => skill.name)).toEqual([
+      "ui-ux-design",
+      "loading-motion-design",
       "ui-ux-audit",
     ]);
+    expect(plan.selected.map((skill) => skill.name)).not.toContain(
+      "test-driven-development",
+    );
+    const archive = plan.decisions.find(
+      (decision) => decision.name === "archive-workflows",
+    );
+    expect(archive?.selected).toBe(false);
+    expect(archive?.reasons.join(" ")).toMatch(/negative|irrelevant|below/i);
+    expect(
+      plan.decisions.find((decision) => decision.name === "ui-ux-design")
+        ?.confidence,
+    ).toMatch(/high|medium/);
+  });
+
+  it("prefers complementary capabilities over duplicate UI design skills", async () => {
+    root = await mkdtemp(
+      path.join(tmpdir(), "qnector-skills-routing-overlap-"),
+    );
+    const definitions = [
+      ["ui-ux-design", "ui design frontend polish", "ui-design"],
+      ["frontend-design", "frontend ui design components", "ui-design"],
+      ["ui-ux-pro-max", "advanced ui ux frontend design", "ui-design"],
+      ["loading-motion-design", "animation motion transition", "motion"],
+    ] as const;
+    for (const [name, description, capability] of definitions) {
+      const directory = path.join(root, name);
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        path.join(directory, "SKILL.md"),
+        [
+          "---",
+          `name: ${name}`,
+          `description: "${description}"`,
+          "routing:",
+          `  positive-triggers: [${description.split(" ").join(", ")}]`,
+          `  capabilities: [${capability}]`,
+          "---",
+          `# ${name}`,
+          "Test instructions.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+    }
+
+    const service = new AgentSkillService({
+      roots: [{ path: root, source: "test" }],
+    });
+    const plan = await service.plan(
+      "design a polished frontend ui with animation",
+      5,
+    );
+    const selectedNames = plan.selected.map((skill) => skill.name);
+    expect(selectedNames).toContain("loading-motion-design");
+    expect(
+      selectedNames.filter((name) =>
+        ["ui-ux-design", "frontend-design", "ui-ux-pro-max"].includes(name),
+      ),
+    ).toHaveLength(1);
+    expect(
+      plan.decisions.some((decision) => decision.outcome === "overlap"),
+    ).toBe(true);
   });
 
   it("parses folded YAML frontmatter used by ecosystem skills", async () => {
@@ -110,7 +255,7 @@ describe("AgentSkillService", () => {
         "---",
         "name: agent-harness",
         "description: >",
-        "  Test and evaluation harness for AI agents — scenario suites, deterministic",
+        "  Test and evaluation harness for AI agents â€” scenario suites, deterministic",
         "  replay, regression diffing, cost and latency budgets.",
         "license: MIT",
         "---",

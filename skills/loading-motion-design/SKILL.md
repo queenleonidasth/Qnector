@@ -4,6 +4,29 @@ description: Design and implement splash screens, startup transitions, skeletons
 license: MIT
 compatibility: Qnector 0.4.9+; browser/performance diagnostics recommended
 allowed-tools: system workspace files process browser computer
+routing:
+  positive-triggers:
+    - "animation"
+    - "animate"
+    - "motion"
+    - "transition"
+    - "parallax"
+    - "splash"
+    - "loading state"
+    - "skeleton"
+    - "perceived lag"
+    - "background animation"
+    - "animated background"
+    - "แอนิเมชัน"
+    - "อนิเมชัน"
+    - "เปลี่ยนหน้า"
+    - "หน้าโหลด"
+  negative-triggers:
+    - "xlsx"
+    - "spreadsheet"
+    - "archive"
+  capabilities:
+    - "motion"
 ---
 
 # Loading and Motion Design

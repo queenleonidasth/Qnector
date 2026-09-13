@@ -9,6 +9,21 @@ metadata:
   domain: development
   type: utility
   mode: assistive
+routing:
+  positive-triggers:
+    - "electron"
+    - "contextbridge"
+    - "context bridge"
+    - "ipc"
+    - "electron main"
+    - "electron renderer"
+    - "electron build"
+    - "code signing"
+  negative-triggers:
+    - "browser only"
+    - "web page only"
+  capabilities:
+    - "electron"
 ---
 
 # Electron + React Best Practices

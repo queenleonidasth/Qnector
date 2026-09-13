@@ -4,6 +4,23 @@ description: "Create, review, and improve Qnector Agent Skills in the open SKILL
 license: MIT
 compatibility: "Qnector 0.4.9+ Agent Skills runtime"
 allowed-tools: [system, workspace, files, process]
+routing:
+  positive-triggers:
+    - "skill router"
+    - "skill routing"
+    - "agent skill"
+    - "skill.md"
+    - "test trigger"
+    - "skill trigger"
+    - "routing metadata"
+    - "match skill"
+    - "สร้าง skill"
+    - "แก้ skill"
+  negative-triggers:
+    - "spreadsheet"
+    - "archive"
+  capabilities:
+    - "skill-authoring"
 ---
 
 # Skill Authoring

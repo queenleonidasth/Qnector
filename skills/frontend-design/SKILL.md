@@ -9,6 +9,20 @@ metadata:
   type: generator
   mode: generative
   domain: development
+routing:
+  positive-triggers:
+    - "frontend component"
+    - "frontend components"
+    - "production frontend"
+    - "component template"
+    - "web component"
+    - "web components"
+  negative-triggers:
+    - "system architecture"
+    - "spreadsheet"
+    - "archive"
+  capabilities:
+    - "ui-design"
 ---
 
 # Frontend Design

@@ -40,6 +40,33 @@ export interface AgentSkillRoot {
   source: string;
 }
 
+export interface AgentSkillRoutingMetadata {
+  positiveTriggers: string[];
+  negativeTriggers: string[];
+  capabilities: string[];
+}
+
+export type AgentSkillRouteConfidence = "high" | "medium" | "low";
+export type AgentSkillRouteOutcome =
+  "selected" | "negative" | "overlap" | "below-threshold" | "limit";
+
+export interface AgentSkillRouteDecision {
+  name: string;
+  score: number;
+  confidence: AgentSkillRouteConfidence;
+  selected: boolean;
+  outcome: AgentSkillRouteOutcome;
+  reasons: string[];
+  capabilities: string[];
+}
+
+export interface AgentSkillRoutePlan {
+  query: string;
+  matches: AgentSkillSummary[];
+  selected: AgentSkillSummary[];
+  decisions: AgentSkillRouteDecision[];
+}
+
 export interface AgentSkillSummary {
   name: string;
   description: string;
@@ -49,6 +76,7 @@ export interface AgentSkillSummary {
   license?: string;
   compatibility?: string;
   allowedTools?: string[];
+  routing?: AgentSkillRoutingMetadata;
   origin?: AgentSkillOrigin;
   enabled: boolean;
 }
@@ -273,37 +301,109 @@ export class AgentSkillService {
 
   public async match(query: string, limit = 5): Promise<AgentSkillSummary[]> {
     const scored = await this.rankMatches(query);
-    return scored.slice(0, clamp(limit, 1, 20)).map((entry) => entry.skill);
-  }
-
-  public async route(query: string, limit = 5): Promise<AgentSkillSummary[]> {
-    const scored = await this.rankMatches(query);
-    if (scored.length === 0) return [];
-
-    // Runtime activation is intentionally stricter than discovery. Test Trigger may
-    // show weak lexical matches, but loading them all wastes context and can inject
-    // unrelated procedures. Keep candidates that are materially close to the best
-    // match, with a small absolute floor so a single generic token is not enough.
-    const maxActivated = clamp(limit, 1, 5);
-    const threshold = Math.max(6, Math.ceil(scored[0]!.score * 0.35));
     return scored
-      .filter((entry) => entry.score >= threshold)
-      .slice(0, maxActivated)
+      .filter((entry) => entry.score > 0)
+      .slice(0, clamp(limit, 1, 20))
       .map((entry) => entry.skill);
   }
 
-  private async rankMatches(
+  public async route(query: string, limit = 5): Promise<AgentSkillSummary[]> {
+    return (await this.plan(query, limit, Math.max(5, limit))).selected;
+  }
+
+  public async plan(
     query: string,
-  ): Promise<Array<{ skill: AgentSkillSummary; score: number }>> {
-    const normalized = query.trim().toLowerCase();
+    maxActivated = 5,
+    maxMatches = 5,
+  ): Promise<AgentSkillRoutePlan> {
+    const normalizedQuery = normalizeRoutingText(query);
+    if (!normalizedQuery)
+      return { query, matches: [], selected: [], decisions: [] };
+
+    const ranked = await this.rankMatches(query);
+    if (ranked.length === 0)
+      return { query, matches: [], selected: [], decisions: [] };
+
+    const activationLimit = clamp(maxActivated, 1, 5);
+    const matchLimit = clamp(maxMatches, 1, 20);
+    const topScore = ranked[0]!.score;
+    const threshold = Math.max(8, Math.ceil(topScore * 0.32));
+    const selected: AgentSkillSummary[] = [];
+    const coveredCapabilities = new Set<string>();
+    const decisions: AgentSkillRouteDecision[] = [];
+
+    for (const entry of ranked.slice(0, 20)) {
+      const confidence = routingConfidence(entry.score, topScore);
+      let outcome: AgentSkillRouteOutcome = "selected";
+      let selectedEntry = false;
+      const reasons = [...entry.reasons];
+      const addsCapability = entry.matchedCapabilities.some(
+        (capability) => !coveredCapabilities.has(capability),
+      );
+      const fullyOverlaps =
+        entry.matchedCapabilities.length > 0 &&
+        entry.matchedCapabilities.every((capability) =>
+          coveredCapabilities.has(capability),
+        );
+
+      if (entry.negativeMatches.length > 0) {
+        outcome = "negative";
+        reasons.push(
+          `negative trigger: ${entry.negativeMatches.slice(0, 2).join(", ")}`,
+        );
+      } else if (
+        confidence === "low" ||
+        (entry.score < threshold && !addsCapability)
+      ) {
+        outcome = "below-threshold";
+        reasons.push(`below activation threshold ${threshold}`);
+      } else if (fullyOverlaps && selected.length > 0) {
+        outcome = "overlap";
+        reasons.push("capability already covered by a stronger selected skill");
+      } else if (selected.length >= activationLimit) {
+        outcome = "limit";
+        reasons.push(`activation limit ${activationLimit} reached`);
+      } else {
+        selectedEntry = true;
+        selected.push(entry.skill);
+        for (const capability of entry.matchedCapabilities)
+          coveredCapabilities.add(capability);
+        reasons.push(
+          addsCapability || entry.capabilities.length === 0
+            ? "selected for complementary task coverage"
+            : "selected by routing confidence",
+        );
+      }
+
+      decisions.push({
+        name: entry.skill.name,
+        score: entry.score,
+        confidence,
+        selected: selectedEntry,
+        outcome,
+        reasons: reasons.slice(0, 6),
+        capabilities: entry.capabilities,
+      });
+    }
+
+    return {
+      query,
+      matches: ranked
+        .filter((entry) => entry.score > 0)
+        .slice(0, matchLimit)
+        .map((entry) => entry.skill),
+      selected,
+      decisions,
+    };
+  }
+
+  private async rankMatches(query: string): Promise<RankedSkill[]> {
+    const normalized = normalizeRoutingText(query);
     if (!normalized) return [];
-    const terms = tokenize(normalized);
+    const querySignals = routingSignals(normalized);
     return (await this.discover(false))
-      .map((skill) => ({
-        skill,
-        score: scoreSkill(skill, normalized, terms),
-      }))
-      .filter((entry) => entry.score > 0)
+      .map((skill) => scoreSkill(skill, normalized, querySignals))
+      .filter((entry) => entry.score > 0 || entry.negativeMatches.length > 0)
       .sort(
         (a, b) =>
           b.score - a.score ||
@@ -701,6 +801,9 @@ export class AgentSkillService {
             ...(parsed.frontmatter.allowedTools?.length
               ? { allowedTools: parsed.frontmatter.allowedTools }
               : {}),
+            ...(parsed.frontmatter.routing
+              ? { routing: parsed.frontmatter.routing }
+              : {}),
             ...(origin ? { origin } : {}),
           });
         } catch {
@@ -723,6 +826,7 @@ type ParsedSkill = {
     license?: string;
     compatibility?: string;
     allowedTools?: string[];
+    routing?: AgentSkillRoutingMetadata;
   };
   body: string;
 };
@@ -763,6 +867,8 @@ function parseSkill(content: string, file: string): ParsedSkill {
     data["allowed-tools"] ?? data.allowed_tools,
   );
   if (allowedTools.length) frontmatter.allowedTools = allowedTools;
+  const routing = routingMetadata(data);
+  if (routing) frontmatter.routing = routing;
   if (!frontmatter.name || !frontmatter.description)
     throw new Error(`SKILL_INVALID: ${file} requires name and description`);
   return { frontmatter, body };
@@ -827,30 +933,434 @@ function yamlValue(value: string): string {
   return JSON.stringify(value);
 }
 
+interface RankedSkill {
+  skill: AgentSkillSummary;
+  score: number;
+  reasons: string[];
+  capabilities: string[];
+  matchedCapabilities: string[];
+  negativeMatches: string[];
+}
+
+interface RoutingSignals {
+  terms: Set<string>;
+  capabilities: Set<string>;
+}
+
+const GENERIC_ROUTING_TERMS = new Set([
+  "a",
+  "an",
+  "and",
+  "app",
+  "application",
+  "build",
+  "change",
+  "create",
+  "dev",
+  "develop",
+  "development",
+  "do",
+  "feature",
+  "for",
+  "help",
+  "implement",
+  "implementation",
+  "in",
+  "make",
+  "need",
+  "of",
+  "on",
+  "please",
+  "project",
+  "task",
+  "the",
+  "this",
+  "to",
+  "try",
+  "update",
+  "use",
+  "using",
+  "want",
+  "with",
+  "work",
+  "working",
+  "ช่วย",
+  "ทำ",
+  "งาน",
+  "หน่อย",
+  "ให้",
+  "ลอง",
+  "ใช้",
+]);
+
+const QUERY_CAPABILITY_PHRASES: Array<[string, string[]]> = [
+  [
+    "ui-design",
+    [
+      " ui ",
+      " ux ",
+      "frontend",
+      "interface",
+      "website",
+      "web page",
+      "login page",
+      "layout",
+      "responsive",
+      "styling",
+      "visual polish",
+      "เว็บ",
+      "หน้าเว็บ",
+      "ทำให้สวย",
+      "ดูไม่สวย",
+      "ดีไซน์",
+      "หน้าตา",
+    ],
+  ],
+  [
+    "motion",
+    [
+      "animation",
+      "animate",
+      "motion",
+      "transition",
+      "parallax",
+      "splash",
+      "animated background",
+      "background animation",
+      "แอนิเมชัน",
+      "อนิเมชัน",
+    ],
+  ],
+  [
+    "ui-audit",
+    [
+      "ui audit",
+      "audit ui",
+      "check ui",
+      "qc ui",
+      "visual bug",
+      "looks bad",
+      "look bad",
+      "ดูไม่สวย",
+      "ใช้งานยาก",
+      "ui เพี้ยน",
+      "เช็ค ui",
+      "ตรวจ ui",
+      "ตรวจ ux",
+    ],
+  ],
+  [
+    "testing",
+    [
+      "tdd",
+      "test driven",
+      "test-driven",
+      "write tests first",
+      "unit test",
+      "integration test",
+      "regression test",
+      "เขียนเทสต์ก่อน",
+      "เขียน test",
+    ],
+  ],
+  [
+    "verification",
+    [
+      "project qc",
+      "full qc",
+      "run full qc",
+      "release gate",
+      "release check",
+      "validate project",
+      "verify project",
+      "เช็คโปรเจกต์",
+      "ตรวจโปรเจกต์",
+      "ก่อน release",
+    ],
+  ],
+  [
+    "evaluation",
+    [
+      "golden dataset",
+      "eval suite",
+      "benchmark",
+      "routing regression",
+      "scenario suite",
+    ],
+  ],
+  [
+    "skill-authoring",
+    [
+      "skill router",
+      "skill routing",
+      "agent skill",
+      "skill.md",
+      "test trigger",
+    ],
+  ],
+  [
+    "spreadsheet",
+    [
+      "xlsx",
+      "xlsm",
+      "excel",
+      "spreadsheet",
+      "workbook",
+      "csv",
+      "tsv",
+      "สูตร excel",
+      "ชีต",
+    ],
+  ],
+  [
+    "archive",
+    [
+      "zip",
+      "unzip",
+      "rar",
+      "7z",
+      "archive",
+      "extract",
+      "compress",
+      "แตกไฟล์",
+      "บีบอัด",
+    ],
+  ],
+  ["document", ["pdf", "docx", "pptx", "word document", "document file"]],
+  [
+    "electron",
+    ["electron", "contextbridge", "context bridge", "ipc main", "ipc renderer"],
+  ],
+  ["typescript", ["typescript", "typecheck", "tsconfig", ".ts ", ".tsx"]],
+  [
+    "debugging",
+    ["bug", "error", "crash", "failing", "failure", "broken", "แก้บั๊ก", "พัง"],
+  ],
+  [
+    "architecture",
+    ["system design", "architecture", "architect", "ออกแบบระบบ"],
+  ],
+  [
+    "design-system",
+    ["design system", "design tokens", "theme tokens", "ระบบดีไซน์"],
+  ],
+  [
+    "ux-writing",
+    ["microcopy", "ux writing", "button label", "error copy", "ข้อความใน ui"],
+  ],
+];
+
+const SKILL_CAPABILITY_RULES: Array<[RegExp, string[]]> = [
+  [/^ui-ux-design$/i, ["ui-design"]],
+  [
+    /^(?:frontend-design|ui-ux-pro-max|ui-visual-composition|impeccable)$/i,
+    ["ui-design"],
+  ],
+  [/^ui-ux-audit$/i, ["ui-audit"]],
+  [/loading-motion/i, ["motion"]],
+  [/test-driven|\btdd\b/i, ["testing"]],
+  [/verification-before|project-qc/i, ["verification"]],
+  [/agent-harness/i, ["evaluation"]],
+  [/skill-authoring/i, ["skill-authoring"]],
+  [/spreadsheet|xlsx|excel/i, ["spreadsheet"]],
+  [/archive|zip/i, ["archive"]],
+  [/document|pdf|docx|pptx/i, ["document"]],
+  [/electron/i, ["electron"]],
+  [/typescript/i, ["typescript"]],
+  [/systematic-debug/i, ["debugging"]],
+  [/system-design/i, ["architecture"]],
+  [/design-system/i, ["design-system", "ui-design"]],
+  [/ux-writing/i, ["ux-writing", "ui-design"]],
+];
+
 function scoreSkill(
   skill: AgentSkillSummary,
   normalizedQuery: string,
-  queryTerms: string[],
-): number {
-  const name = skill.name.toLowerCase();
-  const description = skill.description.toLowerCase();
+  querySignals: RoutingSignals,
+): RankedSkill {
+  const name = normalizeRoutingText(skill.name);
+  const description = normalizeRoutingText(skill.description);
+  const nameTerms = new Set(tokenize(name));
+  const descriptionTerms = new Set(tokenize(description));
+  const capabilities = inferSkillCapabilities(skill);
+  const reasons: string[] = [];
   let score = 0;
-  if (name === normalizedQuery) score += 100;
-  if (name.includes(normalizedQuery)) score += 40;
-  if (description.includes(normalizedQuery)) score += 24;
-  for (const term of queryTerms) {
-    if (name.includes(term)) score += 8;
-    if (description.includes(term)) score += 3;
+
+  if (name === normalizedQuery) {
+    score += 100;
+    reasons.push("exact skill name");
+  } else if (
+    normalizedQuery.includes(name) ||
+    normalizedQuery.includes(name.replace(/-/g, " "))
+  ) {
+    score += 36;
+    reasons.push("skill name phrase");
   }
-  return score;
+
+  const positiveMatches = (skill.routing?.positiveTriggers ?? []).filter(
+    (trigger) =>
+      routingPhraseMatches(normalizedQuery, querySignals.terms, trigger),
+  );
+  if (positiveMatches.length > 0) {
+    score += Math.min(40, positiveMatches.length * 18);
+    reasons.push(`positive trigger: ${positiveMatches.slice(0, 2).join(", ")}`);
+  }
+
+  const capabilityMatches = capabilities.filter((capability) =>
+    querySignals.capabilities.has(capability),
+  );
+  if (capabilityMatches.length > 0) {
+    score += Math.min(36, capabilityMatches.length * 12);
+    reasons.push(`intent: ${capabilityMatches.join(", ")}`);
+  }
+
+  const nameMatches = [...querySignals.terms].filter((term) =>
+    nameTerms.has(term),
+  );
+  if (nameMatches.length > 0) {
+    score += Math.min(24, nameMatches.length * 8);
+    reasons.push(`name terms: ${nameMatches.slice(0, 3).join(", ")}`);
+  }
+
+  const descriptionMatches = [...querySignals.terms].filter((term) =>
+    descriptionTerms.has(term),
+  );
+  if (descriptionMatches.length > 0) {
+    score += Math.min(15, descriptionMatches.length * 3);
+    reasons.push(
+      `description terms: ${descriptionMatches.slice(0, 3).join(", ")}`,
+    );
+  }
+
+  const negativeMatches = (skill.routing?.negativeTriggers ?? []).filter(
+    (trigger) =>
+      routingPhraseMatches(normalizedQuery, querySignals.terms, trigger),
+  );
+
+  return {
+    skill,
+    score,
+    reasons,
+    capabilities,
+    matchedCapabilities: capabilityMatches,
+    negativeMatches,
+  };
+}
+
+function routingSignals(normalizedQuery: string): RoutingSignals {
+  const terms = new Set(
+    tokenize(normalizedQuery).filter(
+      (term) => !GENERIC_ROUTING_TERMS.has(term),
+    ),
+  );
+  const capabilities = new Set<string>();
+  for (const [capability, phrases] of QUERY_CAPABILITY_PHRASES) {
+    if (
+      phrases.some((phrase) =>
+        routingPhraseMatches(normalizedQuery, terms, phrase),
+      )
+    )
+      capabilities.add(capability);
+  }
+  return { terms, capabilities };
+}
+
+function inferSkillCapabilities(skill: AgentSkillSummary): string[] {
+  if (skill.routing?.capabilities.length)
+    return [...new Set(skill.routing.capabilities.map(normalizeRoutingText))];
+  const inferred = new Set<string>();
+  for (const [pattern, capabilities] of SKILL_CAPABILITY_RULES) {
+    if (pattern.test(skill.name))
+      for (const capability of capabilities) inferred.add(capability);
+  }
+  if (inferred.size === 0) {
+    const description = normalizeRoutingText(skill.description);
+    for (const [capability, phrases] of QUERY_CAPABILITY_PHRASES) {
+      if (
+        phrases.some((phrase) =>
+          routingPhraseMatches(
+            description,
+            new Set(tokenize(description)),
+            phrase,
+          ),
+        )
+      )
+        inferred.add(capability);
+    }
+  }
+  return [...inferred];
+}
+
+function routingConfidence(
+  score: number,
+  topScore: number,
+): AgentSkillRouteConfidence {
+  if (score >= 24 || (score >= 16 && score >= topScore * 0.72)) return "high";
+  if (score >= 10 || (score >= 8 && score >= topScore * 0.4)) return "medium";
+  return "low";
+}
+
+function routingPhraseMatches(
+  normalizedText: string,
+  terms: Set<string>,
+  rawPhrase: string,
+): boolean {
+  const phrase = normalizeRoutingText(rawPhrase);
+  if (!phrase) return false;
+  if (/^[a-z0-9_.+-]+$/i.test(phrase)) return terms.has(phrase);
+  return normalizedText.includes(phrase);
+}
+
+function normalizeRoutingText(value: string): string {
+  return value.normalize("NFKC").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function tokenize(value: string): string[] {
   return [
     ...new Set(
-      value.split(/[^\p{L}\p{N}_-]+/u).filter((term) => term.length >= 2),
+      normalizeRoutingText(value)
+        .split(/[^\p{L}\p{N}_.+]+/u)
+        .filter((term) => term.length >= 2),
     ),
   ];
+}
+
+function routingMetadata(
+  data: Record<string, unknown>,
+): AgentSkillRoutingMetadata | undefined {
+  const routing = recordMetadata(data.routing);
+  const positiveTriggers = stringListMetadata(
+    routing?.["positive-triggers"] ??
+      routing?.positive_triggers ??
+      data["positive-triggers"] ??
+      data.positive_triggers,
+  );
+  const negativeTriggers = stringListMetadata(
+    routing?.["negative-triggers"] ??
+      routing?.negative_triggers ??
+      data["negative-triggers"] ??
+      data.negative_triggers,
+  );
+  const capabilities = stringListMetadata(
+    routing?.capabilities ?? data.capabilities,
+  ).map(normalizeRoutingText);
+  if (
+    positiveTriggers.length === 0 &&
+    negativeTriggers.length === 0 &&
+    capabilities.length === 0
+  )
+    return undefined;
+  return {
+    positiveTriggers: [...new Set(positiveTriggers)],
+    negativeTriggers: [...new Set(negativeTriggers)],
+    capabilities: [...new Set(capabilities)],
+  };
+}
+
+function recordMetadata(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function stringMetadata(value: unknown): string | undefined {

@@ -4,6 +4,22 @@ description: Create, extract, normalize, or extend a practical design system wit
 license: MIT
 compatibility: Qnector 0.4.9+
 allowed-tools: workspace files process browser
+routing:
+  positive-triggers:
+    - "design system"
+    - "design tokens"
+    - "theme tokens"
+    - "typography system"
+    - "spacing system"
+    - "ระบบดีไซน์"
+    - "ธีม"
+    - "tokens"
+  negative-triggers:
+    - "system architecture"
+    - "backend architecture"
+  capabilities:
+    - "design-system"
+    - "ui-design"
 ---
 
 # Design System

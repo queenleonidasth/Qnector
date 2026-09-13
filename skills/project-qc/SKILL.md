@@ -4,6 +4,28 @@ description: "QC and validate software projects: inspect repository state, run t
 license: MIT
 compatibility: "Qnector 0.4.9+"
 allowed-tools: [system, workspace, files, process, git, browser, computer]
+routing:
+  positive-triggers:
+    - "project qc"
+    - "release gate"
+    - "release check"
+    - "validate project"
+    - "validate repository"
+    - "verify project"
+    - "verify all checks"
+    - "before shipping"
+    - "stabilize project"
+    - "test lint build"
+    - "check project"
+    - "เช็คโปรเจกต์"
+    - "ตรวจโปรเจกต์"
+    - "ก่อน release"
+  negative-triggers:
+    - "ui audit"
+    - "spreadsheet file"
+    - "archive file"
+  capabilities:
+    - "verification"
 ---
 
 # Project QC

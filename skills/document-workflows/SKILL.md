@@ -4,6 +4,23 @@ description: "Read, inspect, convert, edit, and QC document files including PDF,
 license: MIT
 compatibility: "Qnector 0.4.9+; optional MarkItDown/LibreOffice/Python document libraries improve coverage"
 allowed-tools: [system, files, process, workspace]
+routing:
+  positive-triggers:
+    - "pdf"
+    - "docx"
+    - "pptx"
+    - "odt"
+    - "epub"
+    - "rtf"
+    - "word"
+    - "word document"
+    - "document file"
+    - "เอกสาร"
+  negative-triggers:
+    - "xlsx workbook"
+    - "zip archive"
+  capabilities:
+    - "document"
 ---
 
 # Document Workflows

@@ -452,14 +452,16 @@ export async function executeSystem(
             "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
           );
         const query = stringInput(object, "query", true)!;
-        const skills = await context.agentSkills.match(
-          query,
-          numberInput(object, "maxResults", 5),
-        );
-        const wouldActivate = await context.agentSkills.route(query, 5);
+        const maxResults = numberInput(object, "maxResults", 5);
+        const plan = await context.agentSkills.plan(query, 5, maxResults);
         return {
-          summary: `Matched ${skills.length} Agent Skill(s); runtime would activate ${wouldActivate.length}`,
-          data: { query, skills, wouldActivate },
+          summary: `Matched ${plan.matches.length} Agent Skill(s); runtime would activate ${plan.selected.length}`,
+          data: {
+            query,
+            skills: plan.matches,
+            wouldActivate: plan.selected,
+            decisions: plan.decisions,
+          },
         };
       }
       if (action === "skills_route") {
@@ -468,12 +470,14 @@ export async function executeSystem(
             "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
           );
         const query = stringInput(object, "query", true)!;
-        const matched = await context.agentSkills.route(
+        const maxResults = numberInput(object, "maxResults", 5);
+        const plan = await context.agentSkills.plan(
           query,
-          numberInput(object, "maxResults", 5),
+          maxResults,
+          Math.max(8, maxResults),
         );
         const skills = await Promise.all(
-          matched.map((skill) => context.agentSkills!.get(skill.name)),
+          plan.selected.map((skill) => context.agentSkills!.get(skill.name)),
         );
         if (context.skillTrace) {
           context.skillTrace.routeId = randomUUID();
@@ -485,13 +489,14 @@ export async function executeSystem(
               ? { allowedTools: [...skill.allowedTools] }
               : {}),
           }));
+          context.skillTrace.routingDecisions = plan.decisions;
         }
         return {
           summary:
             skills.length > 0
               ? `Activated ${skills.length} Agent Skill(s): ${skills.map((skill) => skill.name).join(", ")}`
-              : `No Agent Skills matched '${query}'`,
-          data: { query, skills },
+              : `No Agent Skills passed the runtime routing threshold for '${query}'`,
+          data: { query, skills, decisions: plan.decisions },
         };
       }
       if (action === "skills_search_remote") {

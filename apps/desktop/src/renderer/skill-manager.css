@@ -984,6 +984,13 @@
   white-space: nowrap;
 }
 
+.trigger-results .trigger-routing-score {
+  color: #bba76f;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
 .trigger-results em,
 .duplicate-list em {
   color: #ba9d58;

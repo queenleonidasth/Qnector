@@ -4,6 +4,25 @@ description: Write and audit interface microcopy for labels, buttons, menus, onb
 license: MIT
 compatibility: Qnector 0.4.9+
 allowed-tools: workspace files browser computer
+routing:
+  positive-triggers:
+    - "ux writing"
+    - "microcopy"
+    - "wording"
+    - "button label"
+    - "button labels"
+    - "error copy"
+    - "validation messages"
+    - "empty state copy"
+    - "loading copy"
+    - "ข้อความใน ui"
+    - "ชื่อปุ่ม"
+    - "ข้อความ error"
+  negative-triggers:
+    - "document writing"
+    - "source code"
+  capabilities:
+    - "ux-writing"
 ---
 
 # UX Writing

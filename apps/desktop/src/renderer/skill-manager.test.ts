@@ -42,6 +42,10 @@ describe("desktop Skill Manager", () => {
     expect(source).toContain("skillDraftKey(workspaceKey)");
     expect(source).toContain("setTriggerHasRun(true)");
     expect(source).toContain("setTriggerActivations(result.wouldActivate)");
+    expect(source).toContain("setTriggerDecisions(result.decisions)");
+    expect(source).toContain("ROUTING SCORE");
+    expect(source).toContain("decision.confidence");
+    expect(source).toContain("decision?.reasons[0]");
     expect(source).toContain("WOULD ACTIVATE");
     expect(source).toContain("MATCHED SKILLS");
     expect(source).toContain(

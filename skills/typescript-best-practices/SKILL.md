@@ -9,6 +9,22 @@ metadata:
   type: utility
   mode: assistive
   domain: development
+routing:
+  positive-triggers:
+    - "typescript"
+    - "typecheck"
+    - "tsconfig"
+    - ".ts"
+    - ".tsx"
+    - "type safety"
+    - "generics"
+    - "strict typing"
+    - "typescript types"
+  negative-triggers:
+    - "javascript only"
+    - "python"
+  capabilities:
+    - "typescript"
 ---
 
 # TypeScript Best Practices
