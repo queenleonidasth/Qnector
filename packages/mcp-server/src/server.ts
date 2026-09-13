@@ -123,6 +123,8 @@ export class QnectorRuntime {
   private readonly skillTraceStore: SkillTraceStore = {
     default: { skills: [] },
     byTaskId: new Map(),
+    bySessionId: new Map(),
+    byRouteId: new Map(),
   };
   private startedAt = new Date().toISOString();
   private state: ServerStatus["state"] = "disconnected";
@@ -263,7 +265,7 @@ export class QnectorRuntime {
     if (this.configFile) await saveConfig(config, this.configFile);
   }
 
-  public context(): ToolContext {
+  public context(skillTraceSessionId?: string): ToolContext {
     return {
       workspace: this.workspace,
       processManager: this.processManager,
@@ -285,6 +287,7 @@ export class QnectorRuntime {
       platform: this.platform,
       activity: this.activity,
       skillTraceStore: this.skillTraceStore,
+      ...(skillTraceSessionId ? { skillTraceSessionId } : {}),
       getConfig: () => this.config,
       setConfig: (config) => this.setConfig(config),
     };
@@ -419,6 +422,9 @@ export class QnectorRuntime {
     requestContext?: McpRequestContext,
   ): Promise<McpServer> {
     const instructions = await this.sessionBootstrapFor(requestContext);
+    const skillTraceSessionId = requestContext?.requestInfo?.headers
+      .get("mcp-session-id")
+      ?.trim();
     const server = new McpServer(
       { name: "Qnector", version: QNECTOR_VERSION },
       instructions ? { instructions } : undefined,
@@ -435,7 +441,7 @@ export class QnectorRuntime {
         async (input) => {
           const result = await this.registry.call(
             definition.name,
-            this.context(),
+            this.context(skillTraceSessionId || undefined),
             input,
           );
           const { attachments, ...jsonResult } = result;

@@ -48,6 +48,47 @@ describe("AgentSkillService", () => {
     expect(loaded.source).toBe("test");
   });
 
+  it("reuses discovery briefly and refreshes after the cache TTL", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skills-cache-"));
+    const directory = path.join(root, "cache-skill");
+    await mkdir(directory, { recursive: true });
+    const skillFile = path.join(directory, "SKILL.md");
+    await writeFile(
+      skillFile,
+      [
+        "---",
+        "name: cache-skill",
+        'description: "Cache test skill."',
+        "---",
+        "# Cache Skill",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const service = new AgentSkillService({
+      roots: [{ path: root, source: "user" }],
+      discoveryCacheTtlMs: 5_000,
+    });
+
+    expect((await service.list()).map((skill) => skill.name)).toContain(
+      "cache-skill",
+    );
+    await rm(skillFile, { force: true });
+    expect((await service.list()).map((skill) => skill.name)).toContain(
+      "cache-skill",
+    );
+
+    await service.create({
+      scope: "user",
+      name: "fresh-skill",
+      description: "Forces discovery cache invalidation.",
+      instructions: "Refresh discovery.",
+    });
+    const refreshed = (await service.list()).map((skill) => skill.name);
+    expect(refreshed).toContain("fresh-skill");
+    expect(refreshed).not.toContain("cache-skill");
+  });
+
   it("plans dynamic runtime activation and drops weak lexical false positives", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skills-route-"));
     const definitions = [

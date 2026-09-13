@@ -186,6 +186,146 @@ describe("Qnector grouped tools", () => {
     expect(workspaceEntry?.skillTrace).toBeUndefined();
   });
 
+  it("isolates Skill trace state by MCP session when no memory task is supplied", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skill-session-"));
+    const config = defaultConfig(root);
+    const base = makeContext(config);
+    const skillsRoot = path.join(root, "skills");
+    const skillDirectory = path.join(skillsRoot, "session-skill");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      [
+        "---",
+        "name: session-skill",
+        'description: "Trace session-specific file edits."',
+        "allowed-tools: [files]",
+        "---",
+        "# Session Skill",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    base.agentSkills = new AgentSkillService({
+      roots: [{ path: skillsRoot, source: "test" }],
+    });
+    base.skillTraceStore = {
+      default: { skills: [] },
+      byTaskId: new Map(),
+      bySessionId: new Map(),
+    };
+    const sessionA = { ...base, skillTraceSessionId: "session-a" };
+    const sessionB = { ...base, skillTraceSessionId: "session-b" };
+    const registry = new ToolRegistry();
+
+    const routeA = await registry.call("system", sessionA, {
+      action: "skills_route",
+      query: "trace session-specific file edits",
+    });
+    expect(routeA.ok).toBe(true);
+    const routeAId = (routeA.data as { data?: { routeId?: string } })?.data
+      ?.routeId;
+    expect(routeAId).toBeTruthy();
+
+    const routeB = await registry.call("system", sessionB, {
+      action: "skills_route",
+      query: "trace session-specific file edits",
+    });
+    expect(routeB.ok).toBe(true);
+    const routeBId = (routeB.data as { data?: { routeId?: string } })?.data
+      ?.routeId;
+    expect(routeBId).toBeTruthy();
+    expect(routeBId).not.toBe(routeAId);
+
+    await writeFile(path.join(root, "session-a.txt"), "a\n", "utf8");
+    await writeFile(path.join(root, "session-b.txt"), "b\n", "utf8");
+    await registry.call("files", sessionA, {
+      action: "read",
+      path: "session-a.txt",
+    });
+    await registry.call("files", sessionB, {
+      action: "read",
+      path: "session-b.txt",
+    });
+
+    const fileEntries = base.activity
+      .list()
+      .filter((entry) => entry.tool === "files" && entry.action === "read");
+    const entryA = fileEntries.find((entry) =>
+      entry.argsSummary.includes("session-a.txt"),
+    );
+    const entryB = fileEntries.find((entry) =>
+      entry.argsSummary.includes("session-b.txt"),
+    );
+    expect(entryA?.skillTrace?.routeId).toBe(routeAId);
+    expect(entryB?.skillTrace?.routeId).toBe(routeBId);
+  });
+
+  it("requires an explicit Skill route id for stateless trace propagation", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skill-route-id-"));
+    const config = defaultConfig(root);
+    const context = makeContext(config);
+    const skillsRoot = path.join(root, "skills");
+    const skillDirectory = path.join(skillsRoot, "route-id-skill");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      [
+        "---",
+        "name: route-id-skill",
+        'description: "Trace stateless file edits with an explicit route id."',
+        "allowed-tools: [files]",
+        "---",
+        "# Route ID Skill",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    context.agentSkills = new AgentSkillService({
+      roots: [{ path: skillsRoot, source: "test" }],
+    });
+    context.skillTraceStore = {
+      default: { skills: [] },
+      byTaskId: new Map(),
+      bySessionId: new Map(),
+      byRouteId: new Map(),
+    };
+    const registry = new ToolRegistry();
+    const routed = await registry.call("system", context, {
+      action: "skills_route",
+      query: "trace stateless file edits with an explicit route id",
+    });
+    expect(routed.ok).toBe(true);
+    const routeId = (routed.data as { data?: { routeId?: string } })?.data
+      ?.routeId;
+    expect(routeId).toBeTruthy();
+
+    await writeFile(path.join(root, "plain-no-route.txt"), "none\n", "utf8");
+    await writeFile(path.join(root, "explicit-route.txt"), "route\n", "utf8");
+    await registry.call("files", context, {
+      action: "read",
+      path: "plain-no-route.txt",
+    });
+    await registry.call("files", context, {
+      action: "read",
+      path: "explicit-route.txt",
+      skillRouteId: routeId,
+    });
+
+    const entries = context.activity
+      .list()
+      .filter((entry) => entry.tool === "files");
+    const unscoped = entries.find((entry) =>
+      entry.argsSummary.includes("plain-no-route.txt"),
+    );
+    const scoped = entries.find((entry) =>
+      entry.argsSummary.includes("explicit-route.txt"),
+    );
+    expect(unscoped?.skillTrace).toBeUndefined();
+    expect(scoped?.skillTrace?.routeId).toBe(routeId);
+    expect(scoped?.skillTrace?.skills).toEqual(["route-id-skill"]);
+  });
+
   it("replaces exact text inside DOCX and PPTX OOXML packages", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-ooxml-edit-"));
     const registry = new ToolRegistry();

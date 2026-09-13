@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   matrixContinuousMotionEnabled,
   matrixDisconnectSpeedScale,
+  matrixTargetFps,
 } from "./gold-matrix-rain.js";
 
 describe("Royal Gold Matrix disconnect deceleration", () => {
@@ -39,5 +40,10 @@ describe("Royal Gold Matrix disconnect deceleration", () => {
 
   it("respects reduced-motion independently of connection state", () => {
     expect(matrixContinuousMotionEnabled(false, true, 0)).toBe(false);
+  });
+
+  it("keeps 165 FPS only while focused and throttles background animation", () => {
+    expect(matrixTargetFps(true)).toBe(165);
+    expect(matrixTargetFps(false)).toBe(15);
   });
 });

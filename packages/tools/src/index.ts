@@ -59,9 +59,17 @@ export class ToolRegistry {
     input: unknown,
   ): Promise<ToolResult> {
     const memoryTaskId = memoryTaskIdFromInput(input) ?? context.memoryTaskId;
+    const skillRouteId = skillRouteIdFromInput(input);
+    const inheritedTrace =
+      skillTraceForScope(
+        context.skillTraceStore,
+        memoryTaskId,
+        context.skillTraceSessionId,
+        skillRouteId,
+      ) ?? context.skillTrace;
     const skillTrace =
-      skillTraceForTask(context.skillTraceStore, memoryTaskId) ??
-      context.skillTrace;
+      inheritedTrace ??
+      (isSkillsRouteRequest(name, input) ? { skills: [] } : undefined);
     const scopedContext =
       memoryTaskId || skillTrace
         ? {
@@ -248,27 +256,61 @@ export * from "./browser-tool.js";
 export * from "./computer-tool.js";
 
 function memoryTaskIdFromInput(input: unknown): string | undefined {
+  return scopedStringFromInput(input, "memoryTaskId");
+}
+
+function skillRouteIdFromInput(input: unknown): string | undefined {
+  return scopedStringFromInput(input, "skillRouteId");
+}
+
+function scopedStringFromInput(
+  input: unknown,
+  key: "memoryTaskId" | "skillRouteId",
+): string | undefined {
   if (!input || typeof input !== "object" || Array.isArray(input))
     return undefined;
-  const value = (input as { memoryTaskId?: unknown }).memoryTaskId;
+  const value = (input as Record<string, unknown>)[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function skillTraceForTask(
+function isSkillsRouteRequest(name: string, input: unknown): boolean {
+  return (
+    name === "system" &&
+    !!input &&
+    typeof input === "object" &&
+    !Array.isArray(input) &&
+    (input as { action?: unknown }).action === "skills_route"
+  );
+}
+
+function skillTraceForScope(
   store: SkillTraceStore | undefined,
   memoryTaskId: string | undefined,
+  sessionId: string | undefined,
+  skillRouteId: string | undefined,
 ): SkillTraceState | undefined {
   if (!store) return undefined;
-  if (!memoryTaskId) return store.default;
+  if (skillRouteId) return store.byRouteId?.get(skillRouteId);
+  if (memoryTaskId) return traceForKey(store.byTaskId, memoryTaskId);
+  if (sessionId) {
+    store.bySessionId ??= new Map();
+    return traceForKey(store.bySessionId, sessionId);
+  }
+  return undefined;
+}
 
-  let trace = store.byTaskId.get(memoryTaskId);
+function traceForKey(
+  traces: Map<string, SkillTraceState>,
+  key: string,
+): SkillTraceState {
+  let trace = traces.get(key);
   if (!trace) {
     trace = { skills: [] };
-    store.byTaskId.set(memoryTaskId, trace);
-    while (store.byTaskId.size > 100) {
-      const oldest = store.byTaskId.keys().next().value as string | undefined;
+    traces.set(key, trace);
+    while (traces.size > 100) {
+      const oldest = traces.keys().next().value as string | undefined;
       if (!oldest) break;
-      store.byTaskId.delete(oldest);
+      traces.delete(oldest);
     }
   }
   return trace;
@@ -291,6 +333,11 @@ function withTaskIdSchema(
         type: "string",
         description:
           "Qnector Memory v2 task handle. Start/resume a task with the memory tool, then pass the returned taskId here as memoryTaskId on every related Qnector tool call so concurrent chat sessions do not mix progress.",
+      },
+      skillRouteId: {
+        type: "string",
+        description:
+          "Exact routeId returned by system.skills_route. Pass it on subsequent related Qnector tool calls so Skill Context stays attached to the correct stateless chat/request stream.",
       },
     },
   };

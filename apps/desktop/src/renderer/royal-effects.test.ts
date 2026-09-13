@@ -205,7 +205,9 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     const text = await matrix();
 
     expect(text).toContain("TARGET_FPS = 165");
-    expect(text).toContain("FRAME_INTERVAL_MS = 1000 / TARGET_FPS");
+    expect(text).toContain("BACKGROUND_FPS = 15");
+    expect(text).toContain("matrixTargetFps(windowFocused)");
+    expect(text).toContain('window.addEventListener("blur", handleWindowBlur)');
     expect(text).toContain('"(prefers-reduced-motion: reduce)"');
     expect(text).toContain('document.addEventListener("visibilitychange"');
     expect(text).toContain("cancelAnimationFrame");

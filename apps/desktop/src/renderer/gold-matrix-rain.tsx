@@ -13,8 +13,12 @@ const ROYAL_SOVEREIGN = {
 } as const;
 
 const TARGET_FPS = 165;
-const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
+const BACKGROUND_FPS = 15;
 const DORMANT_SPEED_MULTIPLIER = 0.45;
+
+export function matrixTargetFps(focused: boolean): number {
+  return focused ? TARGET_FPS : BACKGROUND_FPS;
+}
 const MAX_DEVICE_PIXEL_RATIO = 2;
 
 function normalizeDisconnectProgress(progress: number): number {
@@ -94,6 +98,7 @@ export function GoldMatrixRain({
 
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     let reducedMotion = motionQuery.matches;
+    let windowFocused = document.hasFocus();
     let animationFrameId: number | undefined;
     let destroyed = false;
     let lastFrameAt = 0;
@@ -253,8 +258,9 @@ export function GoldMatrixRain({
 
       if (lastFrameAt === 0) lastFrameAt = timestamp;
       const elapsed = timestamp - lastFrameAt;
-      if (elapsed >= FRAME_INTERVAL_MS) {
-        lastFrameAt = timestamp - (elapsed % FRAME_INTERVAL_MS);
+      const frameIntervalMs = 1000 / matrixTargetFps(windowFocused);
+      if (elapsed >= frameIntervalMs) {
+        lastFrameAt = timestamp - (elapsed % frameIntervalMs);
         drawFrame(elapsed, true);
       }
       animationFrameId = requestAnimationFrame(render);
@@ -306,6 +312,7 @@ export function GoldMatrixRain({
 
     const handleVisibilityChange = (): void => {
       stopAnimation();
+      windowFocused = document.hasFocus();
       if (
         !document.hidden &&
         matrixContinuousMotionEnabled(
@@ -350,7 +357,19 @@ export function GoldMatrixRain({
     });
     if (canvas.parentElement) resizeObserver.observe(canvas.parentElement);
 
+    const handleWindowFocus = (): void => {
+      windowFocused = true;
+      lastFrameAt = 0;
+      startAnimation();
+    };
+    const handleWindowBlur = (): void => {
+      windowFocused = false;
+      lastFrameAt = 0;
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("blur", handleWindowBlur);
     motionQuery.addEventListener("change", refreshMotionState);
 
     return () => {
@@ -361,6 +380,8 @@ export function GoldMatrixRain({
       drawStaticFrameRef.current = null;
       resizeObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("blur", handleWindowBlur);
       motionQuery.removeEventListener("change", refreshMotionState);
     };
   }, []);

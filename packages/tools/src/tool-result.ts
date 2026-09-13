@@ -49,6 +49,7 @@ export interface ToolContext {
   memory?: MemoryStore;
   memoryV2?: MemoryV2Store;
   memoryTaskId?: string;
+  skillTraceSessionId?: string;
   platform?: PlatformServices;
   activity: ActivityLogger;
   skillTrace?: SkillTraceState;
@@ -71,6 +72,8 @@ export interface SkillTraceState {
 export interface SkillTraceStore {
   default: SkillTraceState;
   byTaskId: Map<string, SkillTraceState>;
+  bySessionId?: Map<string, SkillTraceState>;
+  byRouteId?: Map<string, SkillTraceState>;
 }
 
 function activitySkillTrace(

@@ -122,6 +122,7 @@ export interface AgentSkillServiceOptions {
   workspaceRoot?: () => string | undefined;
   registryBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  discoveryCacheTtlMs?: number;
 }
 
 export interface AgentSkillWriteInput {
@@ -139,7 +140,17 @@ interface SkillStateFile {
 }
 
 export class AgentSkillService {
+  private discoveryCache?: {
+    key: string;
+    expiresAt: number;
+    skills: AgentSkillSummary[];
+  };
+
   public constructor(private readonly options: AgentSkillServiceOptions = {}) {}
+
+  private invalidateDiscoveryCache(): void {
+    this.discoveryCache = undefined;
+  }
 
   public async searchRemote(input: {
     query: string;
@@ -479,6 +490,7 @@ export class AgentSkillService {
         "INVALID_INPUT: renaming a skill is not supported; duplicate it instead",
       );
     await writeFile(current.path, serializeSkill(next), "utf8");
+    this.invalidateDiscoveryCache();
     return this.get(current.name, { includeDisabled: true });
   }
 
@@ -747,75 +759,95 @@ export class AgentSkillService {
     const file = this.statePath();
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    this.invalidateDiscoveryCache();
   }
 
   private async discover(
     includeDisabled: boolean,
   ): Promise<AgentSkillSummary[]> {
-    const disabled = new Set(
-      ((await this.readState()).disabled ?? []).map((entry) =>
-        entry.toLowerCase(),
-      ),
-    );
-    const byName = new Map<string, AgentSkillSummary>();
-    for (const root of this.roots()) {
-      if (!(await isDirectory(root.path))) continue;
-      const candidates: string[] = [];
-      if (await isFile(path.join(root.path, "SKILL.md")))
-        candidates.push(root.path);
-      const entries = await readdir(root.path, { withFileTypes: true }).catch(
-        () => [],
+    const roots = this.roots();
+    const cacheKey = roots
+      .map((root) => `${root.source}:${root.path}`)
+      .join("|");
+    const now = Date.now();
+    let discovered =
+      this.discoveryCache?.key === cacheKey &&
+      this.discoveryCache.expiresAt > now
+        ? this.discoveryCache.skills
+        : undefined;
+
+    if (!discovered) {
+      const disabled = new Set(
+        ((await this.readState()).disabled ?? []).map((entry) =>
+          entry.toLowerCase(),
+        ),
       );
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const directory = path.join(root.path, entry.name);
-        if (await isFile(path.join(directory, "SKILL.md")))
-          candidates.push(directory);
-      }
-      for (const directory of candidates) {
-        if (byName.size >= MAX_SKILLS) break;
-        const file = path.join(directory, "SKILL.md");
-        try {
-          const info = await stat(file);
-          if (info.size <= 0 || info.size > MAX_SKILL_BYTES) continue;
-          const parsed = parseSkill(await readFile(file, "utf8"), file);
-          const name = parsed.frontmatter.name?.trim();
-          const description = parsed.frontmatter.description?.trim();
-          if (!name || !description) continue;
-          const key = name.toLowerCase();
-          const enabled = !disabled.has(key);
-          const origin = await readSkillOrigin(directory);
-          byName.set(key, {
-            name,
-            description,
-            path: file,
-            directory,
-            source: root.source,
-            enabled,
-            ...(parsed.frontmatter.license
-              ? { license: parsed.frontmatter.license }
-              : {}),
-            ...(parsed.frontmatter.compatibility
-              ? { compatibility: parsed.frontmatter.compatibility }
-              : {}),
-            ...(parsed.frontmatter.allowedTools?.length
-              ? { allowedTools: parsed.frontmatter.allowedTools }
-              : {}),
-            ...(parsed.frontmatter.routing
-              ? { routing: parsed.frontmatter.routing }
-              : {}),
-            ...(origin ? { origin } : {}),
-          });
-        } catch {
-          // A malformed skill must never prevent Qnector from loading other skills.
+      const byName = new Map<string, AgentSkillSummary>();
+      for (const root of roots) {
+        if (!(await isDirectory(root.path))) continue;
+        const candidates: string[] = [];
+        if (await isFile(path.join(root.path, "SKILL.md")))
+          candidates.push(root.path);
+        const entries = await readdir(root.path, { withFileTypes: true }).catch(
+          () => [],
+        );
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const directory = path.join(root.path, entry.name);
+          if (await isFile(path.join(directory, "SKILL.md")))
+            candidates.push(directory);
+        }
+        for (const directory of candidates) {
+          if (byName.size >= MAX_SKILLS) break;
+          const file = path.join(directory, "SKILL.md");
+          try {
+            const info = await stat(file);
+            if (info.size <= 0 || info.size > MAX_SKILL_BYTES) continue;
+            const parsed = parseSkill(await readFile(file, "utf8"), file);
+            const name = parsed.frontmatter.name?.trim();
+            const description = parsed.frontmatter.description?.trim();
+            if (!name || !description) continue;
+            const key = name.toLowerCase();
+            const enabled = !disabled.has(key);
+            const origin = await readSkillOrigin(directory);
+            byName.set(key, {
+              name,
+              description,
+              path: file,
+              directory,
+              source: root.source,
+              enabled,
+              ...(parsed.frontmatter.license
+                ? { license: parsed.frontmatter.license }
+                : {}),
+              ...(parsed.frontmatter.compatibility
+                ? { compatibility: parsed.frontmatter.compatibility }
+                : {}),
+              ...(parsed.frontmatter.allowedTools?.length
+                ? { allowedTools: parsed.frontmatter.allowedTools }
+                : {}),
+              ...(parsed.frontmatter.routing
+                ? { routing: parsed.frontmatter.routing }
+                : {}),
+              ...(origin ? { origin } : {}),
+            });
+          } catch {
+            // A malformed skill must never prevent Qnector from loading other skills.
+          }
         }
       }
-    }
-    return [...byName.values()]
-      .filter((skill) => includeDisabled || skill.enabled)
-      .sort((a, b) =>
+      discovered = [...byName.values()].sort((a, b) =>
         a.name.localeCompare(b.name, "en", { sensitivity: "base" }),
       );
+      const ttlMs = Math.max(0, this.options.discoveryCacheTtlMs ?? 1_000);
+      this.discoveryCache = {
+        key: cacheKey,
+        expiresAt: now + ttlMs,
+        skills: discovered,
+      };
+    }
+
+    return discovered.filter((skill) => includeDisabled || skill.enabled);
   }
 }
 

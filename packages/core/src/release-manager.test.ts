@@ -47,6 +47,27 @@ describe("ReleaseManager", () => {
     }
   });
 
+  it("ignores .qnector runtime memory when deciding whether source is newer", async () => {
+    const fixture = await createFixture("runtime-memory-mtime");
+    try {
+      const memoryFile = path.join(fixture.root, ".qnector", "MEMORY.md");
+      await mkdir(path.dirname(memoryFile), { recursive: true });
+      await writeFile(memoryFile, "runtime state\n", "utf8");
+      const future = new Date(Date.now() + 30_000);
+      await utimes(memoryFile, future, future);
+      const manager = new ReleaseManager({
+        buildIdentity: async () => packagedIdentity(fixture.installedExe),
+        resourcesPath: fixture.installedResources,
+      });
+      const result = await manager.status(fixture.root);
+
+      expect(result.sourceChangedSinceLatestPackage).toBe(false);
+      expect(result.status).toBe("latest");
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it("returns unknown rather than a false outdated result when no comparable installed payload exists", async () => {
     const fixture = await createFixture("missing-installed-payload");
     try {

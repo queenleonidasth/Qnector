@@ -14,6 +14,9 @@ const mainSource = readFileSync(
   new URL("../main/main.ts", import.meta.url),
   "utf8",
 );
+const rootPackage = JSON.parse(
+  readFileSync(new URL("../../../../package.json", import.meta.url), "utf8"),
+) as { scripts?: Record<string, string> };
 
 describe("2026-09-11 QC regression guards", () => {
   it("keeps MEMORY.md view and export as separate cancel-safe flows", () => {
@@ -56,6 +59,16 @@ describe("2026-09-11 QC regression guards", () => {
     );
     expect(skillManager).toContain("const confirmImport = async");
     expect(skillManager).not.toContain("Cancel = User");
+  });
+
+  it("does not rerender the full App for every managed-process output event", () => {
+    expect(renderer).not.toContain("const [processes, setProcesses]");
+    expect(renderer).not.toContain("window.qnector.onProcess(");
+  });
+
+  it("bootstraps workspace package builds and bounds test concurrency", () => {
+    expect(rootPackage.scripts?.pretest).toBe("tsc -b --pretty false");
+    expect(rootPackage.scripts?.test).toBe("vitest run --maxWorkers=2");
   });
 
   it("snapshots the current config before handing control to the updater", () => {

@@ -506,7 +506,6 @@ function App(): React.ReactElement {
   >();
   const [bridge, setBridge] = useState<TransportSnapshot>(fallbackBridge);
   const [initialActivity, setInitialActivity] = useState<ActivityEntry[]>([]);
-  const [processes, setProcesses] = useState<ProcessSnapshot[]>([]);
   const [config, setConfig] = useState<QnectorConfig>();
   const [memory, setMemory] = useState<MemoryRecallView>();
   const [runtimeDashboard, setRuntimeDashboard] =
@@ -733,7 +732,6 @@ function App(): React.ReactElement {
       setBridge(nextStatus.bridge);
       if (nextStatus.bridge.state !== "error") setError(undefined);
       setInitialActivity(coalesceActivity(snapshot.activity).slice(0, 50));
-      setProcesses(snapshot.processes);
       setConfig(nextConfig);
       if (snapshot.update) setUpdateState(snapshot.update);
       setSetupProfile(nextConfig.transport.openaiProfile?.trim() || "qnector");
@@ -769,12 +767,6 @@ function App(): React.ReactElement {
         void refreshMemory();
       }, 120);
     });
-    const offProcess = window.qnector.onProcess((entry) =>
-      setProcesses((items) => [
-        entry,
-        ...items.filter((item) => item.id !== entry.id),
-      ]),
-    );
     const offUpdate = window.qnector.onUpdate((next) => setUpdateState(next));
 
     return () => {
@@ -782,7 +774,6 @@ function App(): React.ReactElement {
       offRuntimeReady();
       offStatus();
       offMemory();
-      offProcess();
       offUpdate();
       if (memoryRefreshTimerRef.current !== null)
         window.clearTimeout(memoryRefreshTimerRef.current);

@@ -479,8 +479,9 @@ export async function executeSystem(
         const skills = await Promise.all(
           plan.selected.map((skill) => context.agentSkills!.get(skill.name)),
         );
+        const routeId = randomUUID();
         if (context.skillTrace) {
-          context.skillTrace.routeId = randomUUID();
+          context.skillTrace.routeId = routeId;
           context.skillTrace.query = query;
           context.skillTrace.activatedAt = new Date().toISOString();
           context.skillTrace.skills = skills.map((skill) => ({
@@ -490,13 +491,23 @@ export async function executeSystem(
               : {}),
           }));
           context.skillTrace.routingDecisions = plan.decisions;
+          if (context.skillTraceStore) {
+            context.skillTraceStore.byRouteId ??= new Map();
+            context.skillTraceStore.byRouteId.set(routeId, context.skillTrace);
+            while (context.skillTraceStore.byRouteId.size > 100) {
+              const oldest = context.skillTraceStore.byRouteId.keys().next()
+                .value as string | undefined;
+              if (!oldest) break;
+              context.skillTraceStore.byRouteId.delete(oldest);
+            }
+          }
         }
         return {
           summary:
             skills.length > 0
               ? `Activated ${skills.length} Agent Skill(s): ${skills.map((skill) => skill.name).join(", ")}`
               : `No Agent Skills passed the runtime routing threshold for '${query}'`,
-          data: { query, skills, decisions: plan.decisions },
+          data: { query, routeId, skills, decisions: plan.decisions },
         };
       }
       if (action === "skills_search_remote") {

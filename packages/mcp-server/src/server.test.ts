@@ -297,6 +297,101 @@ describe("Qnector MCP runtime", () => {
       evidence: "in_context",
     });
 
+    const sessionA = "skill-session-a";
+    const sessionB = "skill-session-b";
+    await request(
+      `http://127.0.0.1:${port}/mcp`,
+      {
+        jsonrpc: "2.0",
+        id: 205,
+        method: "tools/call",
+        params: {
+          name: "system",
+          arguments: {
+            action: "skills_route",
+            query: "trace frontend ui animation edits session-a",
+          },
+        },
+      },
+      sessionA,
+    );
+    await request(
+      `http://127.0.0.1:${port}/mcp`,
+      {
+        jsonrpc: "2.0",
+        id: 206,
+        method: "tools/call",
+        params: {
+          name: "system",
+          arguments: {
+            action: "skills_route",
+            query: "trace frontend ui animation edits session-b",
+          },
+        },
+      },
+      sessionB,
+    );
+    const sessionAFile = path.join(root, "session-a.txt");
+    const sessionBFile = path.join(root, "session-b.txt");
+    await writeFile(sessionAFile, "a\n", "utf8");
+    await writeFile(sessionBFile, "b\n", "utf8");
+    await request(
+      `http://127.0.0.1:${port}/mcp`,
+      {
+        jsonrpc: "2.0",
+        id: 207,
+        method: "tools/call",
+        params: {
+          name: "files",
+          arguments: { action: "read", path: sessionAFile },
+        },
+      },
+      sessionA,
+    );
+    await request(
+      `http://127.0.0.1:${port}/mcp`,
+      {
+        jsonrpc: "2.0",
+        id: 208,
+        method: "tools/call",
+        params: {
+          name: "files",
+          arguments: { action: "read", path: sessionBFile },
+        },
+      },
+      sessionB,
+    );
+    const sessionActivity = runtime.activity.list();
+    const sessionARoute = sessionActivity.find(
+      (entry) =>
+        entry.skillTrace?.query?.endsWith("session-a") &&
+        entry.skillTrace.evidence === "activated",
+    );
+    const sessionBRoute = sessionActivity.find(
+      (entry) =>
+        entry.skillTrace?.query?.endsWith("session-b") &&
+        entry.skillTrace.evidence === "activated",
+    );
+    const sessionARead = sessionActivity.find(
+      (entry) =>
+        entry.tool === "files" && entry.argsSummary.includes("session-a.txt"),
+    );
+    const sessionBRead = sessionActivity.find(
+      (entry) =>
+        entry.tool === "files" && entry.argsSummary.includes("session-b.txt"),
+    );
+    expect(sessionARoute?.skillTrace?.routeId).toBeTruthy();
+    expect(sessionBRoute?.skillTrace?.routeId).toBeTruthy();
+    expect(sessionARoute?.skillTrace?.routeId).not.toBe(
+      sessionBRoute?.skillTrace?.routeId,
+    );
+    expect(sessionARead?.skillTrace?.routeId).toBe(
+      sessionARoute?.skillTrace?.routeId,
+    );
+    expect(sessionBRead?.skillTrace?.routeId).toBe(
+      sessionBRoute?.skillTrace?.routeId,
+    );
+
     const memorySnapshot = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",
       id: 203,

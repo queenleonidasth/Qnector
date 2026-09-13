@@ -205,6 +205,7 @@ async function newestSourceMtime(projectRoot: string): Promise<string | null> {
           "dist",
           "release",
           ".git",
+          ".qnector",
           ".pnpm-store",
           "coverage",
           "bin",
