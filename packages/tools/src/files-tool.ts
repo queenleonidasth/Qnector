@@ -103,141 +103,202 @@ export async function executeFiles(
 ): Promise<ToolResult> {
   const object = objectInput(input);
   const action = stringInput(object, "action", true)!;
-  return runWithActivity(context, "files", action, input, async () => {
-    if (action === "read") return readFileAction(context, object);
-    if (action === "read_many") return readManyAction(context, object);
-    if (action === "preview") return previewFileAction(context, object);
-    if (action === "document_replace_text")
-      return documentReplaceTextAction(context, object);
-    if (
-      ["inspect", "extract_text", "render", "document_query"].includes(action)
-    ) {
-      if (!context.documentIntelligence)
-        throw new Error(
-          "UNSUPPORTED_CAPABILITY: document intelligence is not configured in this Qnector runtime",
+  const execute = () =>
+    runWithActivity(context, "files", action, input, async () => {
+      if (action === "read") return readFileAction(context, object);
+      if (action === "read_many") return readManyAction(context, object);
+      if (action === "preview") return previewFileAction(context, object);
+      if (action === "document_replace_text")
+        return documentReplaceTextAction(context, object);
+      if (
+        ["inspect", "extract_text", "render", "document_query"].includes(action)
+      ) {
+        if (!context.documentIntelligence)
+          throw new Error(
+            "UNSUPPORTED_CAPABILITY: document intelligence is not configured in this Qnector runtime",
+          );
+        const target = context.workspace.resolve(
+          stringInput(object, "path", true)!,
         );
-      const target = context.workspace.resolve(
-        stringInput(object, "path", true)!,
-      );
-      if (action === "inspect") {
-        const result = await context.documentIntelligence.inspect(target);
-        return {
-          summary: `Inspected ${result.kind} document ${target}`,
-          data: result,
-        };
-      }
-      if (action === "extract_text") {
-        const result = await context.documentIntelligence.extractText({
+        if (action === "inspect") {
+          const result = await context.documentIntelligence.inspect(target);
+          return {
+            summary: `Inspected ${result.kind} document ${target}`,
+            data: result,
+          };
+        }
+        if (action === "extract_text") {
+          const result = await context.documentIntelligence.extractText({
+            path: target,
+            maxChars: numberInput(object, "maxChars", 100_000),
+            ...(object.page === undefined
+              ? {}
+              : { page: numberInput(object, "page", 1) }),
+            ...(stringInput(object, "sheet")
+              ? { sheet: stringInput(object, "sheet") }
+              : {}),
+          });
+          return {
+            summary: `Extracted ${result.chars} character(s) from ${result.kind} document`,
+            data: result,
+            truncated: result.truncated,
+          };
+        }
+        if (action === "render") {
+          const format = stringInput(object, "format") as
+            "png" | "jpeg" | undefined;
+          const result = await context.documentIntelligence.render({
+            path: target,
+            page: numberInput(object, "page", 1),
+            maxWidth: numberInput(object, "maxWidth", 2048),
+            ...(format ? { format } : {}),
+          });
+          return {
+            summary: `Rendered ${result.kind} page ${result.page}/${result.pageCount}`,
+            data: {
+              path: result.path,
+              kind: result.kind,
+              page: result.page,
+              pageCount: result.pageCount,
+              mimeType: result.attachment.mimeType,
+              width: result.attachment.width,
+              height: result.attachment.height,
+              sizeBytes: result.attachment.sizeBytes,
+            },
+            attachments: [result.attachment],
+          };
+        }
+        const result = await context.documentIntelligence.query({
           path: target,
-          maxChars: numberInput(object, "maxChars", 100_000),
-          ...(object.page === undefined
-            ? {}
-            : { page: numberInput(object, "page", 1) }),
-          ...(stringInput(object, "sheet")
-            ? { sheet: stringInput(object, "sheet") }
-            : {}),
+          sql: stringInput(object, "sql", true)!,
+          maxRows: numberInput(object, "maxRows", 200),
         });
         return {
-          summary: `Extracted ${result.chars} character(s) from ${result.kind} document`,
+          summary: `SQLite document query returned ${result.rows.length} row(s)`,
           data: result,
           truncated: result.truncated,
         };
       }
-      if (action === "render") {
-        const format = stringInput(object, "format") as
-          "png" | "jpeg" | undefined;
-        const result = await context.documentIntelligence.render({
-          path: target,
-          page: numberInput(object, "page", 1),
-          maxWidth: numberInput(object, "maxWidth", 2048),
-          ...(format ? { format } : {}),
-        });
+      if (action === "write" || action === "append")
+        return writeFileAction(context, object, action);
+      if (action === "replace") return replaceFileAction(context, object);
+      if (action === "multi_edit") return multiEditAction(context, object);
+      if (action === "apply_patch") return applyPatchAction(context, object);
+      if (action === "mkdir") {
+        const target = context.workspace.resolve(
+          stringInput(object, "path", true)!,
+        );
+        await mkdir(target, { recursive: true });
+        await recordFileChange(context, `Created directory ${target}`, [
+          target,
+        ]);
         return {
-          summary: `Rendered ${result.kind} page ${result.page}/${result.pageCount}`,
-          data: {
-            path: result.path,
-            kind: result.kind,
-            page: result.page,
-            pageCount: result.pageCount,
-            mimeType: result.attachment.mimeType,
-            width: result.attachment.width,
-            height: result.attachment.height,
-            sizeBytes: result.attachment.sizeBytes,
-          },
-          attachments: [result.attachment],
+          summary: `Created directory ${target}`,
+          data: { path: target, operation: "mkdir" },
         };
       }
-      const result = await context.documentIntelligence.query({
-        path: target,
-        sql: stringInput(object, "sql", true)!,
-        maxRows: numberInput(object, "maxRows", 200),
-      });
-      return {
-        summary: `SQLite document query returned ${result.rows.length} row(s)`,
-        data: result,
-        truncated: result.truncated,
-      };
-    }
-    if (action === "write" || action === "append")
-      return writeFileAction(context, object, action);
-    if (action === "replace") return replaceFileAction(context, object);
-    if (action === "multi_edit") return multiEditAction(context, object);
-    if (action === "apply_patch") return applyPatchAction(context, object);
-    if (action === "mkdir") {
-      const target = context.workspace.resolve(
-        stringInput(object, "path", true)!,
-      );
-      await mkdir(target, { recursive: true });
-      await recordFileChange(context, `Created directory ${target}`, [target]);
-      return {
-        summary: `Created directory ${target}`,
-        data: { path: target, operation: "mkdir" },
-      };
-    }
-    if (action === "move" || action === "copy") {
-      const source = context.workspace.resolve(
-        stringInput(object, "path", true)!,
-      );
-      const destination = context.workspace.resolve(
-        stringInput(object, "destination", true)!,
-      );
-      if (action === "move") await rename(source, destination);
-      else await copyFile(source, destination);
-      const info = await stat(destination);
-      await recordFileChange(
-        context,
-        `${action === "move" ? "Moved" : "Copied"} ${source} to ${destination}`,
-        [source, destination],
-      );
-      return {
-        summary: `${action === "move" ? "Moved" : "Copied"} ${source} to ${destination}`,
-        data: { source, destination, operation: action, bytes: info.size },
-      };
-    }
-    if (action === "delete") {
-      const target = context.workspace.resolve(
-        stringInput(object, "path", true)!,
-      );
-      const recursive = booleanInput(object, "recursive", true);
-      await rm(target, { recursive, force: false });
-      await recordFileChange(context, `Deleted ${target}`, [target]);
-      return {
-        summary: `Deleted ${target}`,
-        data: { path: target, operation: "delete", recursive },
-      };
-    }
-    if (action === "hash") {
-      const target = context.workspace.resolve(
-        stringInput(object, "path", true)!,
-      );
-      const sha256 = await hashFile(target);
-      return { summary: `Hashed ${target}`, data: { path: target, sha256 } };
-    }
-    throw new Error(`INVALID_ACTION: Unknown files action '${action}'`);
-  });
+      if (action === "move" || action === "copy") {
+        const source = context.workspace.resolve(
+          stringInput(object, "path", true)!,
+        );
+        const destination = context.workspace.resolve(
+          stringInput(object, "destination", true)!,
+        );
+        if (action === "move") await rename(source, destination);
+        else await copyFile(source, destination);
+        const info = await stat(destination);
+        await recordFileChange(
+          context,
+          `${action === "move" ? "Moved" : "Copied"} ${source} to ${destination}`,
+          [source, destination],
+        );
+        return {
+          summary: `${action === "move" ? "Moved" : "Copied"} ${source} to ${destination}`,
+          data: { source, destination, operation: action, bytes: info.size },
+        };
+      }
+      if (action === "delete") {
+        const target = context.workspace.resolve(
+          stringInput(object, "path", true)!,
+        );
+        const recursive = booleanInput(object, "recursive", true);
+        await rm(target, { recursive, force: false });
+        await recordFileChange(context, `Deleted ${target}`, [target]);
+        return {
+          summary: `Deleted ${target}`,
+          data: { path: target, operation: "delete", recursive },
+        };
+      }
+      if (action === "hash") {
+        const target = context.workspace.resolve(
+          stringInput(object, "path", true)!,
+        );
+        const sha256 = await hashFile(target);
+        return { summary: `Hashed ${target}`, data: { path: target, sha256 } };
+      }
+      throw new Error(`INVALID_ACTION: Unknown files action '${action}'`);
+    });
+  const resources = mutationResourcePaths(context, object, action);
+  if (resources.length > 0 && context.resourceCoordinator)
+    return context.resourceCoordinator.withResources(
+      context.getConfig().activeWorkspace,
+      resources,
+      context.resourceOwnerToken ?? `files:${randomUUID()}`,
+      execute,
+      context.abortSignal,
+    );
+  return execute();
 }
 
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
+
+const MUTATING_FILE_ACTIONS = new Set([
+  "document_replace_text",
+  "write",
+  "append",
+  "replace",
+  "multi_edit",
+  "apply_patch",
+  "mkdir",
+  "move",
+  "copy",
+  "delete",
+]);
+
+function mutationResourcePaths(
+  context: ToolContext,
+  input: Record<string, unknown>,
+  action: string,
+): string[] {
+  if (!MUTATING_FILE_ACTIONS.has(action)) return [];
+  const resources: string[] = [];
+  const add = (value: unknown): void => {
+    if (typeof value === "string" && value.trim())
+      resources.push(context.workspace.resolve(value));
+  };
+  if (action === "multi_edit" && Array.isArray(input.edits)) {
+    for (const raw of input.edits) {
+      if (raw && typeof raw === "object" && !Array.isArray(raw))
+        add((raw as Record<string, unknown>).path);
+    }
+    return [...new Set(resources)];
+  }
+  if (action === "apply_patch" && typeof input.patch === "string") {
+    for (const match of input.patch.matchAll(
+      /^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm,
+    ))
+      add(match[1]);
+    return [...new Set(resources)];
+  }
+  add(input.path);
+  if (
+    action === "move" ||
+    action === "copy" ||
+    action === "document_replace_text"
+  )
+    add(input.destination);
+  return [...new Set(resources)];
+}
 
 type PreviewMimeType = "image/png" | "image/jpeg" | "image/webp";
 

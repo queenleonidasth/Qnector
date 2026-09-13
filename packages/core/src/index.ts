@@ -22,3 +22,4 @@ export * from "./workflow-manager.js";
 export * from "./pty-manager.js";
 export * from "./performance-monitor.js";
 export * from "./agent-skills.js";
+export * from "./resource-coordinator.js";

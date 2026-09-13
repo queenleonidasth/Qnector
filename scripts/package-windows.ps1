@@ -15,6 +15,31 @@ $typescriptLib = Join-Path $projectRoot "node_modules\typescript\lib"
 foreach ($lib in @("lib.d.ts", "lib.es2022.d.ts", "lib.dom.d.ts")) {
   if (-not (Test-Path -LiteralPath (Join-Path $typescriptLib $lib))) { throw "TypeScript standard library $lib is missing" }
 }
+
+# Bind every packaged executable to the exact source revision and lockfile used
+# to build it. The manifest is copied beside app.asar so system.build_info can
+# report provenance from the installed/portable artifact itself.
+$sourceRevision = (& git rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-fA-F]{40}$') { throw "Could not resolve Git source revision for build provenance" }
+$gitStatus = ((& git status --porcelain=v1 --untracked-files=all) -join "`n").Trim()
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect Git status for build provenance" }
+$lockfilePath = Join-Path $projectRoot "pnpm-lock.yaml"
+if (-not (Test-Path -LiteralPath $lockfilePath -PathType Leaf)) { throw "pnpm-lock.yaml is missing" }
+$lockfileSha256 = (Get-FileHash -LiteralPath $lockfilePath -Algorithm SHA256).Hash
+$provenancePath = Join-Path $projectRoot "apps\desktop\resources\build-provenance.json"
+$provenance = [ordered]@{
+  version = 1
+  generatedAt = [DateTime]::UtcNow.ToString("o")
+  sourceRevision = $sourceRevision.ToLowerInvariant()
+  dirtyTree = -not [string]::IsNullOrWhiteSpace($gitStatus)
+  lockfileSha256 = $lockfileSha256.ToLowerInvariant()
+}
+[IO.File]::WriteAllText(
+  $provenancePath,
+  (($provenance | ConvertTo-Json -Depth 3) + "`n"),
+  [Text.UTF8Encoding]::new($false)
+)
+
 # Release gate: validate updater safety plus the desktop UI regressions that can
 # make a packaged build unusable at Qnector's narrow production window size.
 # Use pnpm.cmd directly: invoking pnpm through npx makes npm warnings on stderr fatal
@@ -53,7 +78,8 @@ $requiredPackagedResources = @(
   "openai-tunnel\NOTICE",
   "typescript-lib\lib.d.ts",
   "typescript-lib\lib.es2022.d.ts",
-  "typescript-lib\lib.dom.d.ts"
+  "typescript-lib\lib.dom.d.ts",
+  "build-provenance.json"
 )
 foreach ($relative in $requiredPackagedResources) {
   $candidate = Join-Path $resourceRoot $relative

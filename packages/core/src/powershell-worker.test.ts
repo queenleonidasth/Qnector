@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ProcessManager } from "./process-manager.js";
@@ -130,6 +130,33 @@ describe.skipIf(process.platform !== "win32")(
       expect(recovered.exitCode).toBe(0);
       expect(recovered.stdout.trim()).toBe("recovered");
     }, 20_000);
+
+    it("does not replay a persistent PowerShell command after the worker dies post-dispatch", async () => {
+      const root = await mkdtemp(
+        path.join(os.tmpdir(), "qnector-shell-unknown-"),
+      );
+      const marker = path.join(root, "marker.txt");
+      const manager = new ProcessManager("powershell");
+      const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
+      try {
+        await expect(
+          manager.run({
+            command: `[IO.File]::AppendAllText(${literal(marker)}, 'once' + [Environment]::NewLine); Stop-Process -Id $PID -Force`,
+            cwd: root,
+            shell: "powershell",
+            timeoutMs: 10_000,
+            outputMode: "raw",
+          }),
+        ).rejects.toThrow("PROCESS_OUTCOME_UNKNOWN");
+        const lines = (await readFile(marker, "utf8"))
+          .split(/\r?\n/)
+          .filter(Boolean);
+        expect(lines).toEqual(["once"]);
+      } finally {
+        await shutdownPowerShellWorkers();
+        await rm(root, { recursive: true, force: true });
+      }
+    }, 15_000);
 
     it("routes common command shims through cmd instead of PowerShell", async () => {
       const manager = new ProcessManager("powershell");

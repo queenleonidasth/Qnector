@@ -1,13 +1,20 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { configSchema } from "@qnector/shared";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
 
-export const QNECTOR_VERSION = "0.4.27";
+export const QNECTOR_VERSION = "0.4.28";
 
 export function configDirectory(): string {
   if (process.platform === "win32") {
@@ -79,7 +86,10 @@ export async function saveConfig(
   await writeConfigAtomic(parsed, file);
 }
 
-async function writeConfigAtomic(config: QnectorConfig, file: string): Promise<void> {
+async function writeConfigAtomic(
+  config: QnectorConfig,
+  file: string,
+): Promise<void> {
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`, "utf8");
@@ -129,7 +139,9 @@ function parseStoredConfig(raw: string): QnectorConfig {
       .slice(0, 5)
       .map((issue) => `${issue.path.join(".") || "config"}: ${issue.message}`)
       .join("; ");
-    throw new Error(`CONFIG_SCHEMA_INVALID: ${issues || "unknown schema error"}`);
+    throw new Error(
+      `CONFIG_SCHEMA_INVALID: ${issues || "unknown schema error"}`,
+    );
   }
   const loaded = parsed.data as QnectorConfig;
   return {

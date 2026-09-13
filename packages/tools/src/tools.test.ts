@@ -494,25 +494,53 @@ describe("Qnector grouped tools", () => {
         { id: "sibling", tool: "system", input: { action: "status" } },
       ],
     });
-    expect(result.ok).toBe(true);
-    const batch = (
-      result.data as {
-        data?: {
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe("PARALLEL_SUBCALL_FAILED");
+    const batch = result.error?.details as
+      | {
+          outcome?: string;
           results?: Array<{
             id?: string;
             result: { ok: boolean; error?: { code?: string } };
           }>;
           succeeded?: number;
           failed?: number;
-        };
-      }
-    )?.data;
+        }
+      | undefined;
+    expect(batch?.outcome).toBe("partial");
     expect(batch?.results).toHaveLength(2);
     expect(batch?.results?.[0]?.result.ok).toBe(false);
     expect(batch?.results?.[0]?.result.error?.code).toBe("FIXTURE_THROW");
     expect(batch?.results?.[1]?.result.ok).toBe(true);
     expect(batch?.succeeded).toBe(1);
     expect(batch?.failed).toBe(1);
+  });
+
+  it("allows explicit best-effort parallel policy while exposing partial outcome", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-best-effort-"));
+    const context = makeContext(defaultConfig(root));
+    const registry = new ToolRegistry();
+    const result = await registry.call("system", context, {
+      action: "parallel",
+      policy: "best-effort",
+      calls: [
+        {
+          id: "missing",
+          tool: "files",
+          input: { action: "read", path: "missing.txt" },
+        },
+        { id: "sibling", tool: "system", input: { action: "status" } },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    const batch = (
+      result.data as {
+        data?: { outcome?: string; failed?: number; results?: unknown[] };
+      }
+    )?.data;
+    expect(batch?.outcome).toBe("partial");
+    expect(batch?.failed).toBe(1);
+    expect(batch?.results).toHaveLength(2);
   });
 
   it("rejects recursive parallel fan-out", async () => {

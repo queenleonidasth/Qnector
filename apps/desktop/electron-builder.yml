@@ -47,6 +47,8 @@ extraResources:
     to: typescript-lib
     filter:
       - "*.d.ts"
+  - from: resources/build-provenance.json
+    to: build-provenance.json
 win:
   icon: resources/icon.ico
   electronLanguages:

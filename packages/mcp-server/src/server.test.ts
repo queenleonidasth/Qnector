@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import net from "node:net";
@@ -500,6 +500,59 @@ describe("Qnector MCP runtime", () => {
     }
   });
 
+  it("rejects untrusted MCP Origin before mutation while allowing same-host Origin", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-origin-"));
+    const port = await freePort();
+    runtime = new QnectorRuntime({
+      config: { ...defaultConfig(root), localPort: port },
+      configFile: path.join(root, "config.json"),
+    });
+    await runtime.start({ port });
+    const blockedMarker = path.join(root, "blocked-origin.txt");
+    const blocked = await request(
+      `http://127.0.0.1:${port}/mcp`,
+      {
+        jsonrpc: "2.0",
+        id: 90,
+        method: "tools/call",
+        params: {
+          name: "files",
+          arguments: {
+            action: "write",
+            path: blockedMarker,
+            content: "blocked",
+          },
+        },
+      },
+      undefined,
+      { origin: "https://untrusted.example" },
+    );
+    expect(blocked.response.status).toBe(403);
+    await expect(readFile(blockedMarker, "utf8")).rejects.toThrow();
+
+    const allowedMarker = path.join(root, "allowed-origin.txt");
+    const allowed = await request(
+      `http://127.0.0.1:${port}/mcp`,
+      {
+        jsonrpc: "2.0",
+        id: 91,
+        method: "tools/call",
+        params: {
+          name: "files",
+          arguments: {
+            action: "write",
+            path: allowedMarker,
+            content: "allowed",
+          },
+        },
+      },
+      undefined,
+      { origin: `http://127.0.0.1:${port}` },
+    );
+    expect(allowed.response.status).toBe(200);
+    expect(await readFile(allowedMarker, "utf8")).toBe("allowed");
+  });
+
   it("supports the Phase 0 ping/read/write gate locally", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-phase0-"));
     const port = await freePort();
@@ -536,6 +589,7 @@ async function request(
   url: string,
   payload: unknown,
   session?: string,
+  extraHeaders: Record<string, string> = {},
 ): Promise<{ response: Response; body: unknown }> {
   const response = await fetch(url, {
     method: "POST",
@@ -543,6 +597,7 @@ async function request(
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
       ...(session ? { "mcp-session-id": session } : {}),
+      ...extraHeaders,
     },
     body: JSON.stringify(payload),
   });

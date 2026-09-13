@@ -152,5 +152,8 @@ function packagedIdentity(executablePath: string): BuildIdentity {
     executableSha256:
       "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
     sourceRevision: null,
+    dirtyTree: null,
+    lockfileSha256: null,
+    provenanceSha256: null,
   };
 }

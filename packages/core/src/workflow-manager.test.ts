@@ -8,6 +8,7 @@ import { ProcessManager } from "./process-manager.js";
 import {
   WorkflowManager,
   type WorkflowRun,
+  type WorkflowStepResult,
   type WorkflowToolExecutor,
 } from "./workflow-manager.js";
 
@@ -63,6 +64,105 @@ describe("WorkflowManager harness", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 1_350));
     expect(existsSync(path.join(root, "late.txt"))).toBe(false);
+  }, 10_000);
+
+  it("keeps live run ownership stable while listing and can still cancel after observation", async () => {
+    const root = await temporaryRoot("qnector-workflow-live-list-");
+    const manager = createManager();
+    const script =
+      "setTimeout(()=>require('node:fs').writeFileSync('late-after-list.txt','late'),900);setTimeout(()=>{},4000)";
+    const run = await manager.run(root, {
+      name: "observe-without-recovery",
+      mode: "graph",
+      maxConcurrency: 1,
+      steps: [
+        {
+          id: "active",
+          type: "command",
+          shell: "direct",
+          command: `node -e \"${script}\"`,
+          resourcePaths: ["late-after-list.txt"],
+        },
+      ],
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    const listed = await manager.listRuns(root);
+    const listedState = listed.find(
+      (entry) => entry.runId === run.runId,
+    )?.state;
+    const statusAfterList = (await manager.status(root, run.runId)).state;
+    const canceled = await manager.cancel(root, run.runId);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+
+    expect(listedState).toBe("running");
+    expect(statusAfterList).toBe("running");
+    expect(canceled.state).toBe("canceled");
+    expect(existsSync(path.join(root, "late-after-list.txt"))).toBe(false);
+  }, 10_000);
+
+  it("aborts timed-out tool executors, reports unknown outcome, and blocks automatic replay", async () => {
+    const root = await temporaryRoot("qnector-workflow-tool-timeout-");
+    const target = path.join(root, "late-tool.txt");
+    let attempts = 0;
+    const manager = createManager(async (_tool, _input, rawContext) => {
+      attempts += 1;
+      const context = rawContext as typeof rawContext & {
+        signal?: AbortSignal;
+      };
+      return new Promise((resolve) => {
+        const timer = setTimeout(async () => {
+          await writeFile(target, `attempt-${attempts}\n`, "utf8");
+          resolve({ ok: true, summary: "late mutation completed" });
+        }, 400);
+        context.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve({
+              ok: false,
+              summary: "executor acknowledged cancellation",
+              error: { code: "PROCESS_CANCELED", message: "canceled" },
+            });
+          },
+          { once: true },
+        );
+      });
+    });
+    const run = await manager.run(root, {
+      name: "tool-timeout-unknown",
+      mode: "graph",
+      maxConcurrency: 1,
+      steps: [
+        {
+          id: "mutation",
+          type: "tool",
+          tool: "fixture",
+          input: {},
+          timeoutMs: 100,
+          resourcePaths: ["late-tool.txt"],
+        },
+      ],
+    });
+    const finished = await manager.wait(root, run.runId, 5_000);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const fileAfterTimeout = existsSync(target);
+    let replayRejected = false;
+    try {
+      await manager.resume(root, run.runId);
+      await manager.wait(root, run.runId, 5_000);
+    } catch (error) {
+      replayRejected = String(error).includes(
+        "WORKFLOW_REPLAY_CONFIRMATION_REQUIRED",
+      );
+    }
+
+    expect(finished.run.state).toBe("failed");
+    expect(finished.run.steps[0]?.state).toBe("interrupted");
+    expect(finished.run.steps[0]?.error).toContain("WORKFLOW_TOOL_TIMEOUT");
+    expect(fileAfterTimeout).toBe(false);
+    expect(replayRejected).toBe(true);
+    expect(attempts).toBe(1);
   }, 10_000);
 
   it("runs independent graph steps concurrently and waits for dependencies", async () => {
@@ -166,6 +266,47 @@ describe("WorkflowManager harness", () => {
     expect(aEnd <= bStart || bEnd <= aStart).toBe(true);
   });
 
+  it("serializes overlapping resources across separate workflow runs", async () => {
+    const root = await temporaryRoot("qnector-workflow-cross-run-lock-");
+    let active = 0;
+    let peak = 0;
+    const manager = createManager(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      active -= 1;
+      return { ok: true, summary: "done" };
+    });
+    const definition = {
+      mode: "graph" as const,
+      maxConcurrency: 1,
+      steps: [
+        {
+          id: "shared",
+          type: "tool" as const,
+          tool: "fixture",
+          input: {},
+          resourcePaths: ["shared.txt"],
+          replay: "safe" as const,
+        },
+      ],
+    };
+
+    const first = await manager.run(root, {
+      name: "cross-run-a",
+      ...definition,
+    });
+    const second = await manager.run(root, {
+      name: "cross-run-b",
+      ...definition,
+    });
+    await Promise.all([
+      manager.wait(root, first.runId, 5_000),
+      manager.wait(root, second.runId, 5_000),
+    ]);
+    expect(peak).toBe(1);
+  });
+
   it("keeps independent work, skips failed dependencies, and stores full results", async () => {
     const root = await temporaryRoot("qnector-workflow-partial-");
     const manager = createManager(async (_tool, input) => {
@@ -222,6 +363,90 @@ describe("WorkflowManager harness", () => {
     const index = await manager.result(root, run.runId);
     expect(JSON.stringify(index)).toContain("workflow-results");
   });
+
+  it("preserves a large tool error envelope before truncating its payload", async () => {
+    const root = await temporaryRoot("qnector-workflow-large-error-");
+    const manager = createManager(async () => ({
+      ok: false,
+      summary: "large fixture failed",
+      error: { code: "FIXTURE_LARGE_FAIL", message: "boom" },
+      data: { payload: "x".repeat(1_100_000) },
+    }));
+    const run = await manager.run(root, {
+      name: "large-error-envelope",
+      mode: "graph",
+      maxConcurrency: 1,
+      steps: [
+        {
+          id: "large-error",
+          type: "tool",
+          tool: "fixture",
+          input: {},
+          replay: "safe",
+        },
+      ],
+    });
+    const finished = await manager.wait(root, run.runId, 5_000);
+    expect(finished.run.state).toBe("failed");
+    expect(finished.run.steps[0]?.state).toBe("failed");
+    expect(finished.run.steps[0]?.error).toContain("FIXTURE_LARGE_FAIL");
+    const result = (await manager.result(
+      root,
+      run.runId,
+      "large-error",
+    )) as WorkflowStepResult;
+    expect(result.state).toBe("failed");
+    expect(result.error).toContain("FIXTURE_LARGE_FAIL");
+  });
+
+  it("does not verify a stale pre-existing declared output as newly produced", async () => {
+    const root = await temporaryRoot("qnector-workflow-stale-output-");
+    await writeFile(path.join(root, "stale.txt"), "old data\n", "utf8");
+    const manager = createManager();
+    const run = await manager.run(root, {
+      name: "stale-output",
+      mode: "graph",
+      maxConcurrency: 1,
+      steps: [
+        {
+          id: "noop",
+          type: "command",
+          shell: "direct",
+          command: 'node -e "process.exit(0)"',
+          outputs: ["stale.txt"],
+        },
+      ],
+    });
+    const finished = await manager.wait(root, run.runId, 5_000);
+    expect(finished.run.state).toBe("failed");
+    expect(finished.run.steps[0]?.verificationStatus).toBe("failed");
+    expect(finished.run.steps[0]?.error).toContain("WORKFLOW_OUTPUT_STALE");
+  });
+
+  it("stops scheduling and active executors during manager shutdown", async () => {
+    const root = await temporaryRoot("qnector-workflow-shutdown-");
+    const manager = createManager();
+    const run = await manager.run(root, {
+      name: "shutdown-barrier",
+      mode: "sequential",
+      steps: [
+        { id: "delay", type: "delay", delayMs: 500 },
+        {
+          id: "write",
+          type: "command",
+          shell: "direct",
+          command:
+            "node -e \"require('node:fs').writeFileSync('after-shutdown.txt','bad')\"",
+        },
+      ],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    await (manager as unknown as { shutdown(): Promise<void> }).shutdown();
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    expect(existsSync(path.join(root, "after-shutdown.txt"))).toBe(false);
+    const status = await manager.status(root, run.runId);
+    expect(["canceled", "interrupted"]).toContain(status.state);
+  }, 10_000);
 
   it("marks orphaned running executions interrupted and requires replay confirmation for mutations", async () => {
     const root = await temporaryRoot("qnector-workflow-recovery-");

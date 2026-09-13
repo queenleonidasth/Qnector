@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { QNECTOR_VERSION } from "./config.js";
 
@@ -12,6 +12,17 @@ export interface BuildIdentity {
   executablePath: string;
   executableSha256: string | null;
   sourceRevision: string | null;
+  dirtyTree: boolean | null;
+  lockfileSha256: string | null;
+  provenanceSha256: string | null;
+}
+
+interface BuildProvenanceManifest {
+  version: 1;
+  generatedAt: string;
+  sourceRevision: string;
+  dirtyTree: boolean;
+  lockfileSha256: string;
 }
 
 let cachedBuildIdentity: Promise<BuildIdentity> | undefined;
@@ -41,6 +52,7 @@ async function loadBuildIdentity(): Promise<BuildIdentity> {
     channel !== "development" && existsSync(executablePath)
       ? await hashFile(executablePath).catch(() => null)
       : null;
+  const provenance = await loadBuildProvenance(channel);
   const buildId =
     process.env.QNECTOR_BUILD_ID ??
     [formatBuildTime(builtAt), executableSha256?.slice(0, 10)]
@@ -53,8 +65,53 @@ async function loadBuildIdentity(): Promise<BuildIdentity> {
     channel,
     executablePath,
     executableSha256,
-    sourceRevision: process.env.QNECTOR_SOURCE_REVISION ?? null,
+    sourceRevision:
+      process.env.QNECTOR_SOURCE_REVISION ??
+      provenance?.manifest.sourceRevision ??
+      null,
+    dirtyTree: provenance?.manifest.dirtyTree ?? null,
+    lockfileSha256: provenance?.manifest.lockfileSha256 ?? null,
+    provenanceSha256: provenance?.sha256 ?? null,
   };
+}
+
+async function loadBuildProvenance(
+  channel: BuildIdentity["channel"],
+): Promise<{ manifest: BuildProvenanceManifest; sha256: string } | null> {
+  const explicit = process.env.QNECTOR_BUILD_PROVENANCE_FILE?.trim();
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string })
+    .resourcesPath;
+  const candidates = [
+    ...(explicit ? [path.resolve(explicit)] : []),
+    ...(channel !== "development" && resourcesPath
+      ? [path.join(resourcesPath, "build-provenance.json")]
+      : []),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const raw = await readFile(candidate);
+      const parsed = JSON.parse(
+        raw.toString("utf8"),
+      ) as Partial<BuildProvenanceManifest>;
+      if (
+        parsed.version !== 1 ||
+        typeof parsed.generatedAt !== "string" ||
+        typeof parsed.sourceRevision !== "string" ||
+        !/^[0-9a-f]{40}$/i.test(parsed.sourceRevision) ||
+        typeof parsed.dirtyTree !== "boolean" ||
+        typeof parsed.lockfileSha256 !== "string" ||
+        !/^[0-9a-f]{64}$/i.test(parsed.lockfileSha256)
+      )
+        continue;
+      return {
+        manifest: parsed as BuildProvenanceManifest,
+        sha256: createHash("sha256").update(raw).digest("hex").toUpperCase(),
+      };
+    } catch {
+      // Provenance is additive. A missing/invalid manifest must not prevent startup.
+    }
+  }
+  return null;
 }
 
 function resolveExecutablePath(): string {

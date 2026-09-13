@@ -122,6 +122,12 @@ export const systemDefinition: ToolDefinition = {
         description:
           "Maximum subcalls running at once; defaults to 6. Results remain in calls[] input order.",
       },
+      policy: {
+        type: "string",
+        enum: ["all-success", "best-effort"],
+        description:
+          "Parallel outcome policy. all-success (default) makes any failed subcall fail the outer batch after all siblings settle; best-effort returns ok with outcome=partial/failed and preserves every subcall result.",
+      },
       name: {
         type: "string",
         description:

@@ -37,6 +37,7 @@ import {
   ReleaseManager,
   DocumentIntelligenceService,
   WorkflowManager,
+  ResourceCoordinator,
   PtyManager,
   AgentSkillService,
   type CodeIntelligenceService,
@@ -86,6 +87,7 @@ export interface QnectorRuntimeOptions {
   releaseManager?: ReleaseManager;
   documentIntelligence?: DocumentIntelligenceService;
   workflowManager?: WorkflowManager;
+  resourceCoordinator?: ResourceCoordinator;
   ptyManager?: PtyManager;
   agentSkills?: AgentSkillService;
   memory?: MemoryStore;
@@ -109,6 +111,7 @@ export class QnectorRuntime {
   public readonly releaseManager: ReleaseManager;
   public readonly documentIntelligence: DocumentIntelligenceService;
   public readonly workflowManager: WorkflowManager;
+  public readonly resourceCoordinator: ResourceCoordinator;
   public readonly ptyManager: PtyManager;
   public readonly agentSkills: AgentSkillService;
   public readonly activity: ActivityLogger;
@@ -173,9 +176,12 @@ export class QnectorRuntime {
     this.releaseManager = options.releaseManager ?? new ReleaseManager();
     this.documentIntelligence =
       options.documentIntelligence ?? new DocumentIntelligenceService();
+    this.resourceCoordinator =
+      options.resourceCoordinator ?? new ResourceCoordinator();
     this.workflowManager =
       options.workflowManager ??
       new WorkflowManager(this.processManager, this.fileWatch, {
+        resourceCoordinator: this.resourceCoordinator,
         executeTool: async (tool, input, workflowContext) => {
           const scopedConfig = {
             ...this.config,
@@ -184,6 +190,9 @@ export class QnectorRuntime {
           const scopedContext: ToolContext = {
             ...this.context(),
             workspace: new WorkspaceState(scopedConfig),
+            abortSignal: workflowContext.signal,
+            resourceCoordinator: this.resourceCoordinator,
+            resourceOwnerToken: workflowContext.resourceOwnerToken,
             getConfig: () => scopedConfig,
             setConfig: async () => {
               throw new Error(
@@ -280,6 +289,7 @@ export class QnectorRuntime {
       releaseManager: this.releaseManager,
       documentIntelligence: this.documentIntelligence,
       workflowManager: this.workflowManager,
+      resourceCoordinator: this.resourceCoordinator,
       ptyManager: this.ptyManager,
       agentSkills: this.agentSkills,
       memory: this.memory,
@@ -318,6 +328,7 @@ export class QnectorRuntime {
   ): Promise<ServerStatus> {
     if (this.listening) return this.status();
     this.state = "connecting";
+    this.workflowManager.resumeAccepting();
     this.startedAt = new Date().toISOString();
     await this.activity.load();
     await this.ensureAutomaticMemoryCheckpoint();
@@ -338,6 +349,7 @@ export class QnectorRuntime {
 
   public async stop(): Promise<void> {
     await this.mcpHandler.close().catch(() => undefined);
+    await this.workflowManager.shutdown().catch(() => undefined);
     this.fileWatch.stopAll();
     await Promise.all([
       this.browserRuntime.close().catch(() => undefined),
@@ -410,6 +422,14 @@ export class QnectorRuntime {
     request: FastifyRequest,
     reply: FastifyReply,
   ): Promise<void> {
+    if (!trustedMcpOrigin(request)) {
+      await reply.code(403).send({
+        ok: false,
+        error: "MCP_ORIGIN_FORBIDDEN",
+        message: "The MCP Origin must match the request Host.",
+      });
+      return;
+    }
     reply.hijack();
     await this.mcpNodeHandler(
       request.raw,
@@ -625,6 +645,20 @@ function toolResultText(result: Record<string, unknown>): string {
     return `${code}: ${message}${hint}\n${LIVE_RESULT_ANCHOR}`;
   }
   return `${summary}\n${LIVE_RESULT_ANCHOR}`;
+}
+
+function trustedMcpOrigin(request: FastifyRequest): boolean {
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  if (Array.isArray(origin) || !request.headers.host) return false;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+      return false;
+    return parsed.host.toLowerCase() === request.headers.host.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 function inputSchemaFor(

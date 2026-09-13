@@ -6,6 +6,7 @@ import type {
 import {
   objectInput,
   runWithActivity,
+  ToolExecutionError,
   type ToolContext,
   type SkillTraceState,
   type SkillTraceStore,
@@ -109,6 +110,11 @@ export class ToolRegistry {
         throw new Error("INVALID_INPUT: calls must be an array");
       if (object.calls.length < 2 || object.calls.length > 12)
         throw new Error("INVALID_INPUT: calls must contain 2-12 operations");
+      const policy = object.policy ?? "all-success";
+      if (policy !== "all-success" && policy !== "best-effort")
+        throw new Error(
+          "INVALID_INPUT: policy must be all-success or best-effort",
+        );
       const requestedConcurrency = object.maxConcurrency ?? 6;
       if (
         typeof requestedConcurrency !== "number" ||
@@ -202,15 +208,25 @@ export class ToolRegistry {
       await Promise.all(Array.from({ length: concurrency }, () => worker()));
       const succeeded = results.filter((entry) => entry.result.ok).length;
       const failed = results.length - succeeded;
+      const outcome =
+        failed === 0 ? "succeeded" : succeeded === 0 ? "failed" : "partial";
       const attachments = resultAttachments.flatMap((entry) => entry ?? []);
+      const batch = {
+        outcome,
+        results,
+        succeeded,
+        failed,
+        maxConcurrency: concurrency,
+      };
+      if (failed > 0 && policy === "all-success")
+        throw new ToolExecutionError(
+          "PARALLEL_SUBCALL_FAILED",
+          `Parallel batch completed ${succeeded}/${results.length} operation(s); ${failed} failed`,
+          batch,
+        );
       return {
         summary: `Parallel batch completed ${succeeded}/${results.length} operation(s)${failed ? `; ${failed} failed` : ""}`,
-        data: {
-          results,
-          succeeded,
-          failed,
-          maxConcurrency: concurrency,
-        },
+        data: batch,
         ...(attachments.length > 0 ? { attachments } : {}),
       };
     });

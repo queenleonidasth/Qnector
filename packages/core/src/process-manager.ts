@@ -9,6 +9,7 @@ import {
   canUsePersistentPowerShell,
   runPersistentPowerShell,
   shutdownPowerShellWorkers,
+  PowerShellWorkerExecutionError,
 } from "./powershell-worker.js";
 
 export type ProcessShell = "powershell" | "cmd" | "direct";
@@ -61,6 +62,7 @@ export interface ProcessOutput {
 
 export class ProcessManager {
   private readonly processes = new Map<string, ManagedProcess>();
+  private readonly activeRunChildren = new Set<ChildProcess>();
   private readonly maxBufferChars = 250_000;
   private readonly globalListeners = new Set<
     (snapshot: ProcessSnapshot) => void
@@ -163,11 +165,28 @@ export class ProcessManager {
           error.message === "POWERSHELL_WORKER_STOPPED"
         )
           throw error;
-        // The worker is an optimization only. Protocol/startup failures fall
-        // back to the isolated one-shot path so execution reliability wins.
+        if (
+          error instanceof PowerShellWorkerExecutionError &&
+          error.outcome === "unknown"
+        )
+          throw new Error(
+            `PROCESS_OUTCOME_UNKNOWN: PowerShell execution ${error.executionId} lost after dispatch; the command may have completed and will not be replayed automatically: ${error.message}`,
+          );
+        if (
+          !(error instanceof PowerShellWorkerExecutionError) ||
+          error.outcome !== "not_started"
+        )
+          throw error;
+        // Only a proven pre-dispatch worker failure may fall back to one-shot.
       }
     }
     const child = this.spawnProcess(options);
+    this.activeRunChildren.add(child);
+    const releaseRunChild = (): void => {
+      this.activeRunChildren.delete(child);
+    };
+    child.once("close", releaseRunChild);
+    child.once("error", releaseRunChild);
     const stdoutCollector = new OutputCollector();
     const stderrCollector = new OutputCollector();
     const outputHash = createHash("sha256");
@@ -582,11 +601,12 @@ export class ProcessManager {
   }
 
   public async stopAll(): Promise<void> {
-    await Promise.all(
-      [...this.processes.keys()]
+    await Promise.all([
+      ...[...this.processes.keys()]
         .filter((id) => this.processes.get(id)?.snapshot.state === "running")
         .map((id) => this.stop(id)),
-    );
+      ...[...this.activeRunChildren].map((child) => this.stopChild(child)),
+    ]);
     await shutdownPowerShellWorkers();
   }
 }

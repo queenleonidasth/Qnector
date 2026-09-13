@@ -21,6 +21,18 @@ interface PendingRequest {
   resolve: (value: WorkerResponse) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
+  dispatched: boolean;
+}
+
+export class PowerShellWorkerExecutionError extends Error {
+  public constructor(
+    public readonly outcome: "not_started" | "unknown",
+    public readonly executionId: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "PowerShellWorkerExecutionError";
+  }
 }
 
 const RESULT_PREFIX = "__QNECTOR_RESULT__";
@@ -144,14 +156,23 @@ class PowerShellWorker {
           },
           Math.max(1, input.timeoutMs),
         );
-        this.pending = { id, resolve, reject, timer };
+        this.pending = { id, resolve, reject, timer, dispatched: false };
         child.stdin.write(`${payload}\n`, "utf8", (error) => {
-          if (!error) return;
+          if (!error) {
+            if (this.pending?.id === id) this.pending.dispatched = true;
+            return;
+          }
           if (this.pending?.id === id) {
             clearTimeout(this.pending.timer);
             this.pending = undefined;
           }
-          reject(error);
+          reject(
+            new PowerShellWorkerExecutionError(
+              "not_started",
+              id,
+              `POWERSHELL_WORKER_DISPATCH_FAILED: ${error.message}`,
+            ),
+          );
           void this.resetChild();
         });
       });
@@ -265,7 +286,21 @@ class PowerShellWorker {
     const pending = this.pending;
     this.pending = undefined;
     clearTimeout(pending.timer);
-    pending.reject(error);
+    if (error.message === "POWERSHELL_WORKER_STOPPED") {
+      pending.reject(error);
+      return;
+    }
+    if (error instanceof PowerShellWorkerExecutionError) {
+      pending.reject(error);
+      return;
+    }
+    pending.reject(
+      new PowerShellWorkerExecutionError(
+        pending.dispatched ? "unknown" : "not_started",
+        pending.id,
+        error.message,
+      ),
+    );
   }
 
   private async resetChild(): Promise<void> {

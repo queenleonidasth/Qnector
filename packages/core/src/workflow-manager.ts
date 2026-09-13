@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   mkdir,
   readFile,
@@ -14,6 +14,7 @@ import type {
   ProcessShell,
   RunResult,
 } from "./process-manager.js";
+import { ResourceCoordinator } from "./resource-coordinator.js";
 
 export type WorkflowMode = "sequential" | "graph";
 export type WorkflowReplayPolicy = "safe" | "manual";
@@ -185,11 +186,15 @@ export type WorkflowToolExecutor = (
     runId: string;
     stepId: string;
     memoryTaskId?: string;
+    signal: AbortSignal;
+    deadlineAt: number;
+    resourceOwnerToken: string;
   },
 ) => Promise<unknown>;
 
 export interface WorkflowManagerOptions {
   executeTool?: WorkflowToolExecutor;
+  resourceCoordinator?: ResourceCoordinator;
 }
 
 type StepExecutionPayload = {
@@ -227,6 +232,8 @@ export class WorkflowManager {
   >();
   private readonly writeQueues = new Map<string, Promise<void>>();
   private readonly executeTool?: WorkflowToolExecutor;
+  private readonly resourceCoordinator: ResourceCoordinator;
+  private accepting = true;
 
   public constructor(
     private readonly processManager: ProcessManager,
@@ -234,6 +241,8 @@ export class WorkflowManager {
     options: WorkflowManagerOptions = {},
   ) {
     this.executeTool = options.executeTool;
+    this.resourceCoordinator =
+      options.resourceCoordinator ?? new ResourceCoordinator();
   }
 
   public async save(
@@ -366,6 +375,10 @@ export class WorkflowManager {
     definition: WorkflowDefinition,
     memoryTaskId?: string,
   ): Promise<WorkflowRun> {
+    if (!this.accepting)
+      throw new Error(
+        "WORKFLOW_SHUTTING_DOWN: workflow manager is not accepting new runs",
+      );
     const now = new Date().toISOString();
     const run: WorkflowRun = {
       runId: `workflow_${randomUUID()}`,
@@ -420,8 +433,10 @@ export class WorkflowManager {
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       try {
-        const run = await this.loadRun(workspace, entry.name.slice(0, -5));
-        this.runs.set(run.runId, run);
+        const runId = entry.name.slice(0, -5);
+        const live = this.runs.get(runId);
+        const run = live ?? (await this.loadRun(workspace, runId));
+        if (!live) this.runs.set(run.runId, run);
         runs.push(run);
       } catch {
         // Ignore malformed historical run files.
@@ -507,6 +522,31 @@ export class WorkflowManager {
     if (execution) await execution;
     else await this.finalizeCanceled(run);
     return cloneRun(this.runs.get(runId) ?? run);
+  }
+
+  public resumeAccepting(): void {
+    this.accepting = true;
+  }
+
+  public async shutdown(): Promise<void> {
+    this.accepting = false;
+    const activeRunIds = [...this.executions.keys()];
+    for (const runId of activeRunIds) {
+      this.canceled.add(runId);
+      const run = this.runs.get(runId);
+      if (run && !TERMINAL_RUN_STATES.has(run.state)) {
+        run.state = "canceling";
+        run.updatedAt = new Date().toISOString();
+        await this.persistRun(run);
+      }
+      for (const controller of this.activeControllers.get(runId)?.values() ??
+        [])
+        controller.abort();
+    }
+    await Promise.allSettled(
+      activeRunIds.map((runId) => this.executions.get(runId)),
+    );
+    await Promise.allSettled([...this.writeQueues.values()]);
   }
 
   public async resume(
@@ -752,10 +792,27 @@ export class WorkflowManager {
     run.updatedAt = runStep.startedAt;
     await this.persistRun(run);
 
+    const outputSnapshots = await captureOutputSnapshots(
+      run.workspace,
+      definitionStep.outputs ?? [],
+    );
+    const resourceOwnerToken = `${run.runId}:${runStep.id}:${runStep.attempt}`;
     let payload: StepExecutionPayload | undefined;
     try {
-      payload = await this.executeStep(run, definitionStep, controller.signal);
-      if (controller.signal.aborted && definitionStep.type !== "tool") {
+      payload = await this.resourceCoordinator.withResources(
+        run.workspace,
+        definitionStep.resourcePaths ?? [],
+        resourceOwnerToken,
+        () =>
+          this.executeStep(
+            run,
+            definitionStep,
+            controller.signal,
+            resourceOwnerToken,
+          ),
+        controller.signal,
+      );
+      if (controller.signal.aborted) {
         runStep.state = "canceled";
         runStep.summary = "Canceled while executor was active";
         runStep.verificationStatus = "unverified";
@@ -763,6 +820,7 @@ export class WorkflowManager {
         await this.verifyDeclaredOutputs(
           run.workspace,
           definitionStep.outputs ?? [],
+          outputSnapshots,
         );
         runStep.state = "succeeded";
         runStep.summary = payload.summary;
@@ -775,7 +833,16 @@ export class WorkflowManager {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (controller.signal.aborted || this.canceled.has(run.runId)) {
+      if (
+        definitionStep.type === "tool" &&
+        message.startsWith("WORKFLOW_TOOL_TIMEOUT:")
+      ) {
+        runStep.state = "interrupted";
+        runStep.error = message;
+        runStep.summary =
+          "Tool deadline expired; mutation outcome requires confirmation";
+        runStep.verificationStatus = "unverified";
+      } else if (controller.signal.aborted || this.canceled.has(run.runId)) {
         runStep.state = "canceled";
         runStep.summary = "Canceled while executor was active";
         runStep.error = message;
@@ -800,6 +867,7 @@ export class WorkflowManager {
     run: WorkflowRun,
     step: WorkflowStep,
     signal: AbortSignal,
+    resourceOwnerToken: string,
   ): Promise<StepExecutionPayload> {
     if (step.type === "command") {
       const result = await this.processManager.run({
@@ -852,22 +920,42 @@ export class WorkflowManager {
         throw new Error(
           "INVALID_INPUT: workflow tool steps cannot recursively invoke process.workflow_* actions",
         );
-      const result = await withTimeout(
-        this.executeTool(step.tool, step.input, {
+      const timeoutMs = clamp(step.timeoutMs ?? 120_000, 100, 600_000);
+      const toolController = new AbortController();
+      const abortTool = (): void => toolController.abort();
+      signal.addEventListener("abort", abortTool, { once: true });
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        toolController.abort();
+      }, timeoutMs);
+      let result: unknown;
+      try {
+        result = await this.executeTool(step.tool, step.input, {
           workspace: run.workspace,
           runId: run.runId,
           stepId: step.id!,
           ...(run.memoryTaskId ? { memoryTaskId: run.memoryTaskId } : {}),
-        }),
-        clamp(step.timeoutMs ?? 120_000, 100, 600_000),
-        `WORKFLOW_TOOL_TIMEOUT: ${step.id}`,
-      );
-      const serialized = safeJsonValue(result);
-      const record = serialized as {
+          signal: toolController.signal,
+          deadlineAt: Date.now() + timeoutMs,
+          resourceOwnerToken,
+        });
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", abortTool);
+      }
+      if (timedOut)
+        throw new Error(
+          `WORKFLOW_TOOL_TIMEOUT: ${step.id}; executor was canceled and its mutation outcome is unknown`,
+        );
+      if (signal.aborted)
+        throw new Error("WORKFLOW_CANCELED: tool executor was canceled");
+      const record = result as {
         ok?: unknown;
         summary?: unknown;
         error?: unknown;
       };
+      const serialized = safeJsonValue(result);
       if (record && typeof record === "object" && record.ok === false) {
         const error =
           record.error && typeof record.error === "object"
@@ -997,14 +1085,21 @@ export class WorkflowManager {
   private async verifyDeclaredOutputs(
     workspace: string,
     outputs: string[],
+    before: Map<string, OutputSnapshot | null>,
   ): Promise<void> {
     for (const output of outputs) {
       const target = path.resolve(workspace, output);
-      try {
-        await stat(target);
-      } catch {
-        throw new Error(`WORKFLOW_OUTPUT_MISSING: ${output}`);
-      }
+      const after = await outputSnapshot(target);
+      if (!after) throw new Error(`WORKFLOW_OUTPUT_MISSING: ${output}`);
+      const previous = before.get(output) ?? null;
+      if (
+        previous &&
+        previous.size === after.size &&
+        previous.sha256 === after.sha256
+      )
+        throw new Error(
+          `WORKFLOW_OUTPUT_STALE: ${output} existed before the step and its content did not change`,
+        );
     }
   }
 
@@ -1455,6 +1550,37 @@ function resourcesOverlap(left: string, right: string): boolean {
     left.startsWith(`${right}${separator}`) ||
     right.startsWith(`${left}${separator}`)
   );
+}
+
+interface OutputSnapshot {
+  size: number;
+  sha256: string;
+}
+
+async function captureOutputSnapshots(
+  workspace: string,
+  outputs: string[],
+): Promise<Map<string, OutputSnapshot | null>> {
+  const snapshots = new Map<string, OutputSnapshot | null>();
+  for (const output of outputs)
+    snapshots.set(
+      output,
+      await outputSnapshot(path.resolve(workspace, output)),
+    );
+  return snapshots;
+}
+
+async function outputSnapshot(target: string): Promise<OutputSnapshot | null> {
+  try {
+    const info = await stat(target);
+    if (!info.isFile())
+      return { size: info.size, sha256: `non-file:${info.mtimeMs}` };
+    const hash = createHash("sha256");
+    hash.update(await readFile(target));
+    return { size: info.size, sha256: hash.digest("hex") };
+  } catch {
+    return null;
+  }
 }
 
 function compactCommandResult(

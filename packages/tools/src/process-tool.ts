@@ -528,6 +528,7 @@ export async function executeProcess(
           Math.min(numberInput(object, "maxChars", 100_000), 1_000_000),
         ),
         outputMode: outputMode(object),
+        signal: context.abortSignal,
       });
       const timeoutMs = numberInput(
         object,

@@ -15,6 +15,7 @@ tools/ripgrep/*.exe
 !.env.example
 *.log
 coverage/
+apps/desktop/resources/build-provenance.json
 *.tsbuildinfo
 **/src/*.js.map
 **/src/*.d.ts.map

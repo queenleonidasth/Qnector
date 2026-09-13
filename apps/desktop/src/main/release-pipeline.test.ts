@@ -36,5 +36,8 @@ describe("GitHub release pipeline", () => {
     expect(script).toContain("accept-skill-layout.ps1");
     expect(script).toContain("Desktop release regression gate failed");
     expect(script).toContain("Skill discovery layout gate failed");
+    expect(script).toContain("build-provenance.json");
+    expect(script).toContain("sourceRevision");
+    expect(script).toContain("lockfileSha256");
   });
 });

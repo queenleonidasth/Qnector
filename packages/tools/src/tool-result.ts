@@ -17,6 +17,7 @@ import type {
   WorkflowManager,
   PtyManager,
   AgentSkillService,
+  ResourceCoordinator,
 } from "@qnector/core";
 import type {
   ActivitySkillTrace,
@@ -50,6 +51,9 @@ export interface ToolContext {
   memoryV2?: MemoryV2Store;
   memoryTaskId?: string;
   skillTraceSessionId?: string;
+  abortSignal?: AbortSignal;
+  resourceCoordinator?: ResourceCoordinator;
+  resourceOwnerToken?: string;
   platform?: PlatformServices;
   activity: ActivityLogger;
   skillTrace?: SkillTraceState;
@@ -118,10 +122,30 @@ export function argsSummary(input: unknown): string {
     : serialized;
 }
 
+export class ToolExecutionError extends Error {
+  public constructor(
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown,
+  ) {
+    super(`${code}: ${message}`);
+    this.name = "ToolExecutionError";
+  }
+}
+
 export function errorFromUnknown(
   error: unknown,
   fallbackCode = "TOOL_ERROR",
 ): ToolError {
+  if (error instanceof ToolExecutionError)
+    return {
+      code: error.code,
+      message: sanitizeText(error.message.replace(`${error.code}: `, "")).value,
+      hint: hintForCode(error.code),
+      ...(error.details === undefined
+        ? {}
+        : { details: sanitizeValue(error.details).value }),
+    };
   const message = sanitizeText(
     error instanceof Error ? error.message : String(error),
   ).value;
