@@ -21,6 +21,7 @@ import type {
 } from "@qnector/core";
 import type {
   ActivitySkillTrace,
+  ActivitySkillRoutingWarning,
   QnectorConfig,
   ToolError,
   ToolMeta,
@@ -109,6 +110,82 @@ function activitySkillTrace(
       ? { routingDecisions: trace.routingDecisions }
       : {}),
   };
+}
+
+export function missingSkillRoutingWarning(
+  tool: string,
+  action: string,
+  input: unknown,
+  trace?: SkillTraceState,
+): ActivitySkillRoutingWarning | undefined {
+  if (trace?.routeId && trace.activatedAt) return undefined;
+  if (!isSubstantiveMutation(tool, action, input)) return undefined;
+  return {
+    code: "SKILL_ROUTING_MISSING",
+    message: `Substantive ${tool}.${action} work ran without an activated Agent Skill route. Call system.skills_route before related mutations so Skill context and trace evidence are explicit.`,
+  };
+}
+
+function isSubstantiveMutation(
+  tool: string,
+  action: string,
+  input: unknown,
+): boolean {
+  const object = isRecord(input) ? input : {};
+  if (tool === "files")
+    return [
+      "document_replace_text",
+      "write",
+      "append",
+      "replace",
+      "multi_edit",
+      "apply_patch",
+      "mkdir",
+      "move",
+      "copy",
+      "delete",
+    ].includes(action);
+  if (tool === "git") {
+    if (["status", "diff", "log", "show", "rev_parse"].includes(action))
+      return false;
+    if (action === "branch")
+      return object.create === true || object.delete === true;
+    return true;
+  }
+  if (tool === "process")
+    return [
+      "run",
+      "start",
+      "stop",
+      "kill_tree",
+      "pty_start",
+      "pty_write",
+      "pty_close",
+      "task_start",
+      "task_cancel",
+      "workflow_save",
+      "workflow_start",
+      "workflow_cancel",
+      "workflow_resume",
+    ].includes(action);
+  if (tool === "browser")
+    return [
+      "launch",
+      "navigate",
+      "fill",
+      "type",
+      "select",
+      "check",
+      "upload_file",
+      "press",
+      "click",
+    ].includes(action);
+  if (tool === "computer")
+    return ["click", "double_click", "type", "press", "set_value"].includes(
+      action,
+    );
+  if (tool === "workspace") return action === "set";
+  return false;
 }
 
 export function argsSummary(input: unknown): string {
@@ -272,6 +349,12 @@ export async function runWithActivity<T>(
   work: () => Promise<T>,
 ): Promise<ToolResult<T>> {
   const startedAt = Date.now();
+  const skillRoutingWarning = missingSkillRoutingWarning(
+    tool,
+    action,
+    input,
+    context.skillTrace,
+  );
   const runningSkillTrace =
     action === "skills_route"
       ? undefined
@@ -283,6 +366,7 @@ export async function runWithActivity<T>(
       argsSummary: argsSummary(input),
       status: "running",
       ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
+      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
     });
   else
     await context.activity.record({
@@ -291,6 +375,7 @@ export async function runWithActivity<T>(
       argsSummary: argsSummary(input),
       status: "running",
       ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
+      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
     });
   try {
     const result = await work();
@@ -321,6 +406,7 @@ export async function runWithActivity<T>(
         outputSize: JSON.stringify(result).length,
         summary,
         ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
+        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
       });
     else
       await context.activity.record({
@@ -332,6 +418,7 @@ export async function runWithActivity<T>(
         outputSize: JSON.stringify(result).length,
         summary,
         ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
+        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
       });
     recordMemoryV2Event(context, tool, action, input, "success", summary);
     const response = success(
@@ -373,6 +460,7 @@ export async function runWithActivity<T>(
         error: parsed,
         durationMs: Date.now() - startedAt,
         ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
+        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
       });
     else
       await context.activity.record({
@@ -383,6 +471,7 @@ export async function runWithActivity<T>(
         error: parsed,
         durationMs: Date.now() - startedAt,
         ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
+        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
       });
     recordMemoryV2Event(
       context,

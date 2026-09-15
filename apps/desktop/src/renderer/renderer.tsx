@@ -322,6 +322,14 @@ const ActivityPanel = React.memo(function ActivityPanel({
                         SKILL {item.skillTrace.skills.length}
                       </span>
                     )}
+                    {item.skillRoutingWarning && (
+                      <span
+                        className="activity-routing-missing-badge"
+                        title={item.skillRoutingWarning.message}
+                      >
+                        ROUTING MISSING
+                      </span>
+                    )}
                     {item.status === "running" ? (
                       <span className="activity-processing-label">
                         PROCESSING…
@@ -404,6 +412,15 @@ const ActivityPanel = React.memo(function ActivityPanel({
                 </strong>
               </div>
             </div>
+            {selectedActivity.skillRoutingWarning && (
+              <div className="activity-detail-section activity-routing-warning">
+                <span className="activity-detail-label">SKILL ROUTING</span>
+                <div className="activity-detail-summary">
+                  <strong>ROUTING MISSING</strong> ·{" "}
+                  {selectedActivity.skillRoutingWarning.message}
+                </div>
+              </div>
+            )}
             {selectedActivity.skillTrace &&
               selectedActivity.skillTrace.skills.length > 0 && (
                 <div className="activity-detail-section activity-skill-trace">

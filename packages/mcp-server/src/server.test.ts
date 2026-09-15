@@ -78,6 +78,12 @@ describe("Qnector MCP runtime", () => {
     });
     expect(initialized.response.ok).toBe(true);
     expect(initialized.response.headers.get("mcp-session-id")).toBeNull();
+    expect(initialized.response.headers.get("cache-control")).toContain(
+      "no-cache",
+    );
+    expect(
+      initialized.response.headers.get("x-qnector-schema-revision"),
+    ).toContain("skills-routing-v2");
     const instructions = (
       initialized.body as { result?: { instructions?: string } }
     ).result?.instructions;
@@ -141,6 +147,8 @@ describe("Qnector MCP runtime", () => {
           result?: {
             tools?: Array<{
               name: string;
+              description?: string;
+              _meta?: Record<string, unknown>;
               inputSchema?: {
                 properties?: { action?: { enum?: string[] } };
               };
@@ -170,6 +178,9 @@ describe("Qnector MCP runtime", () => {
             Record<string, unknown> | undefined
         )?.memoryTaskId,
       ).toBeTruthy();
+      expect(advertised?._meta?.["qnector/schemaRevision"]).toContain(
+        "skills-routing-v2",
+      );
     }
     const processTool = advertisedTools.find((tool) => tool.name === "process");
     expect(
@@ -202,7 +213,10 @@ describe("Qnector MCP runtime", () => {
     ).result;
     expect(compactResult?.content?.[0]?.text).toContain("Qnector local status");
     expect(compactResult?.content?.[0]?.text).toContain(
-      "QNECTOR LIVE; recovery probe: system.status",
+      "recovery probe: system.status",
+    );
+    expect(compactResult?.content?.[0]?.text).toContain(
+      "routing: substantive work=>system.skills_route",
     );
     expect(compactResult?.structuredContent).toMatchObject({
       ok: true,
@@ -268,7 +282,7 @@ describe("Qnector MCP runtime", () => {
     });
     expect(taskWrite.response.ok).toBe(true);
     expect(JSON.stringify(taskWrite.body)).toContain(
-      "QNECTOR LIVE; recovery probe: system.status",
+      "recovery probe: system.status",
     );
     const skillActivity = runtime.activity.list();
     const routeActivity = [...skillActivity]
@@ -486,6 +500,11 @@ describe("Qnector MCP runtime", () => {
       expect(modernTools.tools).toHaveLength(8);
       expect(modernTools.tools.map((tool) => tool.name)).toContain("browser");
       expect(
+        modernTools.tools
+          .find((tool) => tool.name === "system")
+          ?.description?.includes("skills_route"),
+      ).toBe(true);
+      expect(
         modernTools.tools.every((tool) =>
           tool.description?.includes("LONG-CONTEXT RECOVERY"),
         ),
@@ -551,6 +570,17 @@ describe("Qnector MCP runtime", () => {
     );
     expect(allowed.response.status).toBe(200);
     expect(await readFile(allowedMarker, "utf8")).toBe("allowed");
+    const unroutedWrite = [...runtime.activity.list()]
+      .reverse()
+      .find(
+        (entry) =>
+          entry.tool === "files" &&
+          entry.action === "write" &&
+          entry.status === "success",
+      );
+    expect(unroutedWrite?.skillRoutingWarning).toMatchObject({
+      code: "SKILL_ROUTING_MISSING",
+    });
   });
 
   it("supports the Phase 0 ping/read/write gate locally", async () => {

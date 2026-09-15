@@ -26,7 +26,7 @@ export function buildSessionBootstrapInstructions(
   if (skills.length > 0) {
     lines.push(
       "",
-      `Agent Skills: ${skills.length} available. AUTOMATIC ROUTING: for substantive tasks call system.skills_route with the full task; for non-English tasks add a short English intent/technology hint. Skip only trivial or no-Qnector work.`,
+      `Agent Skills: ${skills.length} available${skills.length > 20 ? " (showing 20 below)" : ""}. AUTOMATIC ROUTING: for substantive tasks call system.skills_route with the full task; for non-English tasks add a short English intent/technology hint. Skip only trivial or no-Qnector work.`,
       "Follow only returned relevant skills. After system.skills_route, pass its returned routeId as skillRouteId on every subsequent related Qnector tool call unless a memoryTaskId already scopes the work; this prevents Skill Context from leaking across stateless concurrent chats. UI/UX work must activate a relevant design skill before editing and be visually verified when browser/computer tools are available.",
       "SKILL DISCOVERY: only with explicit user intent, search skills.sh via system.skills_search_remote and install selected results via system.skill_install_remote; never silently install third-party skills.",
       "COMPLETION DISCLOSURE: end completed work with 'Skills used: <activated names|none>'; list only skills actually loaded/used.",

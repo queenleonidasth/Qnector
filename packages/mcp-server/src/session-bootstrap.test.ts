@@ -115,6 +115,50 @@ describe("session memory bootstrap", () => {
     expect(result).toContain("typescript-best-practices");
   });
 
+  it("reports the full skill count when the bootstrap catalog is clipped", () => {
+    const now = "2026-09-15T00:00:00.000Z";
+    const memory: MemoryRecall = {
+      available: false,
+      workspaceId: "skill-catalog-count",
+      workspacePath: "C:/work/skill-catalog-count",
+      updatedAt: now,
+      state: {
+        version: 1,
+        workspaceId: "skill-catalog-count",
+        workspacePath: "C:/work/skill-catalog-count",
+        createdAt: now,
+        updatedAt: now,
+        active: null,
+        facts: [],
+        recentChanges: [],
+      },
+      checkpoints: [],
+      counts: { facts: 0, checkpoints: 0, recentChanges: 0 },
+      truncated: false,
+      sanitized: false,
+    };
+    const skills = Array.from({ length: 24 }, (_, index) => ({
+      name: `skill-${index + 1}`,
+      description: `Skill ${index + 1}`,
+      path: `C:/skills/skill-${index + 1}/SKILL.md`,
+      directory: `C:/skills/skill-${index + 1}`,
+      source: "project" as const,
+      enabled: true,
+    }));
+
+    const result = buildSessionBootstrapInstructions(
+      memory,
+      [],
+      undefined,
+      skills,
+    );
+
+    expect(result).toContain("Agent Skills: 24 available");
+    expect(result).toContain("showing 20 below");
+    expect(result).toContain("skill-20");
+    expect(result).not.toContain("skill-21:");
+  });
+
   it("reports empty memory and non-fatal memory errors clearly", () => {
     const now = "2026-08-29T14:30:00.000Z";
     const empty: MemoryRecall = {

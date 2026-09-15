@@ -143,6 +143,12 @@ export class ActivityLogger {
             skillTrace: sanitizeValue(input.skillTrace)
               .value as ActivityEntry["skillTrace"],
           }),
+      ...(input.skillRoutingWarning === undefined
+        ? {}
+        : {
+            skillRoutingWarning: sanitizeValue(input.skillRoutingWarning)
+              .value as ActivityEntry["skillRoutingWarning"],
+          }),
     };
     this.entries.push(entry);
     while (this.entries.length > this.maxEntries) this.entries.shift();
@@ -189,6 +195,12 @@ export class ActivityLogger {
         : {
             skillTrace: sanitizeValue(input.skillTrace)
               .value as ActivityEntry["skillTrace"],
+          }),
+      ...(input.skillRoutingWarning === undefined
+        ? {}
+        : {
+            skillRoutingWarning: sanitizeValue(input.skillRoutingWarning)
+              .value as ActivityEntry["skillRoutingWarning"],
           }),
     };
     this.entries.push(entry);

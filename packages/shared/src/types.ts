@@ -71,6 +71,12 @@ export interface ActivityEntry {
   summary?: string;
   error?: ToolError;
   skillTrace?: ActivitySkillTrace;
+  skillRoutingWarning?: ActivitySkillRoutingWarning;
+}
+
+export interface ActivitySkillRoutingWarning {
+  code: "SKILL_ROUTING_MISSING";
+  message: string;
 }
 
 export interface ActivitySkillRoutingDecision {

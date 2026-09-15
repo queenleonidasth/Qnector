@@ -71,6 +71,13 @@ describe("2026-09-11 QC regression guards", () => {
     expect(rootPackage.scripts?.test).toBe("vitest run --maxWorkers=2");
   });
 
+  it("surfaces missing Agent Skill routing in Live Activity", () => {
+    expect(renderer).toContain("skillRoutingWarning");
+    expect(renderer).toContain("ROUTING MISSING");
+    expect(renderer).toContain("SKILL ROUTING");
+    expect(styles).toContain(".activity-routing-missing-badge");
+  });
+
   it("snapshots the current config before handing control to the updater", () => {
     expect(mainSource).toContain(
       'ipcMain.handle("updater:install", async () => {',
