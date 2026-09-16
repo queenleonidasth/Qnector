@@ -367,24 +367,17 @@ export async function runWithActivity<T>(
     action === "skills_route"
       ? undefined
       : activitySkillTrace(context, tool, action);
+  const runningEntry = {
+    tool,
+    action,
+    argsSummary: argsSummary(input),
+    status: "running" as const,
+    ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
+    ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
+  };
   if (context.activity.nonBlockingWrites)
-    context.activity.recordBuffered({
-      tool,
-      action,
-      argsSummary: argsSummary(input),
-      status: "running",
-      ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
-      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
-    });
-  else
-    await context.activity.record({
-      tool,
-      action,
-      argsSummary: argsSummary(input),
-      status: "running",
-      ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
-      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
-    });
+    context.activity.recordBuffered(runningEntry);
+  else await context.activity.record(runningEntry);
   try {
     const result = await work();
     qnectorPerformance.operation(
@@ -404,30 +397,20 @@ export async function runWithActivity<T>(
         : `${tool}.${action} completed`;
     const summary = sanitizeText(rawSummary).value;
     const completedSkillTrace = activitySkillTrace(context, tool, action);
+    const successEntry = {
+      tool,
+      action,
+      argsSummary: argsSummary(input),
+      status: "success" as const,
+      durationMs: Date.now() - startedAt,
+      outputSize: JSON.stringify(result).length,
+      summary,
+      ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
+      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
+    };
     if (context.activity.nonBlockingWrites)
-      context.activity.recordBuffered({
-        tool,
-        action,
-        argsSummary: argsSummary(input),
-        status: "success",
-        durationMs: Date.now() - startedAt,
-        outputSize: JSON.stringify(result).length,
-        summary,
-        ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
-        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
-      });
-    else
-      await context.activity.record({
-        tool,
-        action,
-        argsSummary: argsSummary(input),
-        status: "success",
-        durationMs: Date.now() - startedAt,
-        outputSize: JSON.stringify(result).length,
-        summary,
-        ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
-        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
-      });
+      context.activity.recordBuffered(successEntry);
+    else await context.activity.record(successEntry);
     recordMemoryV2Event(context, tool, action, input, "success", summary);
     const response = success(
       tool,
@@ -459,28 +442,19 @@ export async function runWithActivity<T>(
       action === "skills_route"
         ? undefined
         : activitySkillTrace(context, tool, action);
+    const errorEntry = {
+      tool,
+      action,
+      argsSummary: argsSummary(input),
+      status: "error" as const,
+      error: parsed,
+      durationMs: Date.now() - startedAt,
+      ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
+      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
+    };
     if (context.activity.nonBlockingWrites)
-      context.activity.recordBuffered({
-        tool,
-        action,
-        argsSummary: argsSummary(input),
-        status: "error",
-        error: parsed,
-        durationMs: Date.now() - startedAt,
-        ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
-        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
-      });
-    else
-      await context.activity.record({
-        tool,
-        action,
-        argsSummary: argsSummary(input),
-        status: "error",
-        error: parsed,
-        durationMs: Date.now() - startedAt,
-        ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
-        ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
-      });
+      context.activity.recordBuffered(errorEntry);
+    else await context.activity.record(errorEntry);
     recordMemoryV2Event(
       context,
       tool,

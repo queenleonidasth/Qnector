@@ -1,69 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type {
+  AgentSkillSummary as SkillSummary,
+  RemoteAgentSkillSummary as RemoteSkillSummary,
+  AgentSkillDocument as SkillDocument,
+  AgentSkillStatus as SkillStatus,
+  AgentSkillRouteDecision as SkillRoutingDecision,
+} from "@qnector/core";
 import type { ToolResult } from "../preload/api.js";
 import { useModalFocusTrap } from "./modal-accessibility.js";
 import "./skill-manager.css";
 
 type SkillScope = "user" | "workspace";
 type SkillFilter =
-  "all" | "bundled" | "user" | "workspace" | "active" | "disabled";
-
-interface SkillSummary {
-  name: string;
-  description: string;
-  path: string;
-  directory: string;
-  source: string;
-  license?: string;
-  compatibility?: string;
-  allowedTools?: string[];
-  origin?: {
-    registry: "skills.sh";
-    id: string;
-    source: string;
-    skillId: string;
-    url: string;
-    registryHash?: string;
-    contentHash?: string;
-    installs?: number;
-    installedAt: string;
-  };
-  enabled: boolean;
-}
-
-interface RemoteSkillSummary {
-  id: string;
-  name: string;
-  skillId: string;
-  source: string;
-  installs: number;
-  url: string;
-  installable: boolean;
-  installed: boolean;
-}
-
-interface SkillDocument extends SkillSummary {
-  instructions: string;
-  bytes: number;
-}
-
-interface SkillStatus {
-  roots: Array<{ path: string; source: string; available: boolean }>;
-  skillCount: number;
-  activeCount: number;
-  disabledCount: number;
-  skills: SkillSummary[];
-}
-
-interface SkillRoutingDecision {
-  name: string;
-  score: number;
-  confidence: "high" | "medium" | "low";
-  selected: boolean;
-  outcome: "selected" | "negative" | "overlap" | "below-threshold" | "limit";
-  reasons: string[];
-  capabilities: string[];
-}
+  "all" | "bundled" | "user" | "project" | "workspace" | "active" | "disabled";
 
 interface SkillValidation {
   name: string;
@@ -237,6 +187,7 @@ export function SkillManager({
     return (status?.skills ?? []).filter((skill) => {
       if (filter === "bundled" && skill.source !== "bundled") return false;
       if (filter === "user" && skill.source !== "user") return false;
+      if (filter === "project" && skill.source !== "project") return false;
       if (filter === "workspace" && skill.source !== "workspace") return false;
       if (filter === "active" && !skill.enabled) return false;
       if (filter === "disabled" && skill.enabled) return false;
@@ -1213,6 +1164,7 @@ export function SkillManager({
               "all",
               "bundled",
               "user",
+              "project",
               "workspace",
               "active",
               "disabled",

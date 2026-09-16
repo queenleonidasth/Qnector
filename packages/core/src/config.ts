@@ -1,6 +1,4 @@
-import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import {
   copyFile,
   mkdir,
@@ -13,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { configSchema } from "@qnector/shared";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
+import { executableAvailable } from "./executable-lookup.js";
 
 export const QNECTOR_VERSION = "0.4.29";
 
@@ -186,21 +185,6 @@ function normalizeShell(shell: QnectorConfig["shell"]): QnectorConfig["shell"] {
   if (!requested || executableAvailable(requested)) return { ...shell };
   const { powershellPath: _invalid, ...rest } = shell;
   return rest;
-}
-
-function executableAvailable(command: string): boolean {
-  try {
-    if (path.isAbsolute(command)) return existsSync(command);
-    const lookup = process.platform === "win32" ? "where.exe" : "which";
-    return (
-      spawnSync(lookup, [command], {
-        windowsHide: true,
-        stdio: "ignore",
-      }).status === 0
-    );
-  } catch {
-    return false;
-  }
 }
 
 export function withWorkspace(

@@ -56,6 +56,18 @@ describe("desktop Skill Manager", () => {
     );
   });
 
+  it("exposes project skills and uses shared types", async () => {
+    const source = await readFile(skillUrl, "utf8");
+    expect(source).toContain(
+      'filter === "project" && skill.source !== "project"',
+    );
+    expect(source).toContain(
+      'const writable = detail.source === "user" || detail.source === "workspace"',
+    );
+    expect(source).toContain('from "@qnector/core"');
+    expect(source).not.toContain("interface SkillRoutingDecision {");
+  });
+
   it("keeps Skill Manager text readable and its list scrollable", async () => {
     const css = await readFile(cssUrl, "utf8");
     expect(css).toMatch(/\.skill-row-name strong \{[\s\S]*?font-size:\s*12px;/);

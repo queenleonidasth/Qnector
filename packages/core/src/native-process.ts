@@ -1,7 +1,7 @@
-import { execFile, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
+import { executableAvailable } from "./executable-lookup.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -231,21 +231,6 @@ export class NativeProcessService {
     if (requested && executableAvailable(requested)) return requested;
     if (process.platform !== "win32") return "pwsh";
     return executableAvailable("pwsh.exe") ? "pwsh.exe" : "powershell.exe";
-  }
-}
-
-function executableAvailable(command: string): boolean {
-  try {
-    if (path.isAbsolute(command)) return existsSync(command);
-    const lookup = process.platform === "win32" ? "where.exe" : "which";
-    return (
-      spawnSync(lookup, [command], {
-        windowsHide: true,
-        stdio: "ignore",
-      }).status === 0
-    );
-  } catch {
-    return false;
   }
 }
 

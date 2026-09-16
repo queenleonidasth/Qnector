@@ -10,6 +10,11 @@ export interface ActivityEvent {
   entry: ActivityEntry;
 }
 
+type ActivityInput = Omit<ActivityEntry, "id" | "timestamp"> & {
+  id?: string;
+  timestamp?: string;
+};
+
 interface PendingActivityWrite {
   line: string;
   bytes: number;
@@ -112,13 +117,8 @@ export class ActivityLogger {
     return () => this.listeners.delete(listener);
   }
 
-  public async record(
-    input: Omit<ActivityEntry, "id" | "timestamp"> & {
-      id?: string;
-      timestamp?: string;
-    },
-  ): Promise<ActivityEntry> {
-    const entry: ActivityEntry = {
+  private makeEntry(input: ActivityInput): ActivityEntry {
+    return {
       id: input.id ?? randomUUID(),
       timestamp: input.timestamp ?? new Date().toISOString(),
       tool: input.tool,
@@ -150,6 +150,10 @@ export class ActivityLogger {
               .value as ActivityEntry["skillRoutingWarning"],
           }),
     };
+  }
+
+  public async record(input: ActivityInput): Promise<ActivityEntry> {
+    const entry = this.makeEntry(input);
     this.entries.push(entry);
     while (this.entries.length > this.maxEntries) this.entries.shift();
     const line = `${JSON.stringify(entry)}\n`;
@@ -165,44 +169,8 @@ export class ActivityLogger {
    * this path so disk latency is never on the critical path; shutdown flush()
    * still guarantees queued entries are persisted.
    */
-  public recordBuffered(
-    input: Omit<ActivityEntry, "id" | "timestamp"> & {
-      id?: string;
-      timestamp?: string;
-    },
-  ): ActivityEntry {
-    const entry: ActivityEntry = {
-      id: input.id ?? randomUUID(),
-      timestamp: input.timestamp ?? new Date().toISOString(),
-      tool: input.tool,
-      action: input.action,
-      argsSummary: sanitizeArgsSummary(input.argsSummary),
-      status: input.status,
-      ...(input.durationMs === undefined
-        ? {}
-        : { durationMs: input.durationMs }),
-      ...(input.outputSize === undefined
-        ? {}
-        : { outputSize: input.outputSize }),
-      ...(input.summary === undefined
-        ? {}
-        : { summary: sanitizeText(input.summary).value }),
-      ...(input.error === undefined
-        ? {}
-        : { error: sanitizeValue(input.error).value as ToolError }),
-      ...(input.skillTrace === undefined
-        ? {}
-        : {
-            skillTrace: sanitizeValue(input.skillTrace)
-              .value as ActivityEntry["skillTrace"],
-          }),
-      ...(input.skillRoutingWarning === undefined
-        ? {}
-        : {
-            skillRoutingWarning: sanitizeValue(input.skillRoutingWarning)
-              .value as ActivityEntry["skillRoutingWarning"],
-          }),
-    };
+  public recordBuffered(input: ActivityInput): ActivityEntry {
+    const entry = this.makeEntry(input);
     this.entries.push(entry);
     while (this.entries.length > this.maxEntries) this.entries.shift();
     const line = `${JSON.stringify(entry)}\n`;

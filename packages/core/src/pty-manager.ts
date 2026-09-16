@@ -1,9 +1,8 @@
 import { spawn as spawnChild } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { executableAvailable as executableOnPath } from "./executable-lookup.js";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import type { IPty } from "node-pty";
 import type { ProcessShell } from "./process-manager.js";
 
@@ -380,16 +379,6 @@ function powershellExecutable(requested?: string): string {
   if (requested && executableOnPath(requested)) return requested;
   if (process.platform !== "win32") return requested ?? "pwsh";
   return executableOnPath("pwsh.exe") ? "pwsh.exe" : "powershell.exe";
-}
-
-function executableOnPath(command: string): boolean {
-  try {
-    if (path.isAbsolute(command)) return existsSync(command);
-    const lookup = process.platform === "win32" ? "where.exe" : "which";
-    return spawnSync(lookup, [command], { stdio: "ignore" }).status === 0;
-  } catch {
-    return false;
-  }
 }
 
 function cleanupWindowsNodePtyHandles(pty: IPty): void {

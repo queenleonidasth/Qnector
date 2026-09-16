@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createConnection } from "node:net";
 import type { ProcessSnapshot } from "@qnector/shared";
+import { executableAvailable as executableOnPath } from "./executable-lookup.js";
 import {
   canUsePersistentPowerShell,
   runPersistentPowerShell,
@@ -901,14 +902,4 @@ function powershellExecutable(): string {
   return (cachedPowerShellExecutable = executableOnPath("pwsh.exe")
     ? "pwsh.exe"
     : "powershell.exe");
-}
-
-function executableOnPath(command: string): boolean {
-  try {
-    if (path.isAbsolute(command)) return existsSync(command);
-    const lookup = process.platform === "win32" ? "where.exe" : "which";
-    return spawnSync(lookup, [command], { stdio: "ignore" }).status === 0;
-  } catch {
-    return false;
-  }
 }

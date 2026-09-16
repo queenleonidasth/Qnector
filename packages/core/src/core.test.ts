@@ -488,6 +488,45 @@ describe("MemoryStore", () => {
 });
 
 describe("ActivityLogger", () => {
+  it("publishes buffered and awaited entries once in order and persists sanitized data", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-activity-modes-"));
+    try {
+      const file = path.join(root, "activity.jsonl");
+      const logger = new ActivityLogger(file);
+      const events: string[] = [];
+      logger.subscribe(({ entry }) => events.push(entry.action));
+      const buffered = logger.recordBuffered({
+        tool: "files",
+        action: "buffered",
+        argsSummary: JSON.stringify({ password: "private-buffered-secret" }),
+        status: "running",
+      });
+      const awaited = await logger.record({
+        tool: "files",
+        action: "awaited",
+        argsSummary: JSON.stringify({ password: "private-awaited-secret" }),
+        status: "success",
+      });
+      await logger.flush();
+      expect(events).toEqual(["buffered", "awaited"]);
+      expect(logger.list().map((entry) => entry.id)).toEqual([
+        buffered.id,
+        awaited.id,
+      ]);
+      const persisted = await readFile(file, "utf8");
+      expect(persisted).not.toContain("private-buffered-secret");
+      expect(persisted).not.toContain("private-awaited-secret");
+      expect(
+        persisted
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line).action),
+      ).toEqual(["buffered", "awaited"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("exports sanitized JSON and markdown", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "qnector-core-activity-"));
     try {
