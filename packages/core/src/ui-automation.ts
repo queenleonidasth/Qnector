@@ -691,8 +691,9 @@ $inputJson=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${payloa
 $inputData=$inputJson | ConvertFrom-Json;
 function Rid($e){ if($null -eq $e){return ''}; try { return (($e.GetRuntimeId()) -join '.') } catch { return '' } }
 function ReadValue($e){ try { $p=$null; if($e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$p)){ return ([System.Windows.Automation.ValuePattern]$p).Current.Value } } catch {}; return $null }
+function Finite($value){ try { $number=[double]$value; if([double]::IsNaN($number) -or [double]::IsInfinity($number)){ return $null }; return $number } catch { return $null } }
 function Row($e,$parentRid='',$depth=0){
-  try { $r=$e.Current.BoundingRectangle; return [PSCustomObject]@{RuntimeId=(Rid $e);ParentRuntimeId=$parentRid;Depth=$depth;Name=$e.Current.Name;AutomationId=$e.Current.AutomationId;ControlType=$e.Current.ControlType.ProgrammaticName;ClassName=$e.Current.ClassName;ProcessId=$e.Current.ProcessId;Enabled=$e.Current.IsEnabled;Offscreen=$e.Current.IsOffscreen;Focusable=$e.Current.IsKeyboardFocusable;Value=(ReadValue $e);X=$r.X;Y=$r.Y;Width=$r.Width;Height=$r.Height} } catch { return $null }
+  try { $r=$e.Current.BoundingRectangle; return [PSCustomObject]@{RuntimeId=(Rid $e);ParentRuntimeId=$parentRid;Depth=$depth;Name=$e.Current.Name;AutomationId=$e.Current.AutomationId;ControlType=$e.Current.ControlType.ProgrammaticName;ClassName=$e.Current.ClassName;ProcessId=$e.Current.ProcessId;Enabled=$e.Current.IsEnabled;Offscreen=$e.Current.IsOffscreen;Focusable=$e.Current.IsKeyboardFocusable;Value=(ReadValue $e);X=(Finite $r.X);Y=(Finite $r.Y);Width=(Finite $r.Width);Height=(Finite $r.Height)} } catch { return $null }
 }
 function FindWindow($processId,$rid){
   $root=[System.Windows.Automation.AutomationElement]::RootElement;

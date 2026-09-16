@@ -62,6 +62,9 @@ describe("session memory bootstrap", () => {
       },
     ]);
     expect(result).toContain("QNECTOR SESSION BOOTSTRAP");
+    expect(result).toContain("CURRENT CAPABILITY RULE");
+    expect(result).toContain("current tool list outranks conversation history");
+    expect(result).toContain("probe system.status before saying Qnector cannot be used");
     expect(result).toContain("system.status");
     expect(result).toContain("older claim of unavailability is stale");
     expect(result).toContain("Continue Qnector development");
@@ -190,6 +193,8 @@ describe("session memory bootstrap", () => {
       "corrupt state",
     );
     expect(error).toContain("corrupt state");
+    expect(error).toContain("CURRENT CAPABILITY RULE");
+    expect(error).toContain("probe system.status before saying Qnector cannot be used");
     expect(error).toContain("must not block normal Qnector tools");
   });
 });

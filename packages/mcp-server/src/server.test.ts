@@ -83,11 +83,19 @@ describe("Qnector MCP runtime", () => {
     );
     expect(
       initialized.response.headers.get("x-qnector-schema-revision"),
-    ).toContain("skills-routing-v2");
+    ).toContain("capability-recovery-v3");
+    expect(initialized.response.headers.get("x-qnector-capability")).toBe(
+      "live",
+    );
     const instructions = (
       initialized.body as { result?: { instructions?: string } }
     ).result?.instructions;
     expect(instructions).toContain("QNECTOR SESSION BOOTSTRAP");
+    expect(instructions).toContain("CURRENT CAPABILITY RULE");
+    expect(instructions).toContain("current tool list outranks conversation history");
+    expect(instructions).toContain(
+      "probe system.status before saying Qnector cannot be used",
+    );
     expect(instructions).toContain(root);
     expect(instructions).toContain("Continue the saved Qnector task");
     expect(instructions).toContain("Run the next acceptance check");
@@ -147,6 +155,7 @@ describe("Qnector MCP runtime", () => {
           result?: {
             tools?: Array<{
               name: string;
+              title?: string;
               description?: string;
               _meta?: Record<string, unknown>;
               inputSchema?: {
@@ -179,7 +188,18 @@ describe("Qnector MCP runtime", () => {
         )?.memoryTaskId,
       ).toBeTruthy();
       expect(advertised?._meta?.["qnector/schemaRevision"]).toContain(
-        "skills-routing-v2",
+        "capability-recovery-v3",
+      );
+      expect(advertised?.title).toBe(`Qnector ${definition.name} (LIVE)`);
+      expect(advertised?.description).toContain("QNECTOR IS CALLABLE NOW");
+      expect(advertised?.description).toContain(
+        "probe system.status before saying Qnector cannot be used",
+      );
+      expect(advertised?._meta?.["qnector/availability"]).toBe(
+        "live-when-listed",
+      );
+      expect(advertised?._meta?.["qnector/recoveryAction"]).toBe(
+        "system.status",
       );
     }
     const processTool = advertisedTools.find((tool) => tool.name === "process");
@@ -217,6 +237,9 @@ describe("Qnector MCP runtime", () => {
     );
     expect(compactResult?.content?.[0]?.text).toContain(
       "routing: substantive work=>system.skills_route",
+    );
+    expect(compactResult?.content?.[0]?.text).toContain(
+      "availability: live result proves Qnector callable now",
     );
     expect(compactResult?.structuredContent).toMatchObject({
       ok: true,
