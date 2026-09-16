@@ -118,8 +118,16 @@ export function missingSkillRoutingWarning(
   input: unknown,
   trace?: SkillTraceState,
 ): ActivitySkillRoutingWarning | undefined {
-  if (trace?.routeId && trace.activatedAt) return undefined;
   if (!isSubstantiveMutation(tool, action, input)) return undefined;
+  if (
+    trace?.routeId &&
+    trace.activatedAt &&
+    trace.skills.some(
+      (skill) =>
+        !skill.allowedTools?.length || skill.allowedTools.includes(tool),
+    )
+  )
+    return undefined;
   return {
     code: "SKILL_ROUTING_MISSING",
     message: `Substantive ${tool}.${action} work ran without an activated Agent Skill route. Call system.skills_route before related mutations so Skill context and trace evidence are explicit.`,

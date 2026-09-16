@@ -91,6 +91,44 @@ describe("Qnector grouped tools", () => {
     );
   });
 
+  it("automatically activates a relevant skill for an unscoped TypeScript edit and traces the tool call", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-auto-skill-"));
+    const context = makeContext(defaultConfig(root));
+    const directory = path.join(root, "skills", "typescript-best-practices");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "SKILL.md"),
+      "---\nname: typescript-best-practices\ndescription: TypeScript coding and editing TypeScript files.\nallowed-tools: [files]\n---\nUse TypeScript best practices.\n",
+    );
+    context.agentSkills = new AgentSkillService({
+      roots: [{ path: path.join(root, "skills"), source: "test" }],
+    });
+    context.skillTraceStore = {
+      default: { skills: [] },
+      byTaskId: new Map(),
+      byRouteId: new Map(),
+    };
+    const result = await new ToolRegistry().call("files", context, {
+      action: "write",
+      path: "example.ts",
+      content: "export const answer = 42;\n",
+    });
+    expect(result.ok).toBe(true);
+    const entries = context.activity.list();
+    const routed = entries.find(
+      (entry) => entry.action === "skills_route" && entry.status === "success",
+    );
+    expect(routed?.skillTrace?.skills).toContain("typescript-best-practices");
+    const write = entries.find(
+      (entry) =>
+        entry.tool === "files" &&
+        entry.action === "write" &&
+        entry.status === "success",
+    );
+    expect(write?.skillTrace?.routeId).toBe(routed?.skillTrace?.routeId);
+    expect(write?.skillRoutingWarning).toBeUndefined();
+  });
+
   it("records task-scoped Skill activation and tool-call context in Live Activity", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skill-activity-"));
     const config = defaultConfig(root);

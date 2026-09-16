@@ -13,6 +13,42 @@ afterEach(async () => {
 });
 
 describe("AgentSkillService", () => {
+  it("discovers project skills from the active workspace and switches with it", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-project-skills-"));
+    const first = path.join(root, "first");
+    const second = path.join(root, "second");
+    for (const [workspace, name] of [
+      [first, "first-project-skill"],
+      [second, "second-project-skill"],
+    ] as const) {
+      const directory = path.join(workspace, "skills", name);
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        path.join(directory, "SKILL.md"),
+        `---\nname: ${name}\ndescription: "Project-scoped skill for ${name}."\n---\n# Instructions\n`,
+        "utf8",
+      );
+    }
+    let workspace = first;
+    const service = new AgentSkillService({ workspaceRoot: () => workspace });
+    expect((await service.status()).roots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: path.join(first, "skills"),
+          source: "project",
+          available: true,
+        }),
+      ]),
+    );
+    expect((await service.list()).map((skill) => skill.name)).toContain(
+      "first-project-skill",
+    );
+    workspace = second;
+    const names = (await service.list()).map((skill) => skill.name);
+    expect(names).toContain("second-project-skill");
+    expect(names).not.toContain("first-project-skill");
+  });
+
   it("discovers, matches and loads Agent Skills without executing their scripts", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skills-"));
     const directory = path.join(root, "spreadsheet-workflows");

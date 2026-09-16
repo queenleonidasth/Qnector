@@ -24,6 +24,31 @@ describe("missing skill routing diagnostic", () => {
     ).toMatchObject({ code: "SKILL_ROUTING_MISSING" });
   });
 
+  it("warns when a route exists but activated no skills or no skill supports the tool", () => {
+    expect(
+      missingSkillRoutingWarning(
+        "files",
+        "write",
+        { path: "a.txt" },
+        {
+          ...routed,
+          skills: [],
+        },
+      )?.code,
+    ).toBe("SKILL_ROUTING_MISSING");
+    expect(
+      missingSkillRoutingWarning(
+        "files",
+        "write",
+        { path: "a.txt" },
+        {
+          ...routed,
+          skills: [{ name: "browser-only", allowedTools: ["browser"] }],
+        },
+      )?.code,
+    ).toBe("SKILL_ROUTING_MISSING");
+  });
+
   it("does not flag read-only calls or work that already has route context", () => {
     expect(
       missingSkillRoutingWarning("files", "read", { path: "src/a.ts" }),

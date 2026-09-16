@@ -687,7 +687,7 @@ function defaultAgentSkillRoots() {
     ...(runtimeResources
       ? [{ path: path.join(runtimeResources, "skills"), source: "bundled" }]
       : []),
-    { path: path.join(process.cwd(), "skills"), source: "project" },
+    // Project skills are resolved dynamically from config.activeWorkspace.
     ...(appData
       ? [{ path: path.join(appData, "Qnector", "skills"), source: "user" }]
       : []),

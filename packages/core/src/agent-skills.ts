@@ -687,6 +687,12 @@ export class AgentSkillService {
     const roots = [...(this.options.roots ?? [])];
     const workspace = this.options.workspaceRoot?.();
     if (workspace?.trim()) {
+      // Resolve project skills from the active workspace, not process.cwd()
+      // (which is often C:\\Windows\\system32 for packaged/startup launches).
+      roots.push({
+        path: path.join(path.resolve(workspace), "skills"),
+        source: "project",
+      });
       roots.push({
         path: path.join(path.resolve(workspace), ".qnector", "skills"),
         source: "workspace",
