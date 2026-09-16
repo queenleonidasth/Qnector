@@ -68,6 +68,18 @@ describe("desktop Skill Manager", () => {
     expect(source).not.toContain("interface SkillRoutingDecision {");
   });
 
+  it("keeps the controlled skill editor in its own component", async () => {
+    const editor = await readFile(
+      new URL("./skill-editor.tsx", import.meta.url),
+      "utf8",
+    );
+    const source = await readFile(skillUrl, "utf8");
+    expect(source).toContain("<SkillEditor");
+    expect(editor).toContain('className="skills-scroll skills-editor-scroll"');
+    expect(editor).toContain("Validate & Save");
+    expect(editor).toContain("setForm");
+  });
+
   it("keeps Skill Manager text readable and its list scrollable", async () => {
     const css = await readFile(cssUrl, "utf8");
     expect(css).toMatch(/\.skill-row-name strong \{[\s\S]*?font-size:\s*12px;/);

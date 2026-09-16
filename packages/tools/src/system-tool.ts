@@ -428,22 +428,16 @@ export async function executeSystem(
         };
       }
       if (action === "skills_status") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
-        const status = await context.agentSkills.status();
+        const agentSkills = requireAgentSkills(context);
+        const status = await agentSkills.status();
         return {
           summary: `Agent Skills runtime found ${status.skillCount} skill(s) across ${status.roots.length} root(s)`,
           data: status,
         };
       }
       if (action === "skills_list") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
-        const skills = await context.agentSkills.list({
+        const agentSkills = requireAgentSkills(context);
+        const skills = await agentSkills.list({
           query: stringInput(object, "query"),
           limit: numberInput(object, "maxResults", 100),
         });
@@ -453,13 +447,10 @@ export async function executeSystem(
         };
       }
       if (action === "skills_match") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const query = stringInput(object, "query", true)!;
         const maxResults = numberInput(object, "maxResults", 5);
-        const plan = await context.agentSkills.plan(query, 5, maxResults);
+        const plan = await agentSkills.plan(query, 5, maxResults);
         return {
           summary: `Matched ${plan.matches.length} Agent Skill(s); runtime would activate ${plan.selected.length}`,
           data: {
@@ -471,19 +462,16 @@ export async function executeSystem(
         };
       }
       if (action === "skills_route") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const query = stringInput(object, "query", true)!;
         const maxResults = numberInput(object, "maxResults", 5);
-        const plan = await context.agentSkills.plan(
+        const plan = await agentSkills.plan(
           query,
           maxResults,
           Math.max(8, maxResults),
         );
         const skills = await Promise.all(
-          plan.selected.map((skill) => context.agentSkills!.get(skill.name)),
+          plan.selected.map((skill) => agentSkills.get(skill.name)),
         );
         const routeId = randomUUID();
         if (context.skillTrace) {
@@ -517,12 +505,9 @@ export async function executeSystem(
         };
       }
       if (action === "skills_search_remote") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const query = stringInput(object, "query", true)!;
-        const skills = await context.agentSkills.searchRemote({
+        const skills = await agentSkills.searchRemote({
           query,
           limit: numberInput(object, "maxResults", 20),
           ...(stringInput(object, "owner")
@@ -535,12 +520,9 @@ export async function executeSystem(
         };
       }
       if (action === "skill_install_remote") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const remoteId = stringInput(object, "remoteId", true)!;
-        const skill = await context.agentSkills.installRemote(
+        const skill = await agentSkills.installRemote(
           remoteId,
           requiredSkillScope(object),
         );
@@ -550,11 +532,8 @@ export async function executeSystem(
         };
       }
       if (action === "skill_get") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
-        const skill = await context.agentSkills.get(
+        const agentSkills = requireAgentSkills(context);
+        const skill = await agentSkills.get(
           stringInput(object, "name", true)!,
           { includeDisabled: true },
         );
@@ -564,10 +543,7 @@ export async function executeSystem(
         };
       }
       if (action === "skill_create" || action === "skill_update") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const name = stringInput(object, "name", true)!;
         const description = stringInput(object, "description", true)!;
         const instructions = stringInput(object, "instructions", true)!;
@@ -590,44 +566,35 @@ export async function executeSystem(
         };
         const skill =
           action === "skill_create"
-            ? await context.agentSkills.create({
+            ? await agentSkills.create({
                 scope: requiredSkillScope(object),
                 ...shared,
               })
-            : await context.agentSkills.update(name, shared);
+            : await agentSkills.update(name, shared);
         return {
           summary: `${action === "skill_create" ? "Created" : "Updated"} Agent Skill ${skill.name}`,
           data: skill,
         };
       }
       if (action === "skill_delete") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const name = stringInput(object, "name", true)!;
-        await context.agentSkills.remove(name);
+        await agentSkills.remove(name);
         return { summary: `Deleted Agent Skill ${name}`, data: { name } };
       }
       if (action === "skill_enable") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const name = stringInput(object, "name", true)!;
         const enabled = booleanInput(object, "enabled", true);
-        await context.agentSkills.setEnabled(name, enabled);
+        await agentSkills.setEnabled(name, enabled);
         return {
           summary: `${enabled ? "Enabled" : "Disabled"} Agent Skill ${name}`,
           data: { name, enabled },
         };
       }
       if (action === "skill_duplicate") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
-        const skill = await context.agentSkills.duplicate(
+        const agentSkills = requireAgentSkills(context);
+        const skill = await agentSkills.duplicate(
           stringInput(object, "name", true)!,
           requiredSkillScope(object),
           stringInput(object, "newName"),
@@ -635,23 +602,17 @@ export async function executeSystem(
         return { summary: `Duplicated Agent Skill ${skill.name}`, data: skill };
       }
       if (action === "skill_import") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
-        const skill = await context.agentSkills.importSkill(
+        const agentSkills = requireAgentSkills(context);
+        const skill = await agentSkills.importSkill(
           stringInput(object, "sourcePath", true)!,
           requiredSkillScope(object),
         );
         return { summary: `Imported Agent Skill ${skill.name}`, data: skill };
       }
       if (action === "skill_validate") {
-        if (!context.agentSkills)
-          throw new Error(
-            "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
-          );
+        const agentSkills = requireAgentSkills(context);
         const name = stringInput(object, "name", true)!;
-        const validation = await context.agentSkills.validate(name);
+        const validation = await agentSkills.validate(name);
         return {
           summary: `${validation.healthy ? "Validated" : "Validation issues in"} Agent Skill ${name}`,
           data: { name, ...validation },
@@ -1181,4 +1142,14 @@ function openExternal(target: string): void {
     stdio: "ignore",
   });
   child.unref();
+}
+
+function requireAgentSkills(
+  context: ToolContext,
+): NonNullable<ToolContext["agentSkills"]> {
+  if (!context.agentSkills)
+    throw new Error(
+      "UNSUPPORTED_CAPABILITY: agent skill runtime is not configured in this Qnector runtime",
+    );
+  return context.agentSkills;
 }

@@ -78,6 +78,18 @@ describe("2026-09-11 QC regression guards", () => {
     expect(styles).toContain(".activity-routing-missing-badge");
   });
 
+  it("isolates runtime diagnostics from the App shell without losing the refresh control", () => {
+    const diagnostics = readFileSync(
+      new URL("./runtime-diagnostics.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(renderer).toContain("<RuntimeDiagnostics");
+    expect(renderer).not.toContain('className="runtime-scroll"');
+    expect(diagnostics).toContain('data-testid="runtime-scroll"');
+    expect(diagnostics).toContain("onRefresh");
+    expect(diagnostics).toContain("Recent workflows");
+  });
+
   it("snapshots the current config before handing control to the updater", () => {
     expect(mainSource).toContain(
       'ipcMain.handle("updater:install", async () => {',

@@ -91,6 +91,23 @@ describe("Qnector grouped tools", () => {
     );
   });
 
+  it("shares the Agent Skill runtime guard without changing unsupported-action errors", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skill-guard-"));
+    const source = await readFile(
+      new URL("./system-tool.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source.match(/if \(!context\.agentSkills\)/g)).toHaveLength(1);
+    const registry = new ToolRegistry();
+    const context = makeContext(defaultConfig(root));
+    for (const action of ["skills_status", "skill_get", "skill_validate"]) {
+      const result = await registry.call("system", context, { action });
+      expect(result.ok).toBe(false);
+      expect(result.error?.code).toBe("UNSUPPORTED_CAPABILITY");
+      expect(result.error?.message).toContain("agent skill runtime");
+    }
+  });
+
   it("automatically activates a relevant skill for an unscoped TypeScript edit and traces the tool call", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-auto-skill-"));
     const context = makeContext(defaultConfig(root));
