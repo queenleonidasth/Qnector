@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/shared" },
+    { "path": "./packages/execution" },
     { "path": "./packages/core" },
     { "path": "./packages/tools" },
     { "path": "./packages/mcp-server" },
