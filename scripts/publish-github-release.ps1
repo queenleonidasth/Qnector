@@ -2,6 +2,7 @@ param(
   [string]$Version,
   [string]$ReleaseDir,
   [string]$NotesPath,
+  [switch]$Prerelease,
   [switch]$VerifyOnly
 )
 
@@ -14,6 +15,7 @@ if (-not $Version) {
   $Version = [string]$package.version
 }
 if (-not $Version) { throw "Could not determine Qnector version" }
+if ($Version -match '-' -and -not $Prerelease) { throw "Prerelease version requires -Prerelease; refusing to publish as stable" }
 $tag = "v$Version"
 
 & git rev-parse --verify "refs/tags/$tag" *> $null
@@ -87,6 +89,7 @@ function Assert-ReleaseAssets([object]$release) {
 }
 
 $release = Get-ReleaseByTag
+if ($release -and $Prerelease -and -not $release.prerelease) { throw "Existing GitHub release $tag is not a prerelease; refusing to overwrite it" }
 if ($VerifyOnly) {
   Assert-ReleaseAssets $release
   Write-Output "Verified Qnector $tag release: both Windows assets are uploaded with exact sizes."
@@ -101,11 +104,11 @@ if (-not $release) {
   }
   $payload = @{
     tag_name = $tag
-    target_commitish = "main"
+    target_commitish = (& git rev-parse HEAD).Trim()
     name = "Qnector $tag"
     body = $notes
     draft = $false
-    prerelease = $false
+    prerelease = [bool]$Prerelease
   } | ConvertTo-Json -Compress
   $payloadBytes = [Text.Encoding]::UTF8.GetBytes($payload)
   $release = Invoke-RestMethod -Method Post -Uri "$repositoryApi/releases" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $payloadBytes
