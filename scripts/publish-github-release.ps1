@@ -22,6 +22,9 @@ $tag = "v$Version"
 if ($LASTEXITCODE -ne 0) {
   throw "Git tag $tag does not exist. Commit, tag, and push the release before publishing assets."
 }
+$tagCommit = (& git rev-list -n 1 $tag).Trim()
+$headCommit = (& git rev-parse HEAD).Trim()
+if ($tagCommit -ne $headCommit) { throw "Release tag $tag does not match the currently checked out commit" }
 
 $releaseRoot = Join-Path $projectRoot "apps\desktop\release"
 if (-not $ReleaseDir) {
@@ -92,7 +95,13 @@ $release = Get-ReleaseByTag
 if ($release -and $Prerelease -and -not $release.prerelease) { throw "Existing GitHub release $tag is not a prerelease; refusing to overwrite it" }
 if ($VerifyOnly) {
   Assert-ReleaseAssets $release
+  if ($release.draft) { throw "GitHub release $tag still has draft=true" }
   Write-Output "Verified Qnector $tag release: both Windows assets are uploaded with exact sizes."
+  exit 0
+}
+if ($release -and -not $release.draft) {
+  Assert-ReleaseAssets $release
+  Write-Output "Existing published release $tag already has matching assets; refusing unnecessary replacement."
   exit 0
 }
 
@@ -107,7 +116,8 @@ if (-not $release) {
     target_commitish = (& git rev-parse HEAD).Trim()
     name = "Qnector $tag"
     body = $notes
-    draft = $false
+    # Do not expose an asset-less stable release to /releases/latest.
+    draft = $true
     prerelease = [bool]$Prerelease
   } | ConvertTo-Json -Compress
   $payloadBytes = [Text.Encoding]::UTF8.GetBytes($payload)
@@ -125,6 +135,11 @@ foreach ($assetPath in $assets) {
   # can clean up any stale asset with the same name.
   $release = Get-ReleaseByTag
   $existing = @($release.assets | Where-Object { $_.name -eq $file.Name })
+  $matching = @($existing | Where-Object { [int64]$_.size -eq [int64]$file.Length -and [string]$_.state -eq "uploaded" })
+  if ($matching.Count -gt 0) {
+    Write-Output "Already uploaded and size-verified $($file.Name); skipping duplicate transfer."
+    continue
+  }
   foreach ($old in $existing) {
     Invoke-RestMethod -Method Delete -Uri "$repositoryApi/releases/assets/$($old.id)" -Headers $headers | Out-Null
   }
@@ -164,4 +179,9 @@ foreach ($assetPath in $assets) {
 
 $verified = Get-ReleaseByTag
 Assert-ReleaseAssets $verified
-Write-Output "Published Qnector $tag assets to $($verified.html_url)"
+$publishPayload = @{ draft = $false; prerelease = [bool]$Prerelease } | ConvertTo-Json -Compress
+$publishBytes = [Text.Encoding]::UTF8.GetBytes($publishPayload)
+$published = Invoke-RestMethod -Method Patch -Uri "$repositoryApi/releases/$($verified.id)" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $publishBytes
+Assert-ReleaseAssets $published
+if ($published.draft -or [bool]$published.prerelease -ne [bool]$Prerelease) { throw "GitHub release publication state mismatch" }
+Write-Output "Published Qnector $tag assets to $($published.html_url)"
