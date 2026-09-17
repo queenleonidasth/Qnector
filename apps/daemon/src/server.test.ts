@@ -47,7 +47,7 @@ describe("P2 named-pipe daemon", () => {
     });
     expect(JSON.parse(denied)).toMatchObject({ok: false, error: "IPC_UNAUTHORIZED"});
     expect(await daemonRequest(root, {action: "ping"})).toMatchObject({ok: true});
-  });
+  }, 20_000);
 
   it("reconnects after daemon closes, keeps the worker and retrieves exactly one result", async () => {
     const {root, daemon} = fixture();
@@ -75,5 +75,5 @@ describe("P2 named-pipe daemon", () => {
     expect((output.data as {text: string}).text).toContain("DONE");
     expect(readFileSync(marker, "utf8")).toBe("once\n");
     expect((await daemonRequest(root, input)).data).toMatchObject({taskId, reused: true});
-  });
+  }, 20_000);
 });

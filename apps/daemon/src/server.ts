@@ -1,9 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import net, { type Server, type Socket } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { DurableRunner, type SubmitCommand } from "@qnector/execution";
+import { secureExecutionRoot } from "./private-root.js";
 
 export function daemonSocketPath(root: string): string {
   if (process.platform !== "win32") return path.join(path.resolve(root), "daemon.sock");
@@ -50,7 +51,11 @@ export class DurableDaemon {
 
   public async start(): Promise<void> {
     if (this.server) throw new Error("DAEMON_ALREADY_STARTED");
-    mkdirSync(this.root, {recursive: true, mode: 0o700});
+    // Reject an incomplete preview before binding the pipe or accepting tasks.
+    // Otherwise each accepted job could fail after the irreversible DB commit.
+    if (this.jobHostPath && (process.platform !== "win32" || !existsSync(this.jobHostPath)))
+      throw new Error("JOB_HOST_MISSING_OR_UNSUPPORTED");
+    secureExecutionRoot(this.root);
     const server = net.createServer(socket => this.handleConnection(socket));
     // Bind before opening SQLite. The OS disallows two listeners with the same pipe name.
     try {
@@ -134,7 +139,14 @@ export class DurableDaemon {
     const runner = this.runner;
     if (!runner) throw new Error("DAEMON_NOT_READY");
     switch (request.action) {
-      case "ping": return {state: "ready", protocol: 1};
+      case "ping": return {state: "ready", protocol: 1,
+        jobHostEnabled: Boolean(this.jobHostPath)};
+      case "doctor": {
+        const storage = runner.store.doctor();
+        return {state: storage.integrity === "ok" ? "ready" : "degraded", protocol: 1,
+          jobHostEnabled: Boolean(this.jobHostPath), storage,
+          note: "Local execution health only; does not diagnose ChatGPT Web or tunnel availability"};
+      }
       case "submit": {
         if (!request.command) throw new Error("INVALID_INPUT: command required");
         const {task, reused} = runner.submit({
@@ -156,9 +168,9 @@ export class DurableDaemon {
       case "get": {
         const task = runner.get(request.taskId ?? "");
         if (!task) return null;
-        const {taskId, attemptId, state, outputState, verificationState, outcome,
+        const {taskId, attemptId, workspace, state, outputState, verificationState, outcome,
           resultManifest, reason, createdAt, updatedAt} = task;
-        return {taskId, attemptId, state, outputState, verificationState, outcome,
+        return {taskId, attemptId, workspace, state, outputState, verificationState, outcome,
           resultManifest, reason, createdAt, updatedAt};
       }
       case "wait": {

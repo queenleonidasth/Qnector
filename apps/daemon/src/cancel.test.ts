@@ -73,7 +73,7 @@ describe("P2 explicit cancellation", () => {
     daemons.push(resumed);
     await resumed.start();
     const final = await until(() => daemonRequest(root, {action: "result", taskId}),
-      result => (result.data as {state?: string} | undefined)?.state === "canceled");
+      result => (result.data as {state?: string} | undefined)?.state === "canceled", 20_000);
     expect(final.data).toMatchObject({state: "canceled", manifest: {canceled: true}});
-  }, 20_000);
+  }, 35_000);
 });

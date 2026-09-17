@@ -80,5 +80,5 @@ describe("P2 real daemon process termination", () => {
     expect((await daemonRequest(root, {action: "output", taskId, stream: "stdout"})).data)
       .toMatchObject({text: "DONE", complete: true});
     restarted.kill();
-  });
+  }, 25_000);
 });

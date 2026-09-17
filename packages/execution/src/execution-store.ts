@@ -195,6 +195,21 @@ export class ExecutionStore {
     });
   }
 
+  /** Read-only daemon health snapshot. Never exposes command definitions,
+   * idempotency keys, tokens, log contents or private task paths. */
+  public doctor(): {schemaVersion: number; journalMode: string; synchronous: number;
+    integrity: string; taskStates: Record<string, number>} {
+    const schema = this.db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get() as {version: number};
+    const journal = this.db.prepare("PRAGMA journal_mode").get() as {journal_mode: string};
+    const synchronous = this.db.prepare("PRAGMA synchronous").get() as {synchronous: number};
+    const integrity = this.db.prepare("PRAGMA quick_check(1)").get() as {quick_check: string};
+    const counts = this.db.prepare("SELECT state,COUNT(*) AS total FROM tasks GROUP BY state")
+      .all() as {state: string;total: number}[];
+    return {schemaVersion: schema.version, journalMode: journal.journal_mode,
+      synchronous: synchronous.synchronous, integrity: integrity.quick_check,
+      taskStates: Object.fromEntries(counts.map(row => [row.state, row.total]))};
+  }
+
   public get(taskId: string): ExecutionTask | null {
     const row = this.db.prepare("SELECT * FROM tasks WHERE task_id=?").get(taskId) as TaskRow | undefined;
     return row ? asTask(row) : null;
