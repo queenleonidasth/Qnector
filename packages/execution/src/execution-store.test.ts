@@ -117,7 +117,7 @@ describe("Durable execution acceptance and recovery (P1)",() => {
   });
 
   it("distinguishes queued cancellation from running cancel requests requiring confirmation",() => {
-    const {store,input} = fixture();
+    const {store,input,file} = fixture();
     const queued = store.accept(input).task;
     expect(store.requestCancel(queued.taskId)).toBe("canceled");
     expect(store.pending()).toEqual([]);
@@ -127,8 +127,11 @@ describe("Durable execution acceptance and recovery (P1)",() => {
     expect(store.markStarted(attempt)).toBe(true);
     expect(store.requestCancel(running.taskId)).toBe("canceling");
     expect(store.get(running.taskId)?.state).toBe("canceling");
-    expect(store.confirmCanceled({...attempt,token:"wrong"})).toBe(false);
-    expect(store.confirmCanceled(attempt)).toBe(true);
+    const manifestPath = new OutputSpool(path.dirname(file), attempt.attemptId)
+      .finalize(null, "SIGTERM", true).path;
+    expect(store.confirmCanceled({...attempt,token:"wrong"}, manifestPath)).toBe(false);
+    expect(store.confirmCanceled(attempt, manifestPath)).toBe(true);
+    expect(store.get(running.taskId)?.resultManifest).toBe(manifestPath);
     expect(store.get(running.taskId)).toMatchObject({state:"canceled",outputState:"partial"});
     store.close();
   });

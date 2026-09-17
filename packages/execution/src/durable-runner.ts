@@ -65,11 +65,26 @@ export class DurableRunner {
 
   public get(taskId: string): ExecutionTask | null {
     const task = this.store.get(taskId);
-    if (task?.attemptId && ["starting", "running"].includes(task.state)) {
+    if (task?.attemptId && ["starting", "running", "canceling"].includes(task.state)) {
       const attempt = this.store.activeAttempts().find(item => item.taskId === taskId);
       if (attempt) this.reconcile(attempt);
     }
     return this.store.get(taskId);
+  }
+
+  /** Explicit cancellation only: an IPC waiter disconnect must never call this. */
+  public cancel(taskId: string): ExecutionTask {
+    const existing = this.get(taskId);
+    if (!existing) throw new Error("TASK_NOT_FOUND");
+    const state = this.store.requestCancel(taskId);
+    if (state === "canceling" && existing.attemptId) {
+      const cancelFile = path.join(this.spoolRoot, existing.attemptId, "cancel.request");
+      try { writeFileSync(cancelFile, "cancel\n", {flag: "wx", mode: 0o600}); }
+      catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+      }
+    }
+    return this.get(taskId)!;
   }
 
   public output(taskId: string, stream: OutputStream, cursor = 0, maxBytes = 32 * 1024) {
@@ -114,7 +129,14 @@ export class DurableRunner {
     const task = this.store.get(attempt.taskId);
     if (task?.state === "starting" && !this.store.markStarted(attempt)) return false;
     const current = this.store.get(attempt.taskId);
-    if (current?.state !== "running") return false;
+    if (!current || !["running", "canceling"].includes(current.state)) return false;
+    if (result.manifest.canceled === true) {
+      // A cancellation manifest is meaningful only when cancellation was
+      // explicitly requested; the worker attests that its tree kill succeeded.
+      return current.state === "canceling" && this.store.confirmCanceled(attempt, result.path);
+    }
+    // Cancellation can race with natural completion. If the original worker
+    // finished before the cancel took effect, preserve its actual result.
     return this.store.finish(attempt, {
       state: result.manifest.exitCode === 0 && result.manifest.signal === null ? "succeeded" : "failed",
       outputState: result.manifest.outputState,

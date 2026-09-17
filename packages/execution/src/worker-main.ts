@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import path from "node:path";
 import { OutputSpool } from "./output-spool.js";
 
 export type WorkerCommand =
@@ -76,6 +77,9 @@ async function main(): Promise<void> {
   });
   let outputFailure: unknown;
   let timedOut = false;
+  let cancelRequested = false;
+  let cancelConfirmed = false;
+  const cancelFile = path.join(bootstrap.spoolRoot, bootstrap.attemptId, "cancel.request");
   const collect = (stream: "stdout" | "stderr", chunk: Buffer): void => {
     if (outputFailure) return;
     try { spool.append(stream, chunk); } catch (error) { outputFailure = error; }
@@ -83,22 +87,36 @@ async function main(): Promise<void> {
   };
   child.stdout?.on("data", chunk => collect("stdout", chunk as Buffer));
   child.stderr?.on("data", chunk => collect("stderr", chunk as Buffer));
-  const stopTree = (): void => {
-    if (child.pid === undefined) return;
+  // A successful tree-kill request AND child 'close' are both required before
+  // the worker may attest cancellation. Job Object ownership is a later gate.
+  const stopTree = (): boolean => {
+    if (child.pid === undefined) return false;
     if (process.platform === "win32") {
-      spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, timeout: 10_000 });
-    } else {
-      try { process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch { /* exited */ } }
+      const result = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+        windowsHide: true, timeout: 10_000,
+      });
+      return result.status === 0 && !result.error;
     }
+    try { process.kill(-child.pid, "SIGKILL"); return true; }
+    catch { try { return child.kill("SIGKILL"); } catch { return false; } }
   };
+  const cancelInterval = setInterval(() => {
+    if (cancelRequested || !existsSync(cancelFile)) return;
+    cancelRequested = true;
+    cancelConfirmed = stopTree();
+  }, 75);
   const timeout = setTimeout(() => { timedOut = true; stopTree(); }, bootstrap.timeoutMs);
   const exit = await new Promise<{code: number | null; signal: NodeJS.Signals | null}>((resolve) => {
     child.once("error", () => { /* close follows; no replay on spawn error */ });
     child.once("close", (code, signal) => resolve({code, signal}));
   });
   clearTimeout(timeout);
+  clearInterval(cancelInterval);
   if (outputFailure) throw new Error("OUTPUT_PERSISTENCE_FAILED: cannot attest to complete output");
-  spool.finalize(timedOut ? null : exit.code, timedOut ? "SIGTERM" : exit.signal);
+  // Only mark canceled if taskkill successfully addressed the process tree and
+  // child 'close' observed stdout/stderr EOF. A failed kill never claims cancel.
+  spool.finalize(cancelConfirmed ? null : timedOut ? null : exit.code,
+    cancelConfirmed ? "SIGTERM" : timedOut ? "SIGTERM" : exit.signal, cancelConfirmed);
   // The manifest is the durable completion signal; the daemon imports it after reconnect.
 }
 

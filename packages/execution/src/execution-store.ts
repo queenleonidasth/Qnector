@@ -279,7 +279,7 @@ export class ExecutionStore {
         throw new Error("OUTPUT_MANIFEST_INVALID: attempt, output or exit status mismatch");
       const now = new Date().toISOString();
       const updated = this.db.prepare(`UPDATE tasks SET state=?,output_state=?,verification_state=?,outcome='known',
-        result_manifest=?,updated_at=? WHERE task_id=? AND attempt_id=? AND state='running'`)
+        result_manifest=?,updated_at=? WHERE task_id=? AND attempt_id=? AND state IN ('running','canceling')`)
         .run(result.state,result.outputState,result.verificationState ?? "not_requested",result.manifestPath,now,attempt.taskId,attempt.attemptId);
       if (updated.changes !== 1) return false;
       this.db.prepare("UPDATE attempts SET state=?,finished_at=? WHERE attempt_id=?")
@@ -315,11 +315,17 @@ export class ExecutionStore {
   }
 
   /** Caller must first verify the worker AND its complete child process tree stopped. */
-  public confirmCanceled(attempt: DispatchAttempt): boolean {
+  public confirmCanceled(attempt: DispatchAttempt, manifestPath: string): boolean {
     return this.transaction(() => {
       if (!this.verify(attempt)) return false;
-      const updated = this.db.prepare("UPDATE tasks SET state='canceled',output_state='partial',updated_at=? WHERE task_id=? AND attempt_id=? AND state='canceling'")
-        .run(new Date().toISOString(),attempt.taskId,attempt.attemptId);
+      let manifest: CompletionManifest;
+      try { manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as CompletionManifest; }
+      catch { throw new Error("OUTPUT_MANIFEST_INVALID: cancellation manifest not readable"); }
+      if (manifest.attemptId !== attempt.attemptId || manifest.canceled !== true ||
+          !["complete", "partial"].includes(manifest.outputState))
+        throw new Error("OUTPUT_MANIFEST_INVALID: cancellation not attested by worker");
+      const updated = this.db.prepare("UPDATE tasks SET state='canceled',output_state='partial',result_manifest=?,updated_at=? WHERE task_id=? AND attempt_id=? AND state='canceling'")
+        .run(manifestPath,new Date().toISOString(),attempt.taskId,attempt.attemptId);
       if (updated.changes !== 1) return false;
       this.db.prepare("UPDATE attempts SET state='canceled',finished_at=? WHERE attempt_id=?")
         .run(new Date().toISOString(),attempt.attemptId);

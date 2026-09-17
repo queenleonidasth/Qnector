@@ -141,6 +141,12 @@ export class DurableDaemon {
         });
         return {taskId: task.taskId, state: task.state, reused, nextAction: "get"};
       }
+      case "cancel": {
+        if (!request.taskId) throw new Error("INVALID_INPUT: taskId required");
+        const task = runner.cancel(request.taskId);
+        return {taskId: task.taskId, state: task.state, outcome: task.outcome,
+          nextAction: task.state === "canceling" ? "wait" : "result"};
+      }
       case "get": {
         const task = runner.get(request.taskId ?? "");
         if (!task) return null;

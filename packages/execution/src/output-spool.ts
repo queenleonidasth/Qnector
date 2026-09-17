@@ -23,6 +23,8 @@ export interface CompletionManifest {
   stderrBytes: number;
   droppedBytes: number;
   outputState: "complete" | "partial";
+  /** Written only after the worker has confirmed process-tree termination. */
+  canceled?: boolean;
   stdoutSha256: string;
   stderrSha256: string;
   completedAt: string;
@@ -110,7 +112,7 @@ export class OutputSpool {
   }
 
   /** Call only after process exit AND stdout/stderr EOF. Never infer completion from exit alone. */
-  public finalize(exitCode: number | null, signal: string | null): {path:string;manifest:CompletionManifest} {
+  public finalize(exitCode: number | null, signal: string | null, canceled = false): {path:string;manifest:CompletionManifest} {
     if (this.finalized) throw new Error("OUTPUT_FINALIZED: completion manifest already exists");
     for (const stream of ["stdout","stderr"] as const) {
       const file = this.file(stream);
@@ -137,6 +139,7 @@ export class OutputSpool {
       outputState:this.droppedBytes > 0 ? "partial" : "complete",
       stdoutSha256:hashFile("stdout"),stderrSha256:hashFile("stderr"),
       completedAt:new Date().toISOString(),
+      ...(canceled ? {canceled: true} : {}),
     };
     const destination = path.join(this.root,"completion.json");
     const temporary = path.join(this.root,`completion-${randomUUID()}.tmp`);
