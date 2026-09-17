@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { OutputSpool } from "./output-spool.js";
+import { writeWorkerIdentity } from "./worker-identity.js";
 
 export type WorkerCommand =
   | { kind: "direct"; file: string; args: string[] }
@@ -9,6 +10,8 @@ export type WorkerCommand =
 
 export interface WorkerBootstrap {
   attemptId: string;
+  generation: number;
+  token: string;
   spoolRoot: string;
   cwd: string;
   timeoutMs: number;
@@ -18,6 +21,8 @@ export interface WorkerBootstrap {
 
 function validate(value: WorkerBootstrap): WorkerBootstrap {
   if (!/^attempt_[a-f0-9-]{36}$/.test(value.attemptId) ||
+      !Number.isSafeInteger(value.generation) || value.generation < 1 ||
+      typeof value.token !== "string" || !/^[a-f0-9-]{36}$/.test(value.token) ||
       typeof value.spoolRoot !== "string" || !value.spoolRoot ||
       typeof value.cwd !== "string" || !value.cwd ||
       !Number.isSafeInteger(value.timeoutMs) || value.timeoutMs < 1 || value.timeoutMs > 3_600_000 ||
@@ -63,6 +68,10 @@ async function main(): Promise<void> {
     process.stdin.once("end", onEnd);
     process.stdin.resume();
   });
+
+  // Persist a fenced worker identity before any external side effect. Missing
+  // identity means the daemon must not guess that a PID belongs to this attempt.
+  writeWorkerIdentity(bootstrap.spoolRoot, bootstrap);
 
   const command = bootstrap.command;
   const executable = command.kind === "direct" ? command.file :

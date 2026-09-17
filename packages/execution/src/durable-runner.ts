@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExecutionStore, type DispatchAttempt, type ExecutionTask } from "./execution-store.js";
 import { type CompletionManifest, OutputSpool, type OutputStream } from "./output-spool.js";
+import { inspectWorker, type WorkerInspection } from "./worker-identity.js";
 import type { WorkerBootstrap, WorkerCommand } from "./worker-main.js";
 
 export interface SubmitCommand {
@@ -70,6 +71,23 @@ export class DurableRunner {
       if (attempt) this.reconcile(attempt);
     }
     return this.store.get(taskId);
+  }
+
+  /** Read-only OS identity reconciliation: never signal a PID or replay an attempt. */
+  public inspect(taskId: string): {taskId: string; state: ExecutionTask["state"]; worker: WorkerInspection | null} {
+    const task = this.get(taskId);
+    if (!task) throw new Error("TASK_NOT_FOUND");
+    if (!["starting", "running", "canceling"].includes(task.state))
+      return {taskId, state: task.state, worker: null};
+    const attempt = this.store.activeAttempts().find(item => item.taskId === taskId);
+    if (!attempt) return {taskId, state: task.state, worker: {status: "unverified", pid: null, reason: "no active fenced attempt"}};
+    const worker = inspectWorker(this.spoolRoot, attempt);
+    if (worker.status === "exited") {
+      // A confirmed dead original worker with no valid manifest has an unknown
+      // outcome: its child may have performed side effects. Never auto-replay.
+      this.store.interruptUnverified(taskId, "OS-verified original worker exited without a valid completion manifest; effects unknown");
+    }
+    return {taskId, state: this.store.get(taskId)!.state, worker};
   }
 
   /** Explicit cancellation only: an IPC waiter disconnect must never call this. */
@@ -161,7 +179,9 @@ export class DurableRunner {
     if (!task) return;
     const definition = task.definitionSnapshot as {command: WorkerCommand; timeoutMs: number};
     const config: WorkerBootstrap = {
-      attemptId: attempt.attemptId, spoolRoot: this.spoolRoot, cwd: task.workspace,
+      attemptId: attempt.attemptId, generation: attempt.generation,
+      token: attempt.token,
+      spoolRoot: this.spoolRoot, cwd: task.workspace,
       timeoutMs: definition.timeoutMs, command: definition.command,
       maxOutputBytes: 256 * 1024 * 1024,
     };

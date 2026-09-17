@@ -147,6 +147,10 @@ export class DurableDaemon {
         return {taskId: task.taskId, state: task.state, outcome: task.outcome,
           nextAction: task.state === "canceling" ? "wait" : "result"};
       }
+      case "inspect": {
+        if (!request.taskId) throw new Error("INVALID_INPUT: taskId required");
+        return runner.inspect(request.taskId);
+      }
       case "get": {
         const task = runner.get(request.taskId ?? "");
         if (!task) return null;
