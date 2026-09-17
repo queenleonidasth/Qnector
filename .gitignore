@@ -7,6 +7,8 @@ release/
 tools/uia-helper/bin/
 tools/uia-helper/obj/
 tools/uia-helper/publish/
+packages/execution/job-host/obj/
+packages/execution/job-host/bin/
 tools/tunnel-client/*.exe
 tools/everything-cli/*.exe
 tools/ripgrep/*.exe

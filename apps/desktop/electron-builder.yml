@@ -26,6 +26,8 @@ extraResources:
       - "**/SKILL.md"
   - from: ../../tools/uia-helper/publish/qnector-uia.exe
     to: uia-helper/qnector-uia.exe
+  - from: ../../packages/execution/job-host/dist/qnector-job-host.exe
+    to: durable-runtime/qnector-job-host.exe
   - from: ../../tools/everything-cli/es.exe
     to: everything-cli/es.exe
   - from: ../../tools/ripgrep

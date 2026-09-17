@@ -36,13 +36,15 @@ type Request = {
 export class DurableDaemon {
   public readonly socketPath: string;
   private readonly root: string;
+  private readonly jobHostPath: string | undefined;
   private server: Server | undefined;
   private runner: DurableRunner | undefined;
   private token = "";
   private recoveryTimer: NodeJS.Timeout | undefined;
 
-  public constructor(root: string) {
+  public constructor(root: string, options: {jobHostPath?: string} = {}) {
     this.root = path.resolve(root);
+    this.jobHostPath = options.jobHostPath ? path.resolve(options.jobHostPath) : undefined;
     this.socketPath = daemonSocketPath(this.root);
   }
 
@@ -75,7 +77,7 @@ export class DurableDaemon {
       if (process.platform !== "win32") chmodSync(tokenFile, 0o600);
       this.token = daemonAuthToken(this.root);
       if (!/^[a-f0-9]{64}$/.test(this.token)) throw new Error("DAEMON_TOKEN_INVALID");
-      this.runner = new DurableRunner(this.root);
+      this.runner = new DurableRunner(this.root, {jobHostPath: this.jobHostPath});
       this.runner.recover();
       this.recoveryTimer = setInterval(() => {
         try { this.runner?.recover(); } catch { /* exposed by diagnostics in later phases */ }

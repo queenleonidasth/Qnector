@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { OutputSpool } from "./output-spool.js";
 import { writeWorkerIdentity } from "./worker-identity.js";
@@ -17,6 +17,7 @@ export interface WorkerBootstrap {
   timeoutMs: number;
   command: WorkerCommand;
   maxOutputBytes: number;
+  jobHostPath?: string;
 }
 
 function validate(value: WorkerBootstrap): WorkerBootstrap {
@@ -27,6 +28,7 @@ function validate(value: WorkerBootstrap): WorkerBootstrap {
       typeof value.cwd !== "string" || !value.cwd ||
       !Number.isSafeInteger(value.timeoutMs) || value.timeoutMs < 1 || value.timeoutMs > 3_600_000 ||
       !Number.isSafeInteger(value.maxOutputBytes) || value.maxOutputBytes < 0 ||
+      (value.jobHostPath !== undefined && (process.platform !== "win32" || typeof value.jobHostPath !== "string" || !value.jobHostPath)) ||
       !value.command || !["direct", "shell"].includes(value.command.kind)) {
     throw new Error("WORKER_BOOTSTRAP_INVALID");
   }
@@ -48,14 +50,15 @@ async function main(): Promise<void> {
   const spool = new OutputSpool(bootstrap.spoolRoot, bootstrap.attemptId, bootstrap.maxOutputBytes);
   process.stdout.write(`READY ${bootstrap.attemptId}\n`);
 
-  await new Promise<void>((resolve, reject) => {
+  const directive = await new Promise<"GO" | "CANCEL">((resolve, reject) => {
     let buffer = "";
     const onData = (chunk: Buffer): void => {
       buffer += chunk.toString("utf8");
       if (buffer.length > 128) { cleanup(); reject(new Error("WORKER_HANDSHAKE_INVALID")); return; }
       if (!buffer.includes("\n")) return;
       cleanup();
-      if (buffer === `GO ${bootstrap.attemptId}\n`) resolve();
+      if (buffer === `GO ${bootstrap.attemptId}\n`) resolve("GO");
+      else if (buffer === `CANCEL ${bootstrap.attemptId}\n`) resolve("CANCEL");
       else reject(new Error("WORKER_HANDSHAKE_INVALID"));
     };
     const onEnd = (): void => { cleanup(); reject(new Error("WORKER_HANDSHAKE_LOST")); };
@@ -69,9 +72,16 @@ async function main(): Promise<void> {
     process.stdin.resume();
   });
 
+  if (directive === "CANCEL") {
+    // The daemon has not sent GO; no command was spawned and no side effects occurred.
+    // Persist cancellation evidence before this worker exits, without launching anything.
+    spool.finalize(null, "SIGTERM", true);
+    return;
+  }
+
   // Persist a fenced worker identity before any external side effect. Missing
   // identity means the daemon must not guess that a PID belongs to this attempt.
-  writeWorkerIdentity(bootstrap.spoolRoot, bootstrap);
+  const identity = writeWorkerIdentity(bootstrap.spoolRoot, bootstrap);
 
   const command = bootstrap.command;
   const executable = command.kind === "direct" ? command.file :
@@ -80,7 +90,25 @@ async function main(): Promise<void> {
   const args = command.kind === "direct" ? command.args :
     command.shell === "cmd" ? (process.platform === "win32" ? ["/d", "/s", "/c", command.command] : ["-c", command.command]) :
     ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command.command];
-  const child = spawn(executable, args, {
+  const cancelFile = path.join(bootstrap.spoolRoot, bootstrap.attemptId, "cancel.request");
+  const statusFile = path.join(bootstrap.spoolRoot, bootstrap.attemptId, "job-host-status.json");
+  const useJobHost = process.platform === "win32" && bootstrap.jobHostPath !== undefined;
+  if (useJobHost && !existsSync(bootstrap.jobHostPath!)) throw new Error("JOB_HOST_MISSING");
+  let launchExecutable = executable;
+  let launchArgs = args;
+  if (useJobHost) {
+    const ticks = /^win:([0-9]+)$/.exec(identity.started)?.[1];
+    if (!ticks) throw new Error("JOB_HOST_OWNER_IDENTITY_INVALID");
+    const configPath = path.join(bootstrap.spoolRoot, bootstrap.attemptId, "job-host.json");
+    writeFileSync(configPath, JSON.stringify({
+      File: executable, Args: args, Cwd: bootstrap.cwd, StatusPath: statusFile,
+      CancelPath: cancelFile, TimeoutMs: bootstrap.timeoutMs,
+      OwnerPid: process.pid, OwnerStartTicks: ticks,
+    }), {flag: "wx", mode: 0o600});
+    launchExecutable = bootstrap.jobHostPath!;
+    launchArgs = [configPath];
+  }
+  const child = spawn(launchExecutable, launchArgs, {
     cwd: bootstrap.cwd, windowsHide: true, detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -88,22 +116,16 @@ async function main(): Promise<void> {
   let timedOut = false;
   let cancelRequested = false;
   let cancelConfirmed = false;
-  const cancelFile = path.join(bootstrap.spoolRoot, bootstrap.attemptId, "cancel.request");
   const collect = (stream: "stdout" | "stderr", chunk: Buffer): void => {
     if (outputFailure) return;
     try { spool.append(stream, chunk); } catch (error) { outputFailure = error; }
-    // Keep draining both pipes even if disk writes fail or quota is exceeded.
   };
   child.stdout?.on("data", chunk => collect("stdout", chunk as Buffer));
   child.stderr?.on("data", chunk => collect("stderr", chunk as Buffer));
-  // A successful tree-kill request AND child 'close' are both required before
-  // the worker may attest cancellation. Job Object ownership is a later gate.
   const stopTree = (): boolean => {
     if (child.pid === undefined) return false;
     if (process.platform === "win32") {
-      const result = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-        windowsHide: true, timeout: 10_000,
-      });
+      const result = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true, timeout: 10_000});
       return result.status === 0 && !result.error;
     }
     try { process.kill(-child.pid, "SIGKILL"); return true; }
@@ -112,19 +134,27 @@ async function main(): Promise<void> {
   const cancelInterval = setInterval(() => {
     if (cancelRequested || !existsSync(cancelFile)) return;
     cancelRequested = true;
-    cancelConfirmed = stopTree();
+    if (!useJobHost) cancelConfirmed = stopTree();
   }, 75);
-  const timeout = setTimeout(() => { timedOut = true; stopTree(); }, bootstrap.timeoutMs);
+  const timeout = useJobHost ? undefined : setTimeout(() => { timedOut = true; stopTree(); }, bootstrap.timeoutMs);
   const exit = await new Promise<{code: number | null; signal: NodeJS.Signals | null}>((resolve) => {
     child.once("error", () => { /* close follows; no replay on spawn error */ });
     child.once("close", (code, signal) => resolve({code, signal}));
   });
-  clearTimeout(timeout);
+  if (timeout) clearTimeout(timeout);
   clearInterval(cancelInterval);
+  let exitCode = exit.code;
+  if (useJobHost) {
+    if (!existsSync(statusFile)) throw new Error("JOB_HOST_STATUS_MISSING");
+    const status = JSON.parse(readFileSync(statusFile, "utf8")) as {Reason?: string; ExitCode?: number | null};
+    cancelConfirmed = status.Reason === "canceled";
+    timedOut = status.Reason === "timed_out";
+    if (status.Reason === "worker_lost") throw new Error("JOB_HOST_REPORTED_WORKER_LOST");
+    if (!["exited", "canceled", "timed_out"].includes(status.Reason ?? "")) throw new Error("JOB_HOST_STATUS_INVALID");
+    exitCode = status.Reason === "exited" && Number.isInteger(status.ExitCode) ? status.ExitCode! : null;
+  }
   if (outputFailure) throw new Error("OUTPUT_PERSISTENCE_FAILED: cannot attest to complete output");
-  // Only mark canceled if taskkill successfully addressed the process tree and
-  // child 'close' observed stdout/stderr EOF. A failed kill never claims cancel.
-  spool.finalize(cancelConfirmed ? null : timedOut ? null : exit.code,
+  spool.finalize(cancelConfirmed ? null : timedOut ? null : exitCode,
     cancelConfirmed ? "SIGTERM" : timedOut ? "SIGTERM" : exit.signal, cancelConfirmed);
   // The manifest is the durable completion signal; the daemon imports it after reconnect.
 }

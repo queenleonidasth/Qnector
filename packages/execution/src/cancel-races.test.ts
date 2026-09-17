@@ -43,4 +43,24 @@ describe("Durable cancellation races", () => {
     expect(runner.store.pending()).not.toContain(second.taskId);
     expect(runner.store.events(second.taskId).map(event => event.name)).toEqual(["accepted", "canceled"]);
   });
+
+  it("cancels during the pre-GO handshake without ever running the command", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "qnector-handshake-cancel-"));
+    roots.push(root);
+    const runner = new DurableRunner(root, {
+      workerScript: path.resolve(process.cwd(), "packages/execution/dist/worker-main.js"),
+    });
+    runners.push(runner);
+    const marker = path.join(root, "must-never-start.txt");
+    const accepted = runner.submit({workspace: root, idempotencyKey: "cancel-before-go", timeoutMs: 6_000,
+      command: {kind: "direct", file: process.execPath,
+        args: ["-e", "require('fs').writeFileSync(process.argv[1],'WRONG')", marker]}}).task;
+    expect(runner.get(accepted.taskId)?.state).toBe("starting");
+    expect(runner.cancel(accepted.taskId).state).toBe("canceling");
+    const canceled = await until(() => runner.get(accepted.taskId), task => task?.state === "canceled");
+    expect(canceled?.resultManifest).toContain("completion.json");
+    expect(existsSync(marker)).toBe(false);
+    expect(runner.store.events(accepted.taskId).map(event => event.name))
+      .toEqual(["accepted", "claimed", "cancel_requested", "canceled"]);
+  });
 });

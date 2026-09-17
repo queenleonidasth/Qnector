@@ -22,17 +22,19 @@ export class DurableRunner {
   private readonly root: string;
   private readonly spoolRoot: string;
   private readonly workerScript: string;
+  private readonly jobHostPath: string | undefined;
   private readonly active = new Map<string, ChildProcess>();
   private readonly concurrency: number;
   private closed = false;
   private pumping = false;
 
-  public constructor(root: string, options: {workerScript?: string; concurrency?: number} = {}) {
+  public constructor(root: string, options: {workerScript?: string; concurrency?: number; jobHostPath?: string} = {}) {
     this.root = path.resolve(root);
     this.spoolRoot = path.join(this.root, "output");
     mkdirSync(this.spoolRoot, {recursive: true});
     this.store = new ExecutionStore(path.join(this.root, "execution.sqlite"));
     this.workerScript = options.workerScript ?? fileURLToPath(new URL("./worker-main.js", import.meta.url));
+    this.jobHostPath = options.jobHostPath ? path.resolve(options.jobHostPath) : undefined;
     this.concurrency = Math.max(1, Math.min(options.concurrency ?? 2, 8));
   }
 
@@ -96,6 +98,8 @@ export class DurableRunner {
     if (!existing) throw new Error("TASK_NOT_FOUND");
     const state = this.store.requestCancel(taskId);
     if (state === "canceling" && existing.attemptId) {
+      // The worker may not have created the attempt directory yet (cancel-at-accept race).
+      mkdirSync(path.join(this.spoolRoot, existing.attemptId), {recursive: true, mode: 0o700});
       const cancelFile = path.join(this.spoolRoot, existing.attemptId, "cancel.request");
       try { writeFileSync(cancelFile, "cancel\n", {flag: "wx", mode: 0o600}); }
       catch (error) {
@@ -184,7 +188,9 @@ export class DurableRunner {
       spoolRoot: this.spoolRoot, cwd: task.workspace,
       timeoutMs: definition.timeoutMs, command: definition.command,
       maxOutputBytes: 256 * 1024 * 1024,
+      jobHostPath: this.jobHostPath,
     };
+    mkdirSync(path.join(this.spoolRoot, attempt.attemptId), {recursive: true, mode: 0o700});
     const bootstrap = path.join(this.root, `bootstrap-${attempt.attemptId}.json`);
     writeFileSync(bootstrap, JSON.stringify(config), {flag: "wx", mode: 0o600});
     const worker = spawn(process.execPath, [this.workerScript, bootstrap], {
@@ -202,7 +208,15 @@ export class DurableRunner {
       if (received !== `READY ${attempt.attemptId}\n`) { worker.kill(); return; }
       ready = true;
       clearTimeout(guard);
-      if (this.closed || !this.store.markStarted(attempt)) { worker.kill(); return; }
+      if (this.closed) { worker.kill(); return; }
+      if (this.store.get(attempt.taskId)?.state === "canceling") {
+        // Cancellation won the race BEFORE GO. Tell the worker to attest that
+        // it never spawned a command rather than starting and then killing it.
+        worker.stdin?.end(`CANCEL ${attempt.attemptId}\n`);
+        worker.unref();
+        return;
+      }
+      if (!this.store.markStarted(attempt)) { worker.kill(); return; }
       worker.stdin?.end(`GO ${attempt.attemptId}\n`);
       worker.unref();
     });

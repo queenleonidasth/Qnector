@@ -5,6 +5,8 @@ $dotnet = Join-Path $env:ProgramFiles "dotnet\dotnet.exe"
 if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = "dotnet" }
 & $dotnet publish (Join-Path $projectRoot "tools\uia-helper\Qnector.UiaHelper.csproj") -c Release -r win-x64 --self-contained true -o (Join-Path $projectRoot "tools\uia-helper\publish")
 if ($LASTEXITCODE -ne 0) { throw "Failed to publish qnector-uia helper" }
+& (Join-Path $PSScriptRoot "build-job-host.ps1")
+if ($LASTEXITCODE -ne 0) { throw "Failed to publish Qnector Job Object host" }
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\everything-cli\es.exe"))) { throw "Everything CLI tools\everything-cli\es.exe is missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\ripgrep\rg.exe"))) { throw "Ripgrep tools\ripgrep\rg.exe is missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot "tools\ripgrep\LICENSE-MIT"))) { throw "Ripgrep tools\ripgrep\LICENSE-MIT is missing" }
@@ -45,7 +47,7 @@ $provenance = [ordered]@{
 # Use pnpm.cmd directly: invoking pnpm through npx makes npm warnings on stderr fatal
 # under Windows PowerShell when $ErrorActionPreference is Stop.
 $pnpm = (Get-Command "pnpm.cmd" -ErrorAction Stop).Source
-& $pnpm vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts apps/desktop/src/main/startup-splash.test.ts apps/desktop/src/main/release-pipeline.test.ts apps/desktop/src/renderer/styles.test.ts apps/desktop/src/renderer/royal-effects.test.ts apps/desktop/src/renderer/gold-matrix-rain.test.ts apps/desktop/src/renderer/window-animation.test.ts apps/desktop/src/renderer/scroll-completeness.test.ts apps/desktop/src/renderer/qc-regressions.test.ts apps/desktop/src/renderer/skill-manager.test.ts apps/desktop/src/renderer/activity-feed.test.ts packages/tools/src/tools.test.ts packages/tools/src/skill-routing-guard.test.ts packages/mcp-server/src/session-bootstrap.test.ts packages/mcp-server/src/server.test.ts
+& $pnpm vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts apps/desktop/src/main/startup-splash.test.ts apps/desktop/src/main/release-pipeline.test.ts apps/desktop/src/renderer/styles.test.ts apps/desktop/src/renderer/royal-effects.test.ts apps/desktop/src/renderer/gold-matrix-rain.test.ts apps/desktop/src/renderer/window-animation.test.ts apps/desktop/src/renderer/scroll-completeness.test.ts apps/desktop/src/renderer/qc-regressions.test.ts apps/desktop/src/renderer/skill-manager.test.ts apps/desktop/src/renderer/activity-feed.test.ts packages/tools/src/tools.test.ts packages/tools/src/skill-routing-guard.test.ts packages/mcp-server/src/session-bootstrap.test.ts packages/mcp-server/src/server.test.ts packages/execution/src/windows-job-host.test.ts
 if ($LASTEXITCODE -ne 0) { throw "Desktop release regression gate failed; refusing to package" }
 & $pnpm vitest run packages/tools/src/external-mcp.test.ts
 if ($LASTEXITCODE -ne 0) { throw "External MCP integration gate failed; refusing to package" }
@@ -70,6 +72,7 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to package Qnector desktop artifacts" }
 $resourceRoot = Join-Path $releaseDir "win-unpacked\resources"
 $requiredPackagedResources = @(
   "uia-helper\qnector-uia.exe",
+  "durable-runtime\qnector-job-host.exe",
   "everything-cli\es.exe",
   "ripgrep\rg.exe",
   "ripgrep\LICENSE-MIT",
