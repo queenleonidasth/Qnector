@@ -1,10 +1,16 @@
 import path from "node:path";
-import { daemonRequest } from "@qnector/daemon/client";
-import { createRuntime } from "./server.js";
+import { installStdioLogGuard } from "./stdio-log-guard.js";
+
+// Do not import the full runtime before redirecting console diagnostics: ESM
+// static dependencies execute before main() and may otherwise pollute stdout.
+installStdioLogGuard();
 
 /** Opt-in local stdio frontend. Never starts a daemon, changes the default
  * HTTP/tunnel route or logs protocol diagnostics to stdout. */
 async function main(): Promise<void> {
+  const [{daemonRequest}, {createRuntime}] = await Promise.all([
+    import("@qnector/daemon/client"), import("./server.js"),
+  ]);
   const preview = process.env.QNECTOR_DURABLE_PREVIEW === "1";
   const rootValue = process.env.QNECTOR_DURABLE_ROOT;
   if (preview && !rootValue) throw new Error("DURABLE_STDIO_ROOT_REQUIRED");

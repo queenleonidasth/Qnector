@@ -75,7 +75,8 @@ describe("opt-in durable MCP task facade", () => {
       storage: {schemaVersion: 1, journalMode: "wal", synchronous: 2, integrity: "ok"}});
     expect(JSON.stringify(doctor)).not.toContain("daemon-token");
     const marker = path.join(workspace, "once.txt");
-    const input = {idempotencyKey: "retry-the-same", waitTimeoutMs: 0, timeoutMs: 8_000,
+    // Omitting waitTimeoutMs must acknowledge immediately and return a handle.
+    const input = {idempotencyKey: "retry-the-same", timeoutMs: 8_000,
       command: {kind: "direct", file: process.execPath, args: ["-e",
         "const fs=require('fs');setTimeout(()=>{fs.appendFileSync(process.argv[1],'ONE\\n');console.log('DONE')},650)", marker]}};
     const accepted = await call(port, "start", input);

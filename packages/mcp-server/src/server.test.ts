@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import net from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -593,6 +593,34 @@ describe("Qnector MCP runtime", () => {
     expect(unroutedWrite?.skillRoutingWarning).toMatchObject({
       code: "SKILL_ROUTING_MISSING",
     });
+  });
+
+  it("bounds oversized tool output in the actual HTTP MCP response without replaying the operation", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-payload-"));
+    const port = await freePort();
+    runtime = new QnectorRuntime({
+      config: {...defaultConfig(root), localPort: port},
+      configFile: path.join(root, "config.json"),
+      logger: new ActivityLogger(path.join(root, "activity.jsonl")),
+    });
+    const invoked = vi.spyOn(runtime.registry, "call").mockResolvedValue({
+      ok: true, tool: "system", action: "status", summary: "Completed synthetic task",
+      data: {taskId: "task_once", payload: "x".repeat(400_000)},
+      meta: {durationMs: 1, truncated: false, nextCursor: 25},
+    });
+    await runtime.start({port});
+    const output = await request(`http://127.0.0.1:${port}/mcp`, {
+      jsonrpc: "2.0", id: 94, method: "tools/call",
+      params: {name: "system", arguments: {action: "status"}},
+    });
+    const parsed = (output.body as {result?: {structuredContent?: {
+      ok: boolean; data?: {taskId?: string; payloadOmitted?: boolean};
+      meta: {truncated: boolean; nextCursor: number};
+    }}}).result?.structuredContent;
+    expect(invoked).toHaveBeenCalledTimes(1);
+    expect(parsed).toMatchObject({ok: true, data: {taskId: "task_once", payloadOmitted: true},
+      meta: {truncated: true, nextCursor: 25}});
+    expect(JSON.stringify(output.body).length).toBeLessThan(10_000);
   });
 
   it("supports the Phase 0 ping/read/write gate locally", async () => {

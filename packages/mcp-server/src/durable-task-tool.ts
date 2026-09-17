@@ -81,7 +81,9 @@ export async function executeDurableTask(
         request = {action: "submit", workspace, idempotencyKey,
           command: {kind: "shell", shell: command.shell, command: command.command}};
       } else throw new Error("INVALID_INPUT: command kind unsupported");
-      const waitMs = bounded(input.waitTimeoutMs, 4_500, 0, 5_000, "waitTimeoutMs");
+      // Default to an immediate durable acknowledgement. Waiting is opt-in:
+      // an MCP response must not remain blocked behind the command itself.
+      const waitMs = bounded(input.waitTimeoutMs, 0, 0, 5_000, "waitTimeoutMs");
       request.timeoutMs = bounded(input.timeoutMs, 120_000, 1, 3_600_000, "timeoutMs");
       // Never pass the request's AbortSignal to submission: acceptance is durable
       // even when the browser disappears after the DB transaction commits.

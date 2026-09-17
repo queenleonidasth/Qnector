@@ -55,6 +55,7 @@ import type {
 import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry } from "@qnector/tools";
 import { durableTaskSchema, executeDurableTask } from "./durable-task-tool.js";
+import { attachSseHeartbeat, boundMcpToolResult } from "./mcp-reliability.js";
 import type { SkillTraceStore, ToolContext } from "@qnector/tools";
 import {
   buildSessionBootstrapError,
@@ -504,6 +505,9 @@ export class QnectorRuntime {
     reply.raw.setHeader("X-Qnector-Schema-Revision", MCP_SCHEMA_REVISION);
     reply.raw.setHeader("X-Qnector-Capability", "live");
     reply.hijack();
+    // Never emit SSE comments into JSON or stdio. The guard only writes when
+    // the MCP library has committed an actual event-stream response.
+    const stopHeartbeat = attachSseHeartbeat(reply.raw);
     try {
       await this.mcpNodeHandler(
         request.raw,
@@ -516,6 +520,7 @@ export class QnectorRuntime {
         "error",
         `MCP exchange failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+      stopHeartbeat();
       throw error;
     }
   }
@@ -556,7 +561,8 @@ export class QnectorRuntime {
             ),
             input,
           );
-          const { attachments, ...jsonResult } = result;
+          const bounded = boundMcpToolResult(result);
+          const { attachments, ...jsonResult } = bounded;
           return {
             content: [
               { type: "text", text: toolResultText(jsonResult) },

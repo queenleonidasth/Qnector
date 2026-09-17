@@ -48,7 +48,15 @@ export function secureExecutionRoot(root: string): void {
     "$items=@(Get-Item -LiteralPath $env:QNECTOR_SECURE_ROOT -Force)",
     "$items+=@(Get-ChildItem -LiteralPath $env:QNECTOR_SECURE_ROOT -Force -Recurse)",
     "foreach($item in $items){",
-    " $rules=Get-Acl -LiteralPath $item.FullName",
+    // A worker atomically renames its short-lived *.tmp files while the
+    // daemon restarts. The enumeration snapshot can include a vanished path.
+    // Skip ONLY genuinely disappeared children; a missing root or an ACL
+    // error on a path that still exists remains a startup failure.
+    " try { $rules=Get-Acl -LiteralPath $item.FullName -ErrorAction Stop }",
+    " catch {",
+    "  if($item.FullName -eq $env:QNECTOR_SECURE_ROOT -or (Test-Path -LiteralPath $item.FullName)) { throw }",
+    "  continue",
+    " }",
     " if($item.FullName -eq $env:QNECTOR_SECURE_ROOT -and -not $rules.AreAccessRulesProtected){throw 'UNPROTECTED_ACL'}",
     " foreach($entry in $rules.Access){",
     "  $identity=$entry.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value",
