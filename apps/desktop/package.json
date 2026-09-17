@@ -8,6 +8,7 @@
   "dependencies": {
     "@modelcontextprotocol/client": "2.0.0",
     "@qnector/core": "workspace:*",
+    "@qnector/daemon": "workspace:*",
     "@qnector/mcp-server": "workspace:*",
     "@qnector/shared": "workspace:*",
     "@qnector/transports": "workspace:*",

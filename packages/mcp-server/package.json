@@ -11,6 +11,7 @@
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "@qnector/core": "workspace:*",
+    "@qnector/daemon": "workspace:*",
     "@qnector/shared": "workspace:*",
     "@qnector/tools": "workspace:*",
     "fastify": "^5.12.1",

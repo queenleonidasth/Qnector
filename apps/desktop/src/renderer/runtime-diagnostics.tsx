@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { ProcessSnapshot } from "../preload/api.js";
+import type { DurableJobsSnapshot } from "../main/durable-jobs.js";
 
 export interface RuntimeDashboardView {
   performance?: {
@@ -313,6 +315,8 @@ export function RuntimeDiagnostics({
           </div>
         </details>
 
+        <DurableJobsPanel />
+
         <details className="runtime-section">
           <summary>
             <span>Recent workflows</span>
@@ -396,4 +400,88 @@ export function formatTime(timestamp: string): string {
   } catch {
     return "";
   }
+}
+
+/** Jobs are daemon-owned; this view never starts a job or treats tunnel state
+ * as execution state. Output can contain secrets and requires an explicit click. */
+function DurableJobsPanel(): React.ReactElement {
+  const [snapshot, setSnapshot] = useState<DurableJobsSnapshot>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const [output, setOutput] = useState<{taskId: string; text: string; complete: boolean}>();
+  const refresh = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      setSnapshot(await window.qnector.durableJobs());
+      setError(undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  useEffect(() => {void refresh();}, []);
+  const cancel = async (taskId: string): Promise<void> => {
+    if (!window.confirm(`Cancel durable job ${taskId}? This stops its process tree.`)) return;
+    setBusy(true);
+    try {
+      await window.qnector.cancelDurableJob(taskId);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const showOutput = async (taskId: string): Promise<void> => {
+    setBusy(true);
+    try {
+      const page = await window.qnector.durableOutput(taskId, "stdout");
+      setOutput({taskId, text: page.text, complete: page.complete});
+      setError(undefined);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <details className="runtime-section" open data-testid="durable-jobs-panel">
+      <summary>
+        <span>Durable jobs · preview</span>
+        <span className="runtime-section-count">{snapshot?.jobs.length ?? 0} recent</span>
+      </summary>
+      <div className="runtime-section-body runtime-list">
+        <p className="runtime-intro">Jobs run in a separate daemon. Disconnecting ChatGPT or closing this panel does not cancel them. Legacy workflows are not durable yet.</p>
+        <button type="button" className="btn-drawer-action" disabled={busy} onClick={() => void refresh()}>
+          {busy ? "Refreshing…" : "Refresh jobs"}
+        </button>
+        {snapshot?.state === "disabled" && <div className="runtime-empty">Durable Preview is off. Legacy tasks are unchanged.</div>}
+        {snapshot?.state === "unavailable" && <div role="alert" className="runtime-empty">Daemon unavailable: {snapshot.message}</div>}
+        {error && <div role="alert" className="runtime-empty">{error}</div>}
+        {snapshot?.state === "ready" && snapshot.jobs.length === 0 && <div className="runtime-empty">No durable jobs for the active workspace.</div>}
+        {snapshot?.jobs.map(job => (
+          <div className="runtime-list-row" key={job.taskId}>
+            <span className={`item-bead ${job.state === "succeeded" ? "success" : job.state === "failed" || job.state === "interrupted" ? "error" : "running"}`} />
+            <div>
+              <strong title={job.taskId}>{job.taskId.slice(0, 19)}…</strong>
+              <span>{job.state} · {job.outcome} outcome · {formatTime(job.createdAt)}</span>
+              <button type="button" className="btn-drawer-action" disabled={busy} onClick={() => void showOutput(job.taskId)}>Show stdout</button>{" "}
+              {["queued", "starting", "running", "canceling"].includes(job.state) && (
+                <button type="button" className="btn-drawer-action" disabled={busy || job.state === "canceling"} onClick={() => void cancel(job.taskId)}>Cancel job</button>
+              )}
+            </div>
+          </div>
+        ))}
+        {output && <div className="runtime-list-row" role="region" aria-label="Durable job output">
+          <div>
+            <strong>Output · {output.taskId.slice(0, 19)}…</strong>
+            <pre className="activity-detail-code">{output.text || "No stdout yet"}</pre>
+            <small>{output.complete ? "Output complete" : "First 4 KiB only; more output may be available"}</small>
+            <button type="button" className="btn-drawer-action" onClick={() => setOutput(undefined)}>Hide output</button>
+          </div>
+        </div>}
+      </div>
+    </details>
+  );
 }

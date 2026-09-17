@@ -48,6 +48,8 @@ import {
   WINDOWS_LOGIN_ITEM_NAME,
 } from "./login-item.js";
 import { DesktopUpdater } from "./updater.js";
+import { ensurePreviewDaemon, watchPreviewDaemon } from "./durable-daemon.js";
+import { cancelDurableJob, listDurableJobs, readDurableJobOutput } from "./durable-jobs.js";
 import { openTerminalWindow } from "./terminal-launcher.js";
 import { closeSplashWindow, createSplashWindow } from "./splash-window.js";
 
@@ -64,6 +66,8 @@ let transport: TransportAdapter | undefined;
 let updater: DesktopUpdater | undefined;
 let isQuitting = false;
 let shutdownStarted = false;
+let stopDaemonSupervisor: (() => void) | undefined;
+let previewDaemonRoot: string | undefined;
 let registeredShortcut: string | undefined;
 
 type ConfigPatch = {
@@ -172,7 +176,27 @@ async function initializeRuntime(
   qnectorPerformance.mark("mcp-runtime-imported", {
     importMs: Date.now() - importStarted,
   });
+  // Explicit preview only; legacy tools remain untouched by default.
+  let durableDaemonRoot: string | undefined;
+  if (process.platform === "win32" && process.env.QNECTOR_DURABLE_PREVIEW === "1") {
+    const bundleDirectory = app.isPackaged
+      ? path.join(process.resourcesPath, "durable-runtime")
+      : path.resolve(app.getAppPath(), "../../packages/execution/job-host/dist");
+    try {
+      durableDaemonRoot = await ensurePreviewDaemon(
+        path.join(configDirectory(), "durable-preview-job-v1"), bundleDirectory, process.execPath,
+      );
+      stopDaemonSupervisor?.();
+      previewDaemonRoot = durableDaemonRoot;
+      stopDaemonSupervisor = watchPreviewDaemon(durableDaemonRoot, bundleDirectory, process.execPath, {
+        onError: error => console.error("Durable preview supervisor:", error.message),
+      });
+    } catch (error) {
+      console.error("Durable preview unavailable; legacy tools remain active:", error);
+    }
+  }
   const instance = new Runtime({
+    durableDaemonRoot,
     config,
     configFile: configPath(),
     platform: new ElectronPlatformServices(),
@@ -417,6 +441,18 @@ function registerIpc(): void {
     updateConfig(patch),
   );
   ipcMain.handle("activity:list", () => runtime?.activity.list() ?? []);
+  ipcMain.handle("durable:jobs", async () => {
+    const current = await requireRuntime();
+    return listDurableJobs(previewDaemonRoot, current.getConfig().activeWorkspace);
+  });
+  ipcMain.handle("durable:cancel", async (_event, taskId: string) => {
+    const current = await requireRuntime();
+    return cancelDurableJob(previewDaemonRoot, current.getConfig().activeWorkspace, taskId);
+  });
+  ipcMain.handle("durable:output", async (_event, taskId: string, stream: "stdout" | "stderr") => {
+    const current = await requireRuntime();
+    return readDurableJobOutput(previewDaemonRoot, current.getConfig().activeWorkspace, taskId, stream);
+  });
   ipcMain.handle(
     "memory:call",
     async (_event, input: Record<string, unknown>) => {
@@ -958,6 +994,9 @@ function applyLoginItemSetting(config: QnectorConfig): void {
 }
 
 async function shutdown(): Promise<void> {
+  previewDaemonRoot = undefined;
+  stopDaemonSupervisor?.();
+  stopDaemonSupervisor = undefined;
   if (registeredShortcut) {
     globalShortcut.unregister(registeredShortcut);
     registeredShortcut = undefined;

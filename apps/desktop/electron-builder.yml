@@ -16,6 +16,8 @@ files:
   - "!node_modules/@qnector/*/dist/**/*.map"
   - "!node_modules/@qnector/*/dist/**/*.test.*"
   - "!node_modules/@qnector/*/tsconfig*"
+  # Job Host binaries are shipped exactly once as extraResources.
+  - "!node_modules/@qnector/execution/job-host/**"
   - "!node_modules/node-pty/prebuilds/win32-arm64/**"
   - "!node_modules/node-pty/third_party/conpty/**/win10-arm64/**"
 asar: true
@@ -26,8 +28,12 @@ extraResources:
       - "**/SKILL.md"
   - from: ../../tools/uia-helper/publish/qnector-uia.exe
     to: uia-helper/qnector-uia.exe
-  - from: ../../packages/execution/job-host/dist/qnector-job-host.exe
-    to: durable-runtime/qnector-job-host.exe
+  - from: ../../packages/execution/job-host/dist
+    to: durable-runtime
+    filter:
+      - qnector-job-host.exe
+      - daemon.mjs
+      - worker-main.js
   - from: ../../tools/everything-cli/es.exe
     to: everything-cli/es.exe
   - from: ../../tools/ripgrep

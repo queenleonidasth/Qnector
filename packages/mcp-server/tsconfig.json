@@ -6,6 +6,7 @@
   "references": [
     { "path": "../shared" },
     { "path": "../core" },
-    { "path": "../tools" }
+    { "path": "../tools" },
+    { "path": "../../apps/daemon" }
   ]
 }

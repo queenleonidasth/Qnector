@@ -9,6 +9,7 @@ import Fastify, {
 } from "fastify";
 import cors from "@fastify/cors";
 import { toNodeHandler } from "@modelcontextprotocol/node";
+import { serveStdio, type ServeStdioOptions, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import {
   McpServer,
   createMcpHandler,
@@ -53,6 +54,7 @@ import type {
 } from "@qnector/shared";
 import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry } from "@qnector/tools";
+import { durableTaskSchema, executeDurableTask } from "./durable-task-tool.js";
 import type { SkillTraceStore, ToolContext } from "@qnector/tools";
 import {
   buildSessionBootstrapError,
@@ -71,6 +73,8 @@ const LONG_CONTEXT_TOOL_ANCHOR =
 const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
 
 export interface QnectorRuntimeOptions {
+  /** Explicit opt-in; daemon must already be running at this isolated root. */
+  durableDaemonRoot?: string;
   config?: QnectorConfig;
   configFile?: string;
   logger?: ActivityLogger;
@@ -97,6 +101,7 @@ export interface QnectorRuntimeOptions {
 }
 
 export class QnectorRuntime {
+  private readonly durableDaemonRoot?: string;
   public readonly app: FastifyInstance;
   public readonly registry = new ToolRegistry();
   public readonly processManager: ProcessManager;
@@ -132,8 +137,10 @@ export class QnectorRuntime {
   private startedAt = new Date().toISOString();
   private state: ServerStatus["state"] = "disconnected";
   private listening = false;
+  private stdioHandle: StdioServerHandle | undefined;
 
   public constructor(options: QnectorRuntimeOptions = {}) {
+    this.durableDaemonRoot = options.durableDaemonRoot;
     this.config = options.config ?? {
       version: 1,
       deviceId: randomUUID(),
@@ -351,7 +358,34 @@ export class QnectorRuntime {
     }
   }
 
+  /** Independent stdio frontend. Durable work is always owned by the daemon,
+   * never by this transport; stdout is reserved for JSON-RPC framing. */
+  public async startStdio(options: ServeStdioOptions = {}): Promise<StdioServerHandle> {
+    if (this.stdioHandle) throw new Error("STDIO_ALREADY_STARTED");
+    this.workflowManager.resumeAccepting();
+    if (!this.listening) {
+      this.startedAt = new Date().toISOString();
+      await this.activity.load();
+      await this.ensureAutomaticMemoryCheckpoint();
+      await this.migrateMemoryV2();
+    }
+    const handle = serveStdio(() => this.createMcpServer(), {
+      ...options,
+      onerror: (error) => {
+        options.onerror?.(error);
+        // Do not print diagnostics to stdout: it is the MCP wire.
+        if (!options.onerror) console.error("Qnector stdio transport:", error);
+      },
+    });
+    this.stdioHandle = handle;
+    this.state = "connected";
+    return handle;
+  }
+
   public async stop(): Promise<void> {
+    const stdio = this.stdioHandle;
+    this.stdioHandle = undefined;
+    if (stdio) await stdio.close().catch(() => undefined);
     await this.mcpHandler.close().catch(() => undefined);
     await this.workflowManager.shutdown().catch(() => undefined);
     this.fileWatch.stopAll();
@@ -537,6 +571,24 @@ export class QnectorRuntime {
           };
         },
       );
+    }
+    if (this.durableDaemonRoot) {
+      server.registerTool("tasks", {
+        title: "Qnector durable tasks (OPT-IN PREVIEW)",
+        description: "Use an already-running independent daemon. start requires a caller-stable idempotencyKey. A lost MCP connection stops waiting, not work. Use taskId with wait, result or output; cancel is explicit. Development preview, not Job Object or production ready.",
+        inputSchema: fromJsonSchema(durableTaskSchema),
+        annotations: {destructiveHint: true, openWorldHint: false},
+        _meta: {"qnector/durablePreview": true, "qnector/schemaRevision": "durable-tasks-preview-v1"},
+      }, async (input) => {
+        const result = await executeDurableTask(this.durableDaemonRoot!,
+          this.config.activeWorkspace, input as Record<string, unknown>,
+          requestContext?.requestInfo?.signal);
+        return {
+          content: [{type: "text" as const, text: result.ok ? result.summary : `${result.error?.code}: ${result.error?.message}`}],
+          structuredContent: result as unknown as Record<string, unknown>,
+          isError: !result.ok,
+        };
+      });
     }
     server.registerResource(
       "workspace-status",
@@ -745,7 +797,7 @@ function defaultAgentSkillRoots() {
 }
 
 export async function createRuntime(
-  options: { configFile?: string; workspace?: string; port?: number } = {},
+  options: { configFile?: string; workspace?: string; port?: number; durableDaemonRoot?: string } = {},
 ): Promise<QnectorRuntime> {
   const config = await loadConfig({
     file: options.configFile,
@@ -754,6 +806,7 @@ export async function createRuntime(
   const runtime = new QnectorRuntime({
     config,
     configFile: options.configFile,
+    durableDaemonRoot: options.durableDaemonRoot,
   });
   if (options.port) await runtime.start({ port: options.port });
   return runtime;

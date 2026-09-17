@@ -1,4 +1,5 @@
 import type { DesktopUpdateState } from "../updater-types.js";
+import type { DurableJobsSnapshot } from "../main/durable-jobs.js";
 import type {
   ActivityEntry,
   ProcessSnapshot,
@@ -44,6 +45,11 @@ export interface QnectorApi {
   setWorkspace(path: string): Promise<ServerStatus>;
   chooseSkillImport(kind?: "file" | "folder"): Promise<string | undefined>;
   getActivity(): Promise<ActivityEntry[]>;
+  durableJobs(): Promise<DurableJobsSnapshot>;
+  cancelDurableJob(taskId: string): Promise<unknown>;
+  durableOutput(taskId: string, stream: "stdout" | "stderr"): Promise<{
+    text: string; complete: boolean; nextCursor: number;
+  }>;
   callMemory(input: Record<string, unknown>): Promise<ToolResult>;
   callTool(
     tool:

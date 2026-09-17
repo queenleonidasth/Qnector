@@ -14,6 +14,9 @@ const api: QnectorApi = {
   chooseSkillImport: (kind = "file") =>
     ipcRenderer.invoke("skills:choose-import", kind),
   getActivity: () => ipcRenderer.invoke("activity:list"),
+  durableJobs: () => ipcRenderer.invoke("durable:jobs"),
+  cancelDurableJob: (taskId) => ipcRenderer.invoke("durable:cancel", taskId),
+  durableOutput: (taskId, stream) => ipcRenderer.invoke("durable:output", taskId, stream),
   callMemory: (input) => ipcRenderer.invoke("memory:call", input),
   callTool: (tool, input) => ipcRenderer.invoke("tool:call", tool, input),
   exportActivity: (format, options) =>

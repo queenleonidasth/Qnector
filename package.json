@@ -38,7 +38,9 @@
     "test:plus": "tsx scripts/test-plus-compatibility.ts",
     "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",
     "release:github": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1",
-    "release:verify": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1 -VerifyOnly"
+    "release:verify": "powershell -ExecutionPolicy Bypass -File scripts/publish-github-release.ps1 -VerifyOnly",
+    "dev:mcp:stdio": "tsx packages/mcp-server/src/stdio-cli.ts",
+    "mcp:stdio": "node packages/mcp-server/dist/stdio-cli.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
@@ -62,6 +64,7 @@
     "basedpyright": "1.39.10",
     "electron": "44.0.0",
     "electron-builder": "^26.15.3",
+    "esbuild": "0.28.2",
     "eslint": "^10.9.1",
     "pdf-lib": "^1.17.1",
     "prettier": "^3.9.6",
