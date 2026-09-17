@@ -146,7 +146,6 @@ describe("Qnector MCP runtime", () => {
       "requests",
       "performance",
       "build_info",
-      "parallel",
       "context_snapshot",
       "release_status",
       "doctor",
@@ -462,33 +461,6 @@ describe("Qnector MCP runtime", () => {
     expect(snapshotText).toContain("Memory v2 MCP isolation");
     expect(snapshotText).toContain(memoryTaskId!);
     expect(snapshotText).toContain("memory-v2-e2e.txt");
-
-    const parallelCall = await request(`http://127.0.0.1:${port}/mcp`, {
-      jsonrpc: "2.0",
-      id: 21,
-      method: "tools/call",
-      params: {
-        name: "system",
-        arguments: {
-          action: "parallel",
-          maxConcurrency: 2,
-          calls: [
-            { id: "status", tool: "system", input: { action: "status" } },
-            {
-              id: "env",
-              tool: "system",
-              input: { action: "env", keys: ["PATH"] },
-            },
-          ],
-        },
-      },
-    });
-    expect(parallelCall.response.ok).toBe(true);
-    const parallelText = JSON.stringify(parallelCall.body);
-    expect(parallelText).toContain("Parallel batch completed 2/2 operation(s)");
-    expect(parallelText).toContain('"action":"parallel"');
-    expect(parallelText).toContain('"id":"status"');
-    expect(parallelText).toContain('"id":"env"');
 
     const resources = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",

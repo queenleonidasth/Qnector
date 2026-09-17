@@ -36,7 +36,7 @@ const COMPACT_SKILL_INSTRUCTION_CHARS = 1_200;
 export const systemDefinition: ToolDefinition = {
   name: "system",
   description:
-    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. When the user asks to discover or install new Agent Skills, use skills_search_remote and skill_install_remote for the public skills.sh catalog; never install a remote skill without user intent. For configured external MCP servers, use mcp_servers to inspect available upstreams, mcp_tools to discover/filter their tool schemas, and mcp_call to invoke one without exposing configured secret values. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
+    "Inspect the local computer and Qnector bridge. Use separate Qnector tool calls for independent operations; do not batch multiple tool actions into one call. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. When the user asks to discover or install new Agent Skills, use skills_search_remote and skill_install_remote for the public skills.sh catalog; never install a remote skill without user intent. For configured external MCP servers, use mcp_servers to inspect available upstreams, mcp_tools to discover/filter their tool schemas, and mcp_call to invoke one without exposing configured secret values. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
   inputSchema: {
     type: "object",
     properties: {
@@ -45,7 +45,6 @@ export const systemDefinition: ToolDefinition = {
         description:
           "Use screen_capture with source primary/screen/window to capture the current display; use window_list first when a specific window is needed.",
         enum: [
-          "parallel",
           "info",
           "status",
           "build_info",
@@ -87,56 +86,6 @@ export const systemDefinition: ToolDefinition = {
           "window_list",
           "window_focus",
         ],
-      },
-      calls: {
-        type: "array",
-        minItems: 2,
-        maxItems: 12,
-        description:
-          "Independent Qnector operations to execute concurrently in one MCP round-trip. Do not use system.parallel inside calls. Preserve dependent operations as separate sequential calls.",
-        items: {
-          type: "object",
-          properties: {
-            id: {
-              type: "string",
-              description:
-                "Optional stable label for matching a result to this call",
-            },
-            tool: {
-              type: "string",
-              enum: [
-                "system",
-                "workspace",
-                "files",
-                "process",
-                "git",
-                "memory",
-                "browser",
-                "computer",
-              ],
-            },
-            input: {
-              type: "object",
-              additionalProperties: true,
-              description: "Normal input object for the selected Qnector tool",
-            },
-          },
-          required: ["tool", "input"],
-          additionalProperties: false,
-        },
-      },
-      maxConcurrency: {
-        type: "integer",
-        minimum: 1,
-        maximum: 8,
-        description:
-          "Maximum subcalls running at once; defaults to 6. Results remain in calls[] input order.",
-      },
-      policy: {
-        type: "string",
-        enum: ["all-success", "best-effort"],
-        description:
-          "Parallel outcome policy. all-success (default) makes any failed subcall fail the outer batch after all siblings settle; best-effort returns ok with outcome=partial/failed and preserves every subcall result.",
       },
       name: {
         type: "string",

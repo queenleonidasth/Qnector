@@ -627,163 +627,37 @@ describe("Qnector grouped tools", () => {
     expect(JSON.stringify(result.data)).toContain("brief-edit-2");
   });
 
-  it("runs independent tool calls through one bounded parallel batch", async () => {
-    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-"));
-    await writeFile(path.join(root, "alpha.txt"), "alpha\n");
-    await writeFile(path.join(root, "beta.txt"), "beta\n");
-    const context = makeContext(defaultConfig(root));
-    const result = await new ToolRegistry().call("system", context, {
-      action: "parallel",
-      maxConcurrency: 3,
-      calls: [
-        { id: "status", tool: "system", input: { action: "status" } },
-        {
-          id: "alpha",
-          tool: "files",
-          input: { action: "read", path: "alpha.txt" },
-        },
-        {
-          id: "beta",
-          tool: "files",
-          input: { action: "read", path: "beta.txt" },
-        },
-      ],
-    });
-    expect(result.ok).toBe(true);
-    const batch = (
-      result.data as {
-        data?: { results?: Array<{ id?: string; result: { ok: boolean } }> };
-      }
-    )?.data;
-    expect(batch?.results?.map((entry) => entry.id)).toEqual([
-      "status",
-      "alpha",
-      "beta",
-    ]);
-    expect(batch?.results?.every((entry) => entry.result.ok)).toBe(true);
-    expect(JSON.stringify(result)).toContain('"maxConcurrency":3');
-  });
-
-  it("settles thrown parallel subcalls without losing sibling results", async () => {
-    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-settle-"));
-    const context = makeContext(defaultConfig(root));
+  it("removes parallel from the public schema and rejects hidden parallel requests", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-no-parallel-"));
     const registry = new ToolRegistry();
-    const internal = registry as unknown as {
-      handlers: Map<
-        string,
-        (context: ToolContext, input: unknown) => Promise<never>
-      >;
-    };
-    internal.handlers.set("git", async () => {
-      throw new Error("FIXTURE_THROW: handler exploded");
-    });
-
-    const result = await registry.call("system", context, {
-      action: "parallel",
-      calls: [
-        { id: "throws", tool: "git", input: { action: "status" } },
-        { id: "sibling", tool: "system", input: { action: "status" } },
-      ],
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("PARALLEL_SUBCALL_FAILED");
-    const batch = result.error?.details as
-      | {
-          outcome?: string;
-          results?: Array<{
-            id?: string;
-            result: { ok: boolean; error?: { code?: string } };
-          }>;
-          succeeded?: number;
-          failed?: number;
-        }
-      | undefined;
-    expect(batch?.outcome).toBe("partial");
-    expect(batch?.results).toHaveLength(2);
-    expect(batch?.results?.[0]?.result.ok).toBe(false);
-    expect(batch?.results?.[0]?.result.error?.code).toBe("FIXTURE_THROW");
-    expect(batch?.results?.[1]?.result.ok).toBe(true);
-    expect(batch?.succeeded).toBe(1);
-    expect(batch?.failed).toBe(1);
-  });
-
-  it("allows explicit best-effort parallel policy while exposing partial outcome", async () => {
-    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-best-effort-"));
-    const context = makeContext(defaultConfig(root));
-    const registry = new ToolRegistry();
-    const result = await registry.call("system", context, {
-      action: "parallel",
-      policy: "best-effort",
-      calls: [
-        {
-          id: "missing",
-          tool: "files",
-          input: { action: "read", path: "missing.txt" },
-        },
-        { id: "sibling", tool: "system", input: { action: "status" } },
-      ],
-    });
-    expect(result.ok).toBe(true);
-    const batch = (
-      result.data as {
-        data?: { outcome?: string; failed?: number; results?: unknown[] };
-      }
-    )?.data;
-    expect(batch?.outcome).toBe("partial");
-    expect(batch?.failed).toBe(1);
-    expect(batch?.results).toHaveLength(2);
-  });
-
-  it("rejects recursive parallel fan-out", async () => {
-    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-recursive-"));
-    const context = makeContext(defaultConfig(root));
-    const result = await new ToolRegistry().call("system", context, {
-      action: "parallel",
-      calls: [
-        { tool: "system", input: { action: "status" } },
-        {
-          tool: "system",
-          input: {
-            action: "parallel",
-            calls: [
-              { tool: "system", input: { action: "status" } },
-              { tool: "system", input: { action: "status" } },
-            ],
-          },
-        },
-      ],
-    });
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("INVALID_INPUT");
-  });
-
-  it("preserves image attachments returned by parallel subcalls", async () => {
-    root = await mkdtemp(path.join(tmpdir(), "qnector-parallel-image-"));
-    const image = pngFixture(3, 2);
-    await writeFile(path.join(root, "preview.png"), image);
-    const result = await new ToolRegistry().call(
+    const system = registry
+      .list()
+      .find((definition) => definition.name === "system");
+    const properties = system?.inputSchema.properties as Record<
+      string,
+      { enum?: string[] }
+    >;
+    expect(properties.action.enum).not.toContain("parallel");
+    expect(properties.calls).toBeUndefined();
+    expect(properties.maxConcurrency).toBeUndefined();
+    expect(properties.policy).toBeUndefined();
+    expect(system?.description).not.toContain("action=parallel");
+    const rejected = await registry.call(
       "system",
       makeContext(defaultConfig(root)),
       {
         action: "parallel",
-        calls: [
-          { tool: "system", input: { action: "status" } },
-          {
-            tool: "files",
-            input: { action: "preview", path: "preview.png" },
-          },
-        ],
+        calls: [{ tool: "system", input: { action: "status" } }],
       },
     );
-
-    expect(result.ok).toBe(true);
-    expect(result.attachments).toHaveLength(1);
-    expect(result.attachments?.[0]).toMatchObject({
-      mimeType: "image/png",
-      width: 3,
-      height: 2,
-    });
-    expect(JSON.stringify(result.data)).not.toContain(image.toString("base64"));
+    expect(rejected.ok).toBe(false);
+    expect(rejected.error?.code).toBe("INVALID_ACTION");
+    const ordinary = await registry.call(
+      "system",
+      makeContext(defaultConfig(root)),
+      { action: "status" },
+    );
+    expect(ordinary.ok).toBe(true);
   });
 
   it("uses one-call batch reads and bounded workspace grep", async () => {
