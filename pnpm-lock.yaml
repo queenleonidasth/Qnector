@@ -95,6 +95,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      "@modelcontextprotocol/client":
+        specifier: 2.0.0
+        version: 2.0.0
       "@qnector/core":
         specifier: workspace:*
         version: link:../../packages/core

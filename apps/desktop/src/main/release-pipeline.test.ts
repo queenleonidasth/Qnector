@@ -40,4 +40,16 @@ describe("GitHub release pipeline", () => {
     expect(script).toContain("sourceRevision");
     expect(script).toContain("lockfileSha256");
   });
+
+  it("declares the runtime MCP client as a desktop production dependency", async () => {
+    const packageJson = JSON.parse(
+      await readFile(
+        path.join(projectRoot, "apps", "desktop", "package.json"),
+        "utf8",
+      ),
+    ) as { dependencies?: Record<string, string> };
+    expect(packageJson.dependencies?.["@modelcontextprotocol/client"]).toBe(
+      "2.0.0",
+    );
+  });
 });
