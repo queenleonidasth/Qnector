@@ -1,0 +1,9 @@
+{
+  "name": "@qnector/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "dependencies": {"@qnector/execution": "workspace:*"},
+  "scripts": {"build": "tsc -p tsconfig.json"}
+}

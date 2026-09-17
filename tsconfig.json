@@ -7,6 +7,7 @@
     { "path": "./packages/tools" },
     { "path": "./packages/mcp-server" },
     { "path": "./packages/transports" },
+    { "path": "./apps/daemon" },
     { "path": "./apps/relay" },
     { "path": "./apps/desktop" }
   ]

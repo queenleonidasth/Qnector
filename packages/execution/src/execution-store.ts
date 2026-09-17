@@ -210,6 +210,14 @@ export class ExecutionStore {
       .all() as {task_id:string}[]).map(row => row.task_id);
   }
 
+  /** Recovery reads the existing attempt; it never creates a new dispatch. */
+  public activeAttempts(): DispatchAttempt[] {
+    return (this.db.prepare(`SELECT a.task_id,a.attempt_id,a.token,a.generation
+      FROM attempts a JOIN tasks t ON t.attempt_id=a.attempt_id AND t.task_id=a.task_id
+      WHERE t.state IN ('starting','running','canceling') ORDER BY t.created_at`)
+      .all() as {task_id:string;attempt_id:string;token:string;generation:number}[])
+      .map(row => ({taskId:row.task_id,attemptId:row.attempt_id,token:row.token,generation:row.generation}));
+  }
   /** CAS claim. A crash after this step is unknown until a worker handshake/reconciliation. */
   public claim(taskId: string): DispatchAttempt | null {
     return this.transaction(() => {
