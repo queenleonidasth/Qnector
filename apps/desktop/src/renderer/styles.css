@@ -100,6 +100,13 @@ body {
   text-size-adjust: 100%;
 }
 
+/* Pause all decorative CSS timelines without resetting progress while tray-hidden/minimized. */
+html.qnector-window-paused *,
+html.qnector-window-paused *::before,
+html.qnector-window-paused *::after {
+  animation-play-state: paused !important;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 4px;

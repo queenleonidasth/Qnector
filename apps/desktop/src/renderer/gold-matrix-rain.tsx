@@ -13,12 +13,7 @@ const ROYAL_SOVEREIGN = {
 } as const;
 
 const TARGET_FPS = 165;
-const BACKGROUND_FPS = 15;
 const DORMANT_SPEED_MULTIPLIER = 0.45;
-
-export function matrixTargetFps(focused: boolean): number {
-  return focused ? TARGET_FPS : BACKGROUND_FPS;
-}
 const MAX_DEVICE_PIXEL_RATIO = 2;
 
 function normalizeDisconnectProgress(progress: number): number {
@@ -98,7 +93,9 @@ export function GoldMatrixRain({
 
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     let reducedMotion = motionQuery.matches;
-    let windowFocused = document.hasFocus();
+    // Electron disables Page Visibility updates when background throttling is off.
+    // The main process reports real show/hide/minimize/restore state instead.
+    let windowVisible = false;
     let animationFrameId: number | undefined;
     let destroyed = false;
     let lastFrameAt = 0;
@@ -242,7 +239,7 @@ export function GoldMatrixRain({
     };
 
     const render = (timestamp: number): void => {
-      if (destroyed || document.hidden || reducedMotion) return;
+      if (destroyed || !windowVisible || reducedMotion) return;
 
       if (
         !matrixContinuousMotionEnabled(
@@ -258,10 +255,11 @@ export function GoldMatrixRain({
 
       if (lastFrameAt === 0) lastFrameAt = timestamp;
       const elapsed = timestamp - lastFrameAt;
-      const frameIntervalMs = 1000 / matrixTargetFps(windowFocused);
-      if (elapsed >= frameIntervalMs) {
-        lastFrameAt = timestamp - (elapsed % frameIntervalMs);
-        drawFrame(elapsed, true);
+      const frameIntervalMs = 1000 / TARGET_FPS;
+      // Allow small rAF timestamp jitter on a 165 Hz display; never exceed its cadence.
+      if (elapsed >= frameIntervalMs - 0.5) {
+        lastFrameAt = timestamp;
+        drawFrame(Math.min(elapsed, 50), true);
       }
       animationFrameId = requestAnimationFrame(render);
     };
@@ -269,7 +267,7 @@ export function GoldMatrixRain({
     const startAnimation = (): void => {
       if (
         destroyed ||
-        document.hidden ||
+        !windowVisible ||
         animationFrameId ||
         !matrixContinuousMotionEnabled(
           frozenRef.current,
@@ -297,6 +295,7 @@ export function GoldMatrixRain({
     const refreshMotionState = (): void => {
       reducedMotion = motionQuery.matches;
       stopAnimation();
+      if (!windowVisible) return;
       if (
         !matrixContinuousMotionEnabled(
           frozenRef.current,
@@ -310,24 +309,22 @@ export function GoldMatrixRain({
       }
     };
 
-    const handleVisibilityChange = (): void => {
+    const updateVisibility = (visible: boolean): void => {
+      if (destroyed || windowVisible === visible) return;
+      windowVisible = visible;
       stopAnimation();
-      windowFocused = document.hasFocus();
-      if (
-        !document.hidden &&
-        matrixContinuousMotionEnabled(
-          frozenRef.current,
-          reducedMotion,
-          disconnectProgressRef.current,
-        )
-      ) {
+      if (visible) {
+        resizeCanvas();
+        drawFrame(1000 / 60, false);
         startAnimation();
       }
     };
 
     startAnimationRef.current = startAnimation;
     stopAnimationRef.current = stopAnimation;
-    drawStaticFrameRef.current = () => drawFrame(1000 / 60, false);
+    drawStaticFrameRef.current = () => {
+      if (windowVisible) drawFrame(1000 / 60, false);
+    };
 
     resizeCanvas();
     // Paint a complete frame immediately so the hero never appears blank on
@@ -344,6 +341,7 @@ export function GoldMatrixRain({
     }
 
     const resizeObserver = new ResizeObserver(() => {
+      if (!windowVisible) return;
       resizeCanvas();
       if (
         !matrixContinuousMotionEnabled(
@@ -357,19 +355,17 @@ export function GoldMatrixRain({
     });
     if (canvas.parentElement) resizeObserver.observe(canvas.parentElement);
 
-    const handleWindowFocus = (): void => {
-      windowFocused = true;
-      lastFrameAt = 0;
-      startAnimation();
-    };
-    const handleWindowBlur = (): void => {
-      windowFocused = false;
-      lastFrameAt = 0;
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleWindowFocus);
-    window.addEventListener("blur", handleWindowBlur);
+    let receivedVisibilityEvent = false;
+    const unsubscribeVisibility = window.qnector.onWindowVisible((visible) => {
+      receivedVisibilityEvent = true;
+      updateVisibility(visible);
+    });
+    void window.qnector
+      .getWindowVisible()
+      .then((visible) => {
+        if (!receivedVisibilityEvent) updateVisibility(visible);
+      })
+      .catch(() => undefined);
     motionQuery.addEventListener("change", refreshMotionState);
 
     return () => {
@@ -379,9 +375,7 @@ export function GoldMatrixRain({
       stopAnimationRef.current = null;
       drawStaticFrameRef.current = null;
       resizeObserver.disconnect();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleWindowFocus);
-      window.removeEventListener("blur", handleWindowBlur);
+      unsubscribeVisibility();
       motionQuery.removeEventListener("change", refreshMotionState);
     };
   }, []);

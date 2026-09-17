@@ -234,6 +234,15 @@ function getResourcePath(relativePath: string): string {
   return devPath;
 }
 
+function animationWindowVisible(): boolean {
+  return Boolean(
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    mainWindow.isVisible() &&
+    !mainWindow.isMinimized(),
+  );
+}
+
 function createWindow(options?: {
   showWhenReady?: boolean;
   onRendererReady?: () => void;
@@ -263,6 +272,7 @@ function createWindow(options?: {
       preload: path.join(currentDir, "../preload/preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
     show: false,
   });
@@ -286,9 +296,20 @@ function createWindow(options?: {
       mainWindow.focus();
     }
   });
-  mainWindow.webContents.once("did-finish-load", () =>
-    qnectorPerformance.mark("renderer-loaded"),
-  );
+  const publishAnimationVisibility = (): void => {
+    mainWindow?.webContents.send(
+      "window:animation-visible",
+      animationWindowVisible(),
+    );
+  };
+  mainWindow.on("show", publishAnimationVisibility);
+  mainWindow.on("hide", publishAnimationVisibility);
+  mainWindow.on("minimize", publishAnimationVisibility);
+  mainWindow.on("restore", publishAnimationVisibility);
+  mainWindow.webContents.once("did-finish-load", () => {
+    qnectorPerformance.mark("renderer-loaded");
+    publishAnimationVisibility();
+  });
   mainWindow.webContents.once(
     "did-fail-load",
     (_event, errorCode, errorDescription) => {
@@ -361,6 +382,7 @@ function createTray(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("window:animation-visible", () => animationWindowVisible());
   ipcMain.handle("app:bootstrap", () => createBootstrapSnapshot());
   ipcMain.handle("status:get", () =>
     statusWithBridge(

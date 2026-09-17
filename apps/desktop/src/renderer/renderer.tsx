@@ -514,6 +514,30 @@ function App(): React.ReactElement {
   const setupDialogRef = useRef<HTMLElement | null>(null);
   const drawerDialogRef = useRef<HTMLDivElement | null>(null);
 
+  // Pausing CSS preserves animation progress when Qnector is hidden or minimized.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("qnector-window-paused");
+    const updateVisibility = (visible: boolean): void => {
+      root.classList.toggle("qnector-window-paused", !visible);
+    };
+    let receivedEvent = false;
+    const unsubscribe = window.qnector.onWindowVisible((visible) => {
+      receivedEvent = true;
+      updateVisibility(visible);
+    });
+    void window.qnector
+      .getWindowVisible()
+      .then((visible) => {
+        if (!receivedEvent) updateVisibility(visible);
+      })
+      .catch(() => undefined);
+    return () => {
+      unsubscribe();
+      root.classList.remove("qnector-window-paused");
+    };
+  }, []);
+
   // Live Activity owns its own subscription/render state to avoid rerendering App.
 
   useModalFocusTrap(

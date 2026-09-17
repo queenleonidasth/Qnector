@@ -32,6 +32,8 @@ export interface DesktopBootstrapSnapshot {
 }
 
 export interface QnectorApi {
+  getWindowVisible(): Promise<boolean>;
+  onWindowVisible(listener: (visible: boolean) => void): () => void;
   getBootstrap(): Promise<DesktopBootstrapSnapshot>;
   getStatus(): Promise<
     ServerStatus & { publicUrl?: string; bridge: TransportSnapshot }

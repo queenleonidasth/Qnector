@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { QnectorApi } from "./api.js";
 
 const api: QnectorApi = {
+  getWindowVisible: () => ipcRenderer.invoke("window:animation-visible"),
+  onWindowVisible: (listener) =>
+    subscribe("window:animation-visible", listener),
   getBootstrap: () => ipcRenderer.invoke("app:bootstrap"),
   getStatus: () => ipcRenderer.invoke("status:get"),
   connect: () => ipcRenderer.invoke("bridge:connect"),
