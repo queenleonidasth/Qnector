@@ -23,6 +23,11 @@ import {
   errorFromUnknown,
   type ToolContext,
 } from "./tool-result.js";
+import {
+  callExternalMcpTool,
+  listExternalMcpServers,
+  listExternalMcpTools,
+} from "./external-mcp.js";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_ROUTE_SKILL_LIMIT = 3;
@@ -31,7 +36,7 @@ const COMPACT_SKILL_INSTRUCTION_CHARS = 1_200;
 export const systemDefinition: ToolDefinition = {
   name: "system",
   description:
-    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. When the user asks to discover or install new Agent Skills, use skills_search_remote and skill_install_remote for the public skills.sh catalog; never install a remote skill without user intent. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
+    "Inspect the local computer and Qnector bridge. IMPORTANT: when 2 or more independent Qnector operations are known up front, prefer action=parallel with calls[] so Qnector runs them concurrently in one MCP round-trip instead of making separate tool calls. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. When the user asks to discover or install new Agent Skills, use skills_search_remote and skill_install_remote for the public skills.sh catalog; never install a remote skill without user intent. For configured external MCP servers, use mcp_servers to inspect available upstreams, mcp_tools to discover/filter their tool schemas, and mcp_call to invoke one without exposing configured secret values. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
   inputSchema: {
     type: "object",
     properties: {
@@ -52,6 +57,9 @@ export const systemDefinition: ToolDefinition = {
           "find_process",
           "ports",
           "doctor",
+          "mcp_servers",
+          "mcp_tools",
+          "mcp_call",
           "skills_status",
           "skills_list",
           "skills_match",
@@ -158,7 +166,27 @@ export const systemDefinition: ToolDefinition = {
       query: {
         type: "string",
         description:
-          "Filename/path or native process search query, depending on action",
+          "Filename/path, native process search query, or external MCP tool filter depending on action",
+      },
+      server: {
+        type: "string",
+        description:
+          "Configured external MCP server name for mcp_tools/mcp_call",
+      },
+      toolName: {
+        type: "string",
+        description: "External MCP tool name for mcp_call",
+      },
+      arguments: {
+        type: "object",
+        additionalProperties: true,
+        description: "Arguments forwarded to the external MCP tool",
+      },
+      maxChars: {
+        type: "integer",
+        minimum: 1000,
+        maximum: 1000000,
+        description: "Maximum serialized result size returned by mcp_call",
       },
       pid: { type: "integer", minimum: 1 },
       provider: {
@@ -678,6 +706,42 @@ export async function executeSystem(
           },
         };
       }
+      if (action === "mcp_servers") {
+        const result = await listExternalMcpServers();
+        return {
+          summary: `Configured ${result.servers.length} external MCP server(s)`,
+          data: result,
+        };
+      }
+      if (action === "mcp_tools") {
+        const server = stringInput(object, "server", true)!;
+        const query = stringInput(object, "query");
+        const maxResults =
+          typeof object.maxResults === "number" ? object.maxResults : 40;
+        const result = await listExternalMcpTools(server, query, maxResults);
+        return {
+          summary: `Listed ${result.returned} of ${result.matched} matching tool(s) from external MCP server ${server}`,
+          data: result,
+        };
+      }
+      if (action === "mcp_call") {
+        const server = stringInput(object, "server", true)!;
+        const toolName = stringInput(object, "toolName", true)!;
+        const args =
+          object.arguments === undefined ? {} : objectInput(object.arguments);
+        const maxChars =
+          typeof object.maxChars === "number" ? object.maxChars : undefined;
+        const result = await callExternalMcpTool(
+          server,
+          toolName,
+          args,
+          maxChars,
+        );
+        return {
+          summary: `${result.isError ? "External MCP tool returned an error" : "Called external MCP tool"} ${server}.${toolName}`,
+          data: result,
+        };
+      }
       if (action === "doctor") {
         const config = context.getConfig();
         const build = await getBuildIdentity();
@@ -1092,6 +1156,19 @@ function activityInput(
   object: Record<string, unknown>,
   original: unknown,
 ): unknown {
+  if (action === "mcp_call") {
+    const args =
+      object.arguments && typeof object.arguments === "object"
+        ? (object.arguments as Record<string, unknown>)
+        : {};
+    return {
+      action,
+      server: typeof object.server === "string" ? object.server : undefined,
+      toolName:
+        typeof object.toolName === "string" ? object.toolName : undefined,
+      argumentKeys: Object.keys(args).sort(),
+    };
+  }
   if (action !== "clipboard_write") return original;
   const text = typeof object.text === "string" ? object.text : "";
   const html = typeof object.html === "string" ? object.html : undefined;

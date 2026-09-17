@@ -13,7 +13,7 @@ import { configSchema } from "@qnector/shared";
 import type { QnectorConfig, TransportMode } from "@qnector/shared";
 import { executableAvailable } from "./executable-lookup.js";
 
-export const QNECTOR_VERSION = "0.4.33";
+export const QNECTOR_VERSION = "0.4.34";
 
 export function configDirectory(): string {
   if (process.platform === "win32") {
