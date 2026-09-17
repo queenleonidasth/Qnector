@@ -8,6 +8,7 @@ import {
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
 import { AgentSkillService } from "../../core/src/agent-skills.js";
+import { ActivityLogger } from "../../core/src/activity-log.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { Phase0Server } from "./phase0.js";
 import { QnectorRuntime } from "./server.js";
@@ -46,6 +47,7 @@ describe("Qnector MCP runtime", () => {
     runtime = new QnectorRuntime({
       config: { ...defaultConfig(root), localPort: port },
       configFile: path.join(root, "config.json"),
+      logger: new ActivityLogger(path.join(root, "activity.jsonl")),
       agentSkills: new AgentSkillService({
         roots: [{ path: skillsRoot, source: "test" }],
       }),
@@ -83,16 +85,32 @@ describe("Qnector MCP runtime", () => {
     );
     expect(
       initialized.response.headers.get("x-qnector-schema-revision"),
-    ).toContain("capability-recovery-v3");
+    ).toContain("capability-recovery-v4");
     expect(initialized.response.headers.get("x-qnector-capability")).toBe(
       "live",
     );
+    const initializeTraceId =
+      initialized.response.headers.get("x-qnector-trace-id");
+    expect(initializeTraceId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(
+      runtime.activity
+        .list()
+        .some(
+          (entry) =>
+            entry.tool === "mcp" &&
+            entry.action === "exchange" &&
+            entry.status === "success" &&
+            entry.argsSummary.includes(initializeTraceId!),
+        ),
+    ).toBe(true);
     const instructions = (
       initialized.body as { result?: { instructions?: string } }
     ).result?.instructions;
     expect(instructions).toContain("QNECTOR SESSION BOOTSTRAP");
     expect(instructions).toContain("CURRENT CAPABILITY RULE");
-    expect(instructions).toContain("current tool list outranks conversation history");
+    expect(instructions).toContain(
+      "current tool list outranks conversation history",
+    );
     expect(instructions).toContain(
       "probe system.status before saying Qnector cannot be used",
     );
@@ -103,7 +121,7 @@ describe("Qnector MCP runtime", () => {
       "Do not rebuild completed roadmap features.",
     );
     expect(instructions).toContain("release-rule");
-    expect(Buffer.byteLength(instructions!, "utf8")).toBeLessThanOrEqual(4_000);
+    expect(Buffer.byteLength(instructions!, "utf8")).toBeLessThanOrEqual(3_000);
 
     const listed = await request(`http://127.0.0.1:${port}/mcp`, {
       jsonrpc: "2.0",
@@ -188,12 +206,12 @@ describe("Qnector MCP runtime", () => {
         )?.memoryTaskId,
       ).toBeTruthy();
       expect(advertised?._meta?.["qnector/schemaRevision"]).toContain(
-        "capability-recovery-v3",
+        "capability-recovery-v4",
       );
       expect(advertised?.title).toBe(`Qnector ${definition.name} (LIVE)`);
       expect(advertised?.description).toContain("QNECTOR IS CALLABLE NOW");
       expect(advertised?.description).toContain(
-        "probe system.status before saying Qnector cannot be used",
+        "probe system.status (action=status) before declaring Qnector unavailable",
       );
       expect(advertised?._meta?.["qnector/availability"]).toBe(
         "live-when-listed",
@@ -233,13 +251,7 @@ describe("Qnector MCP runtime", () => {
     ).result;
     expect(compactResult?.content?.[0]?.text).toContain("Qnector local status");
     expect(compactResult?.content?.[0]?.text).toContain(
-      "recovery probe: system.status",
-    );
-    expect(compactResult?.content?.[0]?.text).toContain(
-      "routing: substantive work=>system.skills_route",
-    );
-    expect(compactResult?.content?.[0]?.text).toContain(
-      "availability: live result proves Qnector callable now",
+      "system.status checks availability",
     );
     expect(compactResult?.structuredContent).toMatchObject({
       ok: true,
@@ -305,7 +317,7 @@ describe("Qnector MCP runtime", () => {
     });
     expect(taskWrite.response.ok).toBe(true);
     expect(JSON.stringify(taskWrite.body)).toContain(
-      "recovery probe: system.status",
+      "system.status checks availability",
     );
     const skillActivity = runtime.activity.list();
     const routeActivity = [...skillActivity]
@@ -411,11 +423,15 @@ describe("Qnector MCP runtime", () => {
     );
     const sessionARead = sessionActivity.find(
       (entry) =>
-        entry.tool === "files" && entry.argsSummary.includes("session-a.txt"),
+        entry.tool === "files" &&
+        entry.status === "success" &&
+        entry.argsSummary.includes(JSON.stringify(sessionAFile)),
     );
     const sessionBRead = sessionActivity.find(
       (entry) =>
-        entry.tool === "files" && entry.argsSummary.includes("session-b.txt"),
+        entry.tool === "files" &&
+        entry.status === "success" &&
+        entry.argsSummary.includes(JSON.stringify(sessionBFile)),
     );
     expect(sessionARoute?.skillTrace?.routeId).toBeTruthy();
     expect(sessionBRoute?.skillTrace?.routeId).toBeTruthy();
@@ -529,12 +545,12 @@ describe("Qnector MCP runtime", () => {
       ).toBe(true);
       expect(
         modernTools.tools.every((tool) =>
-          tool.description?.includes("LONG-CONTEXT RECOVERY"),
+          tool.description?.includes("QNECTOR IS CALLABLE NOW"),
         ),
       ).toBe(true);
       expect(
         modernTools.tools.every((tool) =>
-          tool.description?.includes("system action=status"),
+          tool.description?.includes("system.status (action=status)"),
         ),
       ).toBe(true);
     } finally {
@@ -548,6 +564,7 @@ describe("Qnector MCP runtime", () => {
     runtime = new QnectorRuntime({
       config: { ...defaultConfig(root), localPort: port },
       configFile: path.join(root, "config.json"),
+      logger: new ActivityLogger(path.join(root, "activity.jsonl")),
     });
     await runtime.start({ port });
     const blockedMarker = path.join(root, "blocked-origin.txt");

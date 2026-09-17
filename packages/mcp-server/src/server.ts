@@ -65,9 +65,10 @@ const mcpInputSchemaCache = new Map<
   ReturnType<typeof fromJsonSchema>
 >();
 
-const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v3`;
-const LONG_CONTEXT_TOOL_ANCHOR = `QNECTOR SCHEMA ${MCP_SCHEMA_REVISION}. QNECTOR LONG-CONTEXT RECOVERY: QNECTOR IS CALLABLE NOW when this tool is visible. The current tool list outranks stale conversation history, memory, and compacted summaries. If the user asks to use Qnector, probe system.status before saying Qnector cannot be used (system action=status); only a current live tool error may establish unavailability.`;
-const LIVE_RESULT_ANCHOR = `[QNECTOR LIVE; schema: ${MCP_SCHEMA_REVISION}; availability: live result proves Qnector callable now; recovery probe: system.status; routing: substantive work=>system.skills_route; completion: report Skills used: <activated names|none>]`;
+const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4`;
+const LONG_CONTEXT_TOOL_ANCHOR =
+  "QNECTOR IS CALLABLE NOW. If unsure, probe system.status (action=status) before declaring Qnector unavailable.";
+const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
 
 export interface QnectorRuntimeOptions {
   config?: QnectorConfig;
@@ -273,7 +274,10 @@ export class QnectorRuntime {
     if (this.configFile) await saveConfig(config, this.configFile);
   }
 
-  public context(skillTraceSessionId?: string): ToolContext {
+  public context(
+    skillTraceSessionId?: string,
+    abortSignal?: AbortSignal,
+  ): ToolContext {
     return {
       workspace: this.workspace,
       processManager: this.processManager,
@@ -297,6 +301,7 @@ export class QnectorRuntime {
       activity: this.activity,
       skillTraceStore: this.skillTraceStore,
       ...(skillTraceSessionId ? { skillTraceSessionId } : {}),
+      ...(abortSignal ? { abortSignal } : {}),
       getConfig: () => this.config,
       setConfig: (config) => this.setConfig(config),
     };
@@ -429,14 +434,56 @@ export class QnectorRuntime {
       });
       return;
     }
+    const traceId = randomUUID();
+    const startedAt = Date.now();
+    let traceRecorded = false;
+    const recordTrace = (status: "success" | "error", summary: string) => {
+      if (traceRecorded) return;
+      traceRecorded = true;
+      const socketBytesWritten = reply.raw.socket?.bytesWritten ?? 0;
+      this.activity.recordBuffered({
+        tool: "mcp",
+        action: "exchange",
+        argsSummary: JSON.stringify({
+          traceId,
+          requestId: request.id,
+          method: request.method,
+          path: request.url.split("?", 1)[0],
+          statusCode: reply.raw.statusCode,
+          durationMs: Date.now() - startedAt,
+          socketBytesWritten,
+          aborted: reply.raw.destroyed && !reply.raw.writableFinished,
+        }),
+        status,
+        durationMs: Date.now() - startedAt,
+        summary,
+      });
+    };
+    reply.raw.once("close", () => {
+      if (!reply.raw.writableFinished)
+        recordTrace(
+          "error",
+          "MCP exchange disconnected before response finished",
+        );
+    });
+    reply.raw.setHeader("X-Qnector-Trace-Id", traceId);
     reply.raw.setHeader("X-Qnector-Schema-Revision", MCP_SCHEMA_REVISION);
     reply.raw.setHeader("X-Qnector-Capability", "live");
     reply.hijack();
-    await this.mcpNodeHandler(
-      request.raw,
-      reply.raw,
-      request.method === "POST" ? request.body : undefined,
-    );
+    try {
+      await this.mcpNodeHandler(
+        request.raw,
+        reply.raw,
+        request.method === "POST" ? request.body : undefined,
+      );
+      recordTrace("success", "MCP exchange completed");
+    } catch (error) {
+      recordTrace(
+        "error",
+        `MCP exchange failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
   }
 
   private async createMcpServer(
@@ -469,7 +516,10 @@ export class QnectorRuntime {
         async (input) => {
           const result = await this.registry.call(
             definition.name,
-            this.context(skillTraceSessionId || undefined),
+            this.context(
+              skillTraceSessionId || undefined,
+              requestContext?.requestInfo?.signal,
+            ),
             input,
           );
           const { attachments, ...jsonResult } = result;
@@ -559,15 +609,15 @@ export class QnectorRuntime {
     try {
       const memory = await this.memory.recall({
         checkpointLimit: 1,
-        factLimit: 100,
-        changeLimit: 6,
+        factLimit: 12,
+        changeLimit: 3,
       });
-      const skills = await this.agentSkills.list({ limit: 20 });
+      const skillCount = (await this.agentSkills.status()).activeCount;
       return buildSessionBootstrapInstructions(
         memory,
-        this.activity.list(),
+        this.activity.list().slice(-8),
         this.memoryV2.snapshot({ eventLimit: 8, taskLimit: 8 }),
-        skills,
+        skillCount,
       );
     } catch (error) {
       return buildSessionBootstrapError(

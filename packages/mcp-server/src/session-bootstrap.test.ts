@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { MemoryRecall } from "@qnector/core";
+import type { MemoryV2Snapshot } from "@qnector/shared";
 import {
   buildSessionBootstrapError,
   buildSessionBootstrapInstructions,
 } from "./session-bootstrap.js";
 
 describe("session memory bootstrap", () => {
-  it("formats saved continuity context and stays within the 6 KB budget", () => {
+  it("prioritizes continuity within a 3 KB bootstrap budget", () => {
     const now = "2026-08-29T14:30:00.000Z";
     const active = {
       currentTask: "Continue Qnector development",
       completedSteps: ["Finished P1-P10", "Packaged the previous build"],
       pendingSteps: ["Verify the new package", "Update the handoff"],
-      criticalContext: `Do not rebuild completed work. ${"บริบทสำคัญ ".repeat(500)}`,
+      criticalContext: `Do not rebuild completed work. ${"à¸šà¸£à¸´à¸šà¸—à¸ªà¸³à¸„à¸±à¸ ".repeat(500)}`,
     };
     const memory: MemoryRecall = {
       available: true,
@@ -76,10 +77,60 @@ describe("session memory bootstrap", () => {
     expect(result).toContain("rule-20");
     expect(result).toContain("Recent working set");
     expect(result).toContain("Updated runtime dashboard");
-    expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(6_000);
+    expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(3_000);
+
+    const memoryV2: MemoryV2Snapshot = {
+      version: 2,
+      workspaceId: memory.workspaceId,
+      workspacePath: memory.workspacePath,
+      updatedAt: now,
+      revision: 1,
+      tasks: Array.from({ length: 4 }, (_, index) => ({
+        id: `task-${index}`,
+        workspaceId: memory.workspaceId,
+        title: `Task ${index}`,
+        status: index === 3 ? ("blocked" as const) : ("active" as const),
+        currentTask: `Current task ${index}`,
+        completedSteps: [],
+        pendingSteps: [],
+        criticalContext: "",
+        createdAt: now,
+        updatedAt: `2026-08-${20 + index}T14:30:00.000Z`,
+        sessionCount: 1,
+        touchedPaths: [],
+      })),
+      events: [],
+      memories: [],
+      conflicts: [
+        {
+          id: "conflict",
+          path: "shared.ts",
+          taskIds: ["task-1", "task-3"],
+          taskTitles: ["Task 1", "Task 3"],
+          severity: "warning",
+        },
+      ],
+      counts: {
+        tasks: 4,
+        activeTasks: 4,
+        events: 0,
+        memories: 0,
+        conflicts: 1,
+      },
+    };
+    const dense = buildSessionBootstrapInstructions(memory, [], memoryV2, 24);
+    expect(Buffer.byteLength(dense, "utf8")).toBeLessThanOrEqual(3_000);
+    expect(dense).toContain("Agent Skills: 24 available");
+    expect(dense).toContain("task-3 [blocked]");
+    expect(dense).not.toContain("task-0 [active]");
+    expect(dense).toContain("Task conflict warning");
+    expect(dense).toContain("Resume next: Verify the new package");
+    expect(dense).toContain("Do not rebuild completed work.");
+    expect(dense).toContain("rule-20");
+    expect(dense).toContain("rule-0");
   });
 
-  it("requires automatic skill routing and completion disclosure when skills exist", () => {
+  it("requires explicit skill routing and completion disclosure when skills exist", () => {
     const memory: MemoryRecall = {
       available: false,
       workspaceId: "skill-routing",
@@ -192,6 +243,12 @@ describe("session memory bootstrap", () => {
     expect(buildSessionBootstrapInstructions(empty)).toContain(
       "No saved continuity memory exists",
     );
+    expect(
+      buildSessionBootstrapInstructions({
+        ...empty,
+        warning: "memory read warning",
+      }),
+    ).toContain("Memory warning: memory read warning");
     const error = buildSessionBootstrapError(
       "C:\\work\\empty",
       "corrupt state",

@@ -725,6 +725,11 @@ function makeTransport(config: QnectorConfig): TransportAdapter {
             "cache",
             "openai-tunnel-validation.json",
           ),
+          diagnosticLogFile: path.join(
+            configDirectory(),
+            "logs",
+            "tunnel-client.jsonl",
+          ),
         }),
       );
     case "relay": {

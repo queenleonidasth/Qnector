@@ -141,4 +141,36 @@ describe("OpenAiTunnelAdapter integration boundaries", () => {
     expect(snapshot.state).toBe("connected");
     expect(calls).toEqual(["run", "init", "doctor", "run"]);
   });
+
+  it("persists redacted tunnel diagnostics without retaining credentials", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "qnector-openai-log-"));
+    cleanup.push(root);
+    const executable = path.join(root, "tunnel-client.exe");
+    const diagnosticLogFile = path.join(root, "logs", "tunnel-client.jsonl");
+    await writeFile(executable, "fixture", "utf8");
+    const spawnImpl = ((_: string, args: readonly string[]) => {
+      const child = fakeChild(30_000);
+      if (args[0] === "run")
+        queueMicrotask(() =>
+          child.stderr?.emit(
+            "data",
+            Buffer.from("connection failed token=secret-value retrying\n"),
+          ),
+        );
+      return child;
+    }) as typeof nodeSpawn;
+    const adapter = new OpenAiTunnelAdapter("http://127.0.0.1:8787/mcp", {
+      executable,
+      diagnosticLogFile,
+      spawnImpl,
+      warmStabilityMs: 10,
+      coldStabilityMs: 10,
+    });
+    await adapter.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const log = await readFile(diagnosticLogFile, "utf8");
+    expect(log).toContain("connection failed");
+    expect(log).toContain("token=[redacted]");
+    expect(log).not.toContain("secret-value");
+  });
 });

@@ -378,7 +378,8 @@ export async function executeProcess(
         stringInput(object, "taskId", true)!;
       const snapshot = await context.processManager.waitForExit(
         processId,
-        numberInput(object, "timeoutMs", 120_000),
+        boundedWaitTimeout(object, 30_000),
+        context.abortSignal,
       );
       return {
         summary: `${processId} reached ${snapshot.state}`,
@@ -393,8 +394,9 @@ export async function executeProcess(
         processId,
         pattern: stringInput(object, "pattern", true)!,
         cursor: numberInput(object, "cursor", 0),
-        timeoutMs: numberInput(object, "timeoutMs", 60_000),
+        timeoutMs: boundedWaitTimeout(object, 30_000),
         caseSensitive: booleanInput(object, "caseSensitive", false),
+        signal: context.abortSignal,
       });
       return {
         summary: `Observed '${result.matched}' in output from ${processId}`,
@@ -407,8 +409,9 @@ export async function executeProcess(
       const result = await context.processManager.waitForPort({
         host: stringInput(object, "host") ?? "127.0.0.1",
         port: numberInput(object, "port", Number.NaN),
-        timeoutMs: numberInput(object, "timeoutMs", 60_000),
+        timeoutMs: boundedWaitTimeout(object, 30_000),
         intervalMs: numberInput(object, "intervalMs", 200),
+        signal: context.abortSignal,
       });
       return {
         summary: `${result.host}:${result.port} accepted connections after ${result.elapsedMs} ms`,
@@ -712,4 +715,14 @@ function workflowStepId(value: string, index: number): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 70);
   return normalized || `document-${index + 1}`;
+}
+
+function boundedWaitTimeout(
+  input: Record<string, unknown>,
+  fallback: number,
+): number {
+  return Math.max(
+    100,
+    Math.min(Math.floor(numberInput(input, "timeoutMs", fallback)), 120_000),
+  );
 }

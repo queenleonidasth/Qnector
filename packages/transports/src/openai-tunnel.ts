@@ -1,6 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import type { TransportSnapshot } from "@qnector/shared";
 import { BaseTransportAdapter } from "./base.js";
@@ -16,6 +23,7 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
       runtimeApiKey?: string;
       publicUrl?: string;
       validationCacheFile?: string;
+      diagnosticLogFile?: string;
       spawnImpl?: typeof spawn;
       warmStabilityMs?: number;
       coldStabilityMs?: number;
@@ -23,6 +31,8 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
   ) {
     super(localUrl);
   }
+
+  private diagnosticWriteQueue: Promise<void> = Promise.resolve();
 
   public async start(): Promise<TransportSnapshot> {
     this.setSnapshot({
@@ -120,7 +130,7 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
   }
 
   private spawnRun(profile: string): ChildProcess {
-    return (this.options.spawnImpl ?? spawn)(
+    const child = (this.options.spawnImpl ?? spawn)(
       this.options.executable,
       ["run", "--profile", profile],
       {
@@ -131,9 +141,45 @@ export class OpenAiTunnelAdapter extends BaseTransportAdapter {
             ? { CONTROL_PLANE_API_KEY: this.options.runtimeApiKey }
             : {}),
         },
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
       },
     );
+    this.captureOutput(child.stdout, "stdout");
+    this.captureOutput(child.stderr, "stderr");
+    return child;
+  }
+
+  private captureOutput(
+    stream: NodeJS.ReadableStream | null | undefined,
+    source: "stdout" | "stderr",
+  ): void {
+    stream?.on("data", (chunk: Buffer | string) => {
+      for (const line of String(chunk).split(/\r?\n/).filter(Boolean))
+        this.recordDiagnosticLine(source, line);
+    });
+  }
+
+  private recordDiagnosticLine(
+    source: "stdout" | "stderr",
+    line: string,
+  ): void {
+    const file = this.options.diagnosticLogFile;
+    if (!file) return;
+    const safe = sanitizeTunnelLine(line);
+    const entry = `${JSON.stringify({
+      timestamp: new Date().toISOString(),
+      source,
+      line: safe,
+    })}\n`;
+    this.diagnosticWriteQueue = this.diagnosticWriteQueue
+      .then(async () => {
+        await mkdir(path.dirname(file), { recursive: true });
+        const current = await stat(file).catch(() => null);
+        if ((current?.size ?? 0) + Buffer.byteLength(entry, "utf8") > 1_000_000)
+          await writeFile(file, entry, "utf8");
+        else await appendFile(file, entry, "utf8");
+      })
+      .catch(() => undefined);
   }
 
   private async validationFingerprint(profile: string): Promise<string> {
@@ -238,4 +284,15 @@ function runClientCommand(
       reject(new Error(`${errorCode}: ${stderr.trim() || code}`));
     });
   });
+}
+
+function sanitizeTunnelLine(value: string): string {
+  const normalized = value
+    .replace(
+      /(authorization|bearer|token|api[_-]?key|secret|password)(\s*[:=]\s*)\S+/gi,
+      "$1$2[redacted]",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized.length > 500 ? `${normalized.slice(0, 499)}…` : normalized;
 }

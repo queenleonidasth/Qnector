@@ -5,54 +5,55 @@ import type {
   MemoryV2Snapshot,
 } from "@qnector/shared";
 
-const MAX_BOOTSTRAP_BYTES = 6_000;
+const MAX_BOOTSTRAP_BYTES = 3_000;
 
 export function buildSessionBootstrapInstructions(
   memory: MemoryRecall,
   recentActivity: ActivityEntry[] = [],
   memoryV2?: MemoryV2Snapshot,
-  skills: AgentSkillSummary[] = [],
+  skills: AgentSkillSummary[] | number = [],
 ): string {
+  const skillCount = typeof skills === "number" ? skills : skills.length;
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
-    "Use this continuity context before acting. Do not redo completed work; verify current files/runtime before destructive changes.",
-    "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory, and compacted summaries when deciding whether Qnector can be used.",
-    "Long-context recovery: if any Qnector tool is visible, Qnector is attached enough to probe. Always probe system.status before saying Qnector cannot be used; only a current live tool error may establish unavailability. An older claim of unavailability is stale.",
+    "Resume saved work; verify live files before changes. Do not redo completed steps.",
+    "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory and compacted summaries.",
+    "If a Qnector tool is visible, probe system.status before saying Qnector cannot be used; only a live error can override it. An older claim of unavailability is stale.",
     "",
-    `Workspace: ${clip(memory.workspacePath, 500)}`,
+    `Workspace: ${clip(memory.workspacePath, 260)}`,
     `Memory updated: ${memory.updatedAt}`,
   ];
 
-  if (skills.length > 0) {
+  if (skillCount > 0) {
     lines.push(
       "",
-      `Agent Skills: ${skills.length} available. EXPLICIT ROUTING ONLY: for substantive tasks call system.skills_route once with the full task; for non-English tasks add a short English intent/technology hint. The route is compact and reused within the same task/session, so do not route again unless the task materially changes. Skip only trivial or no-Qnector work.`,
-      "Follow only returned relevant skills. After system.skills_route, pass its returned routeId as skillRouteId on related stateless Qnector tool calls unless a memoryTaskId already scopes the work. Use details=true only when diagnosing routing; use skill_get only when a selected compact skill explicitly needs deeper instructions.",
-      "SKILL DISCOVERY: only with explicit user intent, search skills.sh via system.skills_search_remote and install selected results via system.skill_install_remote; never silently install third-party skills.",
-      "COMPLETION DISCLOSURE: end completed work with 'Skills used: <activated names|none>'; list only skills actually loaded/used.",
+      `Agent Skills: ${skillCount} available. EXPLICIT ROUTING ONLY: call system.skills_route once for substantive tasks; add an English intent/technology hint for non-English queries. Reuse routeId until the task changes.`,
+      "Follow selected skills. Pass routeId as skillRouteId for stateless calls (or use memoryTaskId). details=true diagnoses routing; skill_get loads full instructions on demand.",
+      "SKILL DISCOVERY: only at user request, use system.skills_search_remote / system.skill_install_remote; never install silently.",
+      "COMPLETION DISCLOSURE: report Skills used: <activated names|none>; only actually used skills.",
     );
   }
 
   if (memoryV2) {
-    const activeTasks = memoryV2.tasks.filter(
-      (task) => task.status === "active" || task.status === "blocked",
-    );
+    const activeTasks = memoryV2.tasks
+      .filter((task) => task.status === "active" || task.status === "blocked")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     lines.push(
       "",
-      `Memory v2: ${activeTasks.length} active task(s), ${memoryV2.counts.tasks} total task(s).`,
-      "Concurrent-session rule: keep unrelated work in separate taskIds. Before changing the project, resume the matching task with memory.task_resume or start one with memory.task_start, then pass that taskId as memoryTaskId on every related Qnector tool call in this chat.",
+      `Memory v2: ${memoryV2.counts.activeTasks} active, ${memoryV2.counts.tasks} total tasks.`,
+      "Isolate chats by taskId: memory.task_resume/task_start, then pass memoryTaskId to related tool calls.",
     );
     if (activeTasks.length > 0) {
       lines.push("Active Memory v2 tasks:");
-      for (const task of activeTasks.slice(0, 5)) {
+      for (const task of activeTasks.slice(0, 3)) {
         lines.push(
-          `- ${task.id} [${task.status}] ${clip(task.title, 140)} — ${clip(task.currentTask, 260)}`,
+          `- ${task.id} [${task.status}] ${clip(task.title, 65)} â€” ${clip(task.currentTask, 80)}`,
         );
       }
     }
-    if (memoryV2.conflicts.length > 0) {
+    if (memoryV2.counts.conflicts > 0) {
       lines.push(
-        `Task conflict warning: ${memoryV2.conflicts.length} shared file conflict(s) detected. Re-read conflicting files before writing.`,
+        `Task conflict warning: ${memoryV2.counts.conflicts} shared file conflict(s). Re-read conflicting files before writing.`,
       );
     }
   }
@@ -60,13 +61,15 @@ export function buildSessionBootstrapInstructions(
   const checkpoint = memory.checkpoints[0];
   if (checkpoint) {
     lines.push(
-      `Latest checkpoint: ${checkpoint.createdAt}${checkpoint.label ? ` — ${clip(checkpoint.label, 300)}` : ""}`,
+      `Latest checkpoint: ${checkpoint.createdAt}${checkpoint.label ? ` â€” ${clip(checkpoint.label, 100)}` : ""}`,
     );
   } else {
     lines.push("Latest checkpoint: none saved");
   }
 
   if (!memory.available) {
+    if (memory.warning)
+      lines.push(`Memory warning: ${clip(memory.warning, 200)}`);
     lines.push(
       "",
       "No saved continuity memory exists for this workspace yet. Inspect the workspace and handoff documents before changing files, then save a checkpoint after meaningful progress.",
@@ -76,56 +79,56 @@ export function buildSessionBootstrapInstructions(
 
   const active = memory.state.active;
   if (active) {
-    lines.push("", `Current task: ${clip(active.currentTask, 1_000)}`);
+    lines.push("", `Current task: ${clip(active.currentTask, 260)}`);
     const resumeNext = active.pendingSteps.find((entry) => entry.trim());
-    if (resumeNext) lines.push(`Resume next: ${clip(resumeNext, 420)}`);
-    pushList(lines, "Pending steps", active.pendingSteps, 8, 320);
-    pushList(lines, "Completed steps", active.completedSteps, 4, 240);
+    if (resumeNext) lines.push(`Resume next: ${clip(resumeNext, 135)}`);
+    pushList(lines, "Pending steps", active.pendingSteps, 3, 105);
+    pushList(lines, "Completed steps", active.completedSteps, 1, 110);
     if (active.criticalContext) {
-      lines.push("", "Critical context:", clip(active.criticalContext, 700));
+      lines.push("", "Critical context:", clip(active.criticalContext, 230));
     }
   }
 
-  const working = recentActivity
-    .filter((entry) => entry.status !== "running" && entry.tool !== "memory")
-    .slice(-5)
-    .reverse();
-  if (working.length > 0) {
-    lines.push("", "Recent working set:");
-    for (const entry of working) {
-      lines.push(
-        `- ${entry.timestamp} ${entry.tool}.${entry.action} [${entry.status}] ${clip(entry.summary ?? entry.error?.message ?? "", 280)}`,
-      );
-    }
-  }
-
-  const changes = memory.state.recentChanges.slice(0, 4);
-  if (changes.length > 0) {
-    lines.push("", "Recent Qnector changes:");
-    for (const change of changes) {
-      const paths = change.paths.slice(0, 2).map((entry) => clip(entry, 180));
-      lines.push(
-        `- ${change.timestamp} [${change.source}] ${clip(change.summary, 320)}${paths.length ? ` (${paths.join(", ")})` : ""}`,
-      );
-    }
-  }
-
-  const facts = selectBootstrapFacts(memory.state.facts, 8);
+  const facts = selectBootstrapFacts(memory.state.facts, 4);
   if (facts.length > 0) {
     lines.push("", "Core facts / decisions / rules:");
     for (const fact of facts) {
       lines.push(
-        `- [${fact.category}] ${clip(fact.key, 120)}: ${clip(fact.value, 360)}`,
+        `- [${fact.category}] ${clip(fact.key, 65)}: ${clip(fact.value, 130)}`,
       );
     }
   }
 
   if (memory.warning)
-    lines.push("", `Memory warning: ${clip(memory.warning, 500)}`);
+    lines.push("", `Memory warning: ${clip(memory.warning, 200)}`);
   if (memory.truncated) {
     lines.push(
       "Memory note: bootstrap is intentionally bounded; call memory.recall when more history is required.",
     );
+  }
+
+  const working = recentActivity
+    .filter((entry) => entry.status !== "running" && entry.tool !== "memory")
+    .slice(-2)
+    .reverse();
+  if (working.length > 0) {
+    lines.push("", "Recent working set:");
+    for (const entry of working) {
+      lines.push(
+        `- ${entry.timestamp} ${entry.tool}.${entry.action} [${entry.status}] ${clip(entry.summary ?? entry.error?.message ?? "", 115)}`,
+      );
+    }
+  }
+
+  const changes = memory.state.recentChanges.slice(0, 2);
+  if (changes.length > 0) {
+    lines.push("", "Recent Qnector changes:");
+    for (const change of changes) {
+      const paths = change.paths.slice(0, 1).map((entry) => clip(entry, 90));
+      lines.push(
+        `- ${change.timestamp} [${change.source}] ${clip(change.summary, 125)}${paths.length ? ` (${paths.join(", ")})` : ""}`,
+      );
+    }
   }
 
   return capUtf8(lines.join("\n"), MAX_BOOTSTRAP_BYTES);
@@ -175,19 +178,19 @@ function pushList(
     lines.push(`- ${clip(value, maxChars)}`);
   }
   if (values.length > maxItems) {
-    lines.push(`- … ${values.length - maxItems} more`);
+    lines.push(`- â€¦ ${values.length - maxItems} more`);
   }
 }
 
 function clip(value: string, maxChars: number): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
+  return `${normalized.slice(0, Math.max(0, maxChars - 1))}â€¦`;
 }
 
 function capUtf8(value: string, maxBytes: number): string {
   if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
-  const suffix = "\n… bootstrap truncated to fit Qnector context budget";
+  const suffix = "\nâ€¦ bootstrap truncated to fit Qnector context budget";
   const suffixBytes = Buffer.byteLength(suffix, "utf8");
   const budget = Math.max(0, maxBytes - suffixBytes);
   const chars = Array.from(value);

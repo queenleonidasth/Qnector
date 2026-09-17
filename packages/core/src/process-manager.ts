@@ -478,15 +478,31 @@ export class ProcessManager {
 
   public async waitForExit(
     processId: string,
-    timeoutMs = 120_000,
+    timeoutMs = 30_000,
+    signal?: AbortSignal,
   ): Promise<ProcessSnapshot> {
     const current = this.snapshot(processId);
     if (current.state !== "running") return current;
-    timeoutMs = Math.max(100, Math.min(Math.floor(timeoutMs), 600_000));
+    timeoutMs = Math.max(100, Math.min(Math.floor(timeoutMs), 120_000));
+    if (signal?.aborted)
+      throw new Error(
+        `PROCESS_CANCELED: waiting for ${processId} was canceled`,
+      );
     return new Promise<ProcessSnapshot>((resolve, reject) => {
       let unsubscribe: () => void = () => {};
-      const timer = setTimeout(() => {
+      const cleanup = (): void => {
+        clearTimeout(timer);
         unsubscribe();
+        signal?.removeEventListener("abort", onAbort);
+      };
+      const onAbort = (): void => {
+        cleanup();
+        reject(
+          new Error(`PROCESS_CANCELED: waiting for ${processId} was canceled`),
+        );
+      };
+      const timer = setTimeout(() => {
+        cleanup();
         reject(
           new Error(
             `PROCESS_WAIT_TIMEOUT: ${processId} did not exit within ${timeoutMs} ms`,
@@ -495,10 +511,11 @@ export class ProcessManager {
       }, timeoutMs);
       unsubscribe = this.subscribe(processId, (snapshot) => {
         if (snapshot.state === "running") return;
-        clearTimeout(timer);
-        unsubscribe();
+        cleanup();
         resolve(snapshot);
       });
+      signal?.addEventListener("abort", onAbort, { once: true });
+      if (signal?.aborted) onAbort();
     });
   }
 
@@ -508,6 +525,7 @@ export class ProcessManager {
     cursor?: number;
     timeoutMs?: number;
     caseSensitive?: boolean;
+    signal?: AbortSignal;
   }): Promise<ProcessOutput & { matched: string }> {
     const pattern = input.pattern;
     if (!pattern) throw new Error("INVALID_INPUT: pattern is required");
@@ -517,8 +535,12 @@ export class ProcessManager {
       );
     const timeoutMs = Math.max(
       100,
-      Math.min(Math.floor(input.timeoutMs ?? 60_000), 600_000),
+      Math.min(Math.floor(input.timeoutMs ?? 30_000), 120_000),
     );
+    if (input.signal?.aborted)
+      throw new Error(
+        `PROCESS_CANCELED: waiting for output from ${input.processId} was canceled`,
+      );
     let cursor = Math.max(0, input.cursor ?? 0);
     const match = (): (ProcessOutput & { matched: string }) | null => {
       const output = this.output(input.processId, cursor, 100_000, "raw");
@@ -539,8 +561,21 @@ export class ProcessManager {
     if (immediate) return immediate;
     return new Promise((resolve, reject) => {
       let unsubscribe: () => void = () => {};
-      const timer = setTimeout(() => {
+      const cleanup = (): void => {
+        clearTimeout(timer);
         unsubscribe();
+        input.signal?.removeEventListener("abort", onAbort);
+      };
+      const onAbort = (): void => {
+        cleanup();
+        reject(
+          new Error(
+            `PROCESS_CANCELED: waiting for output from ${input.processId} was canceled`,
+          ),
+        );
+      };
+      const timer = setTimeout(() => {
+        cleanup();
         reject(
           new Error(
             `PROCESS_WAIT_TIMEOUT: output pattern was not observed within ${timeoutMs} ms`,
@@ -551,12 +586,10 @@ export class ProcessManager {
         try {
           const found = match();
           if (found) {
-            clearTimeout(timer);
-            unsubscribe();
+            cleanup();
             resolve(found);
           } else if (snapshot.state !== "running") {
-            clearTimeout(timer);
-            unsubscribe();
+            cleanup();
             reject(
               new Error(
                 `PROCESS_EXITED_BEFORE_MATCH: ${input.processId} exited before '${pattern}' appeared`,
@@ -564,11 +597,12 @@ export class ProcessManager {
             );
           }
         } catch (error) {
-          clearTimeout(timer);
-          unsubscribe();
+          cleanup();
           reject(error);
         }
       });
+      input.signal?.addEventListener("abort", onAbort, { once: true });
+      if (input.signal?.aborted) onAbort();
     });
   }
 
@@ -577,6 +611,7 @@ export class ProcessManager {
     port: number;
     timeoutMs?: number;
     intervalMs?: number;
+    signal?: AbortSignal;
   }): Promise<{ host: string; port: number; elapsedMs: number }> {
     const host = input.host?.trim() || "127.0.0.1";
     const port = Math.floor(input.port);
@@ -584,7 +619,7 @@ export class ProcessManager {
       throw new Error("INVALID_INPUT: port must be an integer from 1 to 65535");
     const timeoutMs = Math.max(
       100,
-      Math.min(Math.floor(input.timeoutMs ?? 60_000), 600_000),
+      Math.min(Math.floor(input.timeoutMs ?? 30_000), 120_000),
     );
     const intervalMs = Math.max(
       50,
@@ -592,9 +627,13 @@ export class ProcessManager {
     );
     const startedAt = Date.now();
     while (Date.now() - startedAt <= timeoutMs) {
+      if (input.signal?.aborted)
+        throw new Error(
+          `PROCESS_CANCELED: waiting for ${host}:${port} was canceled`,
+        );
       if (await canConnect(host, port))
         return { host, port, elapsedMs: Date.now() - startedAt };
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      await delayWithAbort(intervalMs, input.signal);
     }
     throw new Error(
       `PORT_WAIT_TIMEOUT: ${host}:${port} did not accept connections within ${timeoutMs} ms`,
@@ -630,6 +669,23 @@ class OutputCollector {
   public value(): string {
     return this.stored;
   }
+}
+
+function delayWithAbort(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted)
+    return Promise.reject(new Error("PROCESS_CANCELED: wait was canceled"));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new Error("PROCESS_CANCELED: wait was canceled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 interface ReducedOutput {
