@@ -64,7 +64,9 @@ describe("session memory bootstrap", () => {
     expect(result).toContain("QNECTOR SESSION BOOTSTRAP");
     expect(result).toContain("CURRENT CAPABILITY RULE");
     expect(result).toContain("current tool list outranks conversation history");
-    expect(result).toContain("probe system.status before saying Qnector cannot be used");
+    expect(result).toContain(
+      "probe system.status before saying Qnector cannot be used",
+    );
     expect(result).toContain("system.status");
     expect(result).toContain("older claim of unavailability is stale");
     expect(result).toContain("Continue Qnector development");
@@ -108,17 +110,18 @@ describe("session memory bootstrap", () => {
         enabled: true,
       },
     ]);
-    expect(result).toContain("AUTOMATIC ROUTING");
+    expect(result).toContain("EXPLICIT ROUTING ONLY");
     expect(result).toContain("system.skills_route");
     expect(result).toContain("skillRouteId");
     expect(result).toContain("system.skills_search_remote");
     expect(result).toContain("system.skill_install_remote");
     expect(result).toContain("English intent/technology hint");
     expect(result).toContain("Skills used:");
-    expect(result).toContain("typescript-best-practices");
+    expect(result).toContain("Agent Skills: 1 available");
+    expect(result).not.toContain("typescript-best-practices");
   });
 
-  it("reports the full skill count when the bootstrap catalog is clipped", () => {
+  it("reports the full skill count without embedding the skill catalog", () => {
     const now = "2026-09-15T00:00:00.000Z";
     const memory: MemoryRecall = {
       available: false,
@@ -157,9 +160,10 @@ describe("session memory bootstrap", () => {
     );
 
     expect(result).toContain("Agent Skills: 24 available");
-    expect(result).toContain("showing 20 below");
-    expect(result).toContain("skill-20");
-    expect(result).not.toContain("skill-21:");
+    expect(result).not.toContain("showing 20 below");
+    expect(result).not.toContain("Available skill catalog");
+    expect(result).not.toContain("skill-1:");
+    expect(Buffer.byteLength(result, "utf8")).toBeLessThan(2_500);
   });
 
   it("reports empty memory and non-fatal memory errors clearly", () => {
@@ -194,7 +198,9 @@ describe("session memory bootstrap", () => {
     );
     expect(error).toContain("corrupt state");
     expect(error).toContain("CURRENT CAPABILITY RULE");
-    expect(error).toContain("probe system.status before saying Qnector cannot be used");
+    expect(error).toContain(
+      "probe system.status before saying Qnector cannot be used",
+    );
     expect(error).toContain("must not block normal Qnector tools");
   });
 });

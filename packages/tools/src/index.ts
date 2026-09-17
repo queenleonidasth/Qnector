@@ -61,38 +61,9 @@ export class ToolRegistry {
   ): Promise<ToolResult> {
     const memoryTaskId = memoryTaskIdFromInput(input) ?? context.memoryTaskId;
     const skillRouteId = skillRouteIdFromInput(input);
-    // A stateless MCP call may omit the route handle. Recover deterministically
-    // from a supplied task intent or an unambiguous tool/file signature.
-    const autoQuery =
-      !skillRouteId && !isSkillsRouteRequest(name, input) && context.agentSkills
-        ? automaticSkillQuery(name, input)
-        : undefined;
-    if (autoQuery) {
-      const existing =
-        skillTraceForScope(
-          context.skillTraceStore,
-          memoryTaskId,
-          context.skillTraceSessionId,
-          undefined,
-        ) ?? context.skillTrace;
-      if (!existing?.routeId || !existing.skills.length) {
-        const routed = await this.call("system", context, {
-          action: "skills_route",
-          query: autoQuery,
-          ...(memoryTaskId ? { memoryTaskId } : {}),
-        });
-        const routeData = (
-          routed.data as
-            { data?: { routeId?: string; skills?: unknown[] } } | undefined
-        )?.data;
-        if (routed.ok && routeData?.routeId && routeData.skills?.length) {
-          return this.call(name, context, {
-            ...(input as Record<string, unknown>),
-            skillRouteId: routeData.routeId,
-          });
-        }
-      }
-    }
+    // Skill routing is explicit only: never insert hidden tool calls in a
+    // stateless MCP request. Existing task/session/route handles still inherit
+    // the activated Skill trace without another route operation.
     const inheritedTrace =
       skillTraceForScope(
         context.skillTraceStore,
@@ -303,56 +274,6 @@ export * from "./memory-tool.js";
 export * from "./browser-tool.js";
 export * from "./computer-tool.js";
 
-function automaticSkillQuery(name: string, input: unknown): string | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input))
-    return undefined;
-  const object = input as Record<string, unknown>;
-  const action = typeof object.action === "string" ? object.action : "";
-  const intent =
-    typeof object.skillIntent === "string" ? object.skillIntent.trim() : "";
-  if (intent && intent.length <= 2_000) return intent;
-  if (
-    name === "files" &&
-    [
-      "write",
-      "append",
-      "replace",
-      "multi_edit",
-      "apply_patch",
-      "document_replace_text",
-    ].includes(action)
-  ) {
-    const filename = typeof object.path === "string" ? object.path : "";
-    const extension = /\.(tsx?|jsx?|css|html|xlsx?|csv|docx|pdf|zip)$/i
-      .exec(filename)?.[1]
-      ?.toLowerCase();
-    const topics: Record<string, string> = {
-      ts: "TypeScript coding edit typescript best practices",
-      tsx: "React TypeScript frontend UI coding edit",
-      js: "JavaScript coding edit",
-      jsx: "React frontend UI coding edit",
-      css: "frontend UI CSS design edit",
-      html: "frontend UI HTML design edit",
-      xls: "spreadsheet Excel workbook edit",
-      xlsx: "spreadsheet Excel workbook edit",
-      csv: "spreadsheet CSV edit",
-      docx: "document DOCX edit",
-      pdf: "document PDF edit",
-      zip: "archive ZIP edit",
-    };
-    return extension ? topics[extension] : undefined;
-  }
-  if (
-    name === "browser" &&
-    ["navigate", "click"].includes(action) &&
-    typeof object.url === "string" &&
-    /^https?:\/\/(?:www\.)?nexusmods\.com(?:\/|$)/i.test(object.url)
-  ) {
-    return "Nexus Mods download installation workflow nexusmods.com";
-  }
-  return undefined;
-}
-
 function memoryTaskIdFromInput(input: unknown): string | undefined {
   return scopedStringFromInput(input, "memoryTaskId");
 }
@@ -429,18 +350,12 @@ function withTaskIdSchema(
       ...properties,
       memoryTaskId: {
         type: "string",
-        description:
-          "Qnector Memory v2 task handle. Start/resume a task with the memory tool, then pass the returned taskId here as memoryTaskId on every related Qnector tool call so concurrent chat sessions do not mix progress.",
+        description: "Memory task scope from memory.task_start/resume.",
       },
       skillRouteId: {
         type: "string",
         description:
-          "Exact routeId returned by system.skills_route. Pass it on subsequent related Qnector tool calls so Skill Context stays attached to the correct stateless chat/request stream.",
-      },
-      skillIntent: {
-        type: "string",
-        description:
-          "Optional natural-language task description for automatic Skill selection when skillRouteId is absent. Do not include credentials or private file contents. Prefer system.skills_route first for multi-step work.",
+          "Route handle from system.skills_route for related stateless calls.",
       },
     },
   };

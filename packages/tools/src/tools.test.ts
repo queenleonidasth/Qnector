@@ -91,6 +91,23 @@ describe("Qnector grouped tools", () => {
     );
   });
 
+  it("keeps per-tool routing scope schema compact and omits redundant skill intent", () => {
+    const definitions = new ToolRegistry().list();
+    for (const definition of definitions) {
+      const properties = definition.inputSchema.properties as Record<
+        string,
+        { description?: string } | undefined
+      >;
+      expect(properties.skillIntent).toBeUndefined();
+      expect(properties.memoryTaskId?.description?.length ?? 0).toBeLessThan(
+        90,
+      );
+      expect(properties.skillRouteId?.description?.length ?? 0).toBeLessThan(
+        100,
+      );
+    }
+  });
+
   it("shares the Agent Skill runtime guard without changing unsupported-action errors", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skill-guard-"));
     const source = await readFile(
@@ -108,7 +125,7 @@ describe("Qnector grouped tools", () => {
     }
   });
 
-  it("automatically activates a relevant skill for an unscoped TypeScript edit and traces the tool call", async () => {
+  it("does not implicitly route a file edit or add hidden tool calls", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-auto-skill-"));
     const context = makeContext(defaultConfig(root));
     const directory = path.join(root, "skills", "typescript-best-practices");
@@ -132,18 +149,137 @@ describe("Qnector grouped tools", () => {
     });
     expect(result.ok).toBe(true);
     const entries = context.activity.list();
-    const routed = entries.find(
-      (entry) => entry.action === "skills_route" && entry.status === "success",
+    expect(entries.some((entry) => entry.action === "skills_route")).toBe(
+      false,
     );
-    expect(routed?.skillTrace?.skills).toContain("typescript-best-practices");
     const write = entries.find(
       (entry) =>
         entry.tool === "files" &&
         entry.action === "write" &&
         entry.status === "success",
     );
-    expect(write?.skillTrace?.routeId).toBe(routed?.skillTrace?.routeId);
-    expect(write?.skillRoutingWarning).toBeUndefined();
+    expect(write?.skillTrace).toBeUndefined();
+    expect(write?.skillRoutingWarning?.code).toBe("SKILL_ROUTING_MISSING");
+  });
+
+  it("keeps default route responses compact while retaining full diagnostics on demand", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-compact-route-"));
+    const context = makeContext(defaultConfig(root));
+    const skillsRoot = path.join(root, "skills");
+    const directory = path.join(skillsRoot, "typescript-best-practices");
+    const instructions = "Important TypeScript guidance.\n".repeat(450);
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "SKILL.md"),
+      `---\nname: typescript-best-practices\ndescription: TypeScript coding and editing.\nallowed-tools: [files]\n---\n${instructions}`,
+    );
+    context.agentSkills = new AgentSkillService({
+      roots: [{ path: skillsRoot, source: "test" }],
+    });
+    context.skillTraceStore = {
+      default: { skills: [] },
+      byTaskId: new Map(),
+      byRouteId: new Map(),
+    };
+    const registry = new ToolRegistry();
+    const compact = await registry.call("system", context, {
+      action: "skills_route",
+      query: "TypeScript coding edit",
+      memoryTaskId: "compact-task",
+    });
+    expect(compact.ok).toBe(true);
+    const payload = (compact.data as { data: Record<string, unknown> }).data;
+    expect(payload.routeId).toEqual(expect.any(String));
+    expect(JSON.stringify(compact).length).toBeLessThan(4_000);
+    expect(payload.decisions).toBeUndefined();
+    expect(payload.skills).toEqual([
+      expect.objectContaining({
+        name: "typescript-best-practices",
+        instructionsTruncated: true,
+      }),
+    ]);
+    expect(
+      context.skillTraceStore.byRouteId?.get(payload.routeId as string)
+        ?.routingDecisions?.[0]?.selected,
+    ).toBe(true);
+
+    const repeated = await registry.call("system", context, {
+      action: "skills_route",
+      query: "  typescript   coding edit  ",
+      memoryTaskId: "compact-task",
+    });
+    expect(repeated.ok).toBe(true);
+    const reused = (repeated.data as { data: Record<string, unknown> }).data;
+    expect(reused.routeId).toBe(payload.routeId);
+    expect(reused.reused).toBe(true);
+    expect(JSON.stringify(repeated).length).toBeLessThan(950);
+    expect(JSON.stringify(reused)).not.toContain(
+      "Important TypeScript guidance",
+    );
+
+    const complete = await registry.call("system", context, {
+      action: "skills_route",
+      query: "TypeScript coding edit",
+      details: true,
+    });
+    expect(complete.ok).toBe(true);
+    const fullPayload = (
+      complete.data as {
+        data: { skills: Array<{ instructions: string }>; decisions: unknown[] };
+      }
+    ).data;
+    expect(fullPayload.skills[0]?.instructions.trim()).toBe(
+      instructions.trim(),
+    );
+    expect(fullPayload.decisions.length).toBeGreaterThan(0);
+  });
+
+  it("reuses one explicit skill route across successive task-scoped edits", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-route-reuse-"));
+    const context = makeContext(defaultConfig(root));
+    const skillsRoot = path.join(root, "skills");
+    const directory = path.join(skillsRoot, "typescript-best-practices");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "SKILL.md"),
+      "---\nname: typescript-best-practices\ndescription: TypeScript coding editing.\nallowed-tools: [files]\n---\nDo the job.\n",
+    );
+    context.agentSkills = new AgentSkillService({
+      roots: [{ path: skillsRoot, source: "test" }],
+    });
+    context.skillTraceStore = {
+      default: { skills: [] },
+      byTaskId: new Map(),
+      byRouteId: new Map(),
+    };
+    const registry = new ToolRegistry();
+    const routed = await registry.call("system", context, {
+      action: "skills_route",
+      query: "TypeScript coding editing",
+      memoryTaskId: "one-task",
+    });
+    expect(routed.ok).toBe(true);
+    for (const filename of ["first.ts", "second.ts", "third.ts"]) {
+      const result = await registry.call("files", context, {
+        action: "write",
+        path: filename,
+        content: "export const value = 1;\n",
+        memoryTaskId: "one-task",
+      });
+      expect(result.ok).toBe(true);
+    }
+    const entries = context.activity.list();
+    expect(
+      entries.filter(
+        (entry) =>
+          entry.action === "skills_route" && entry.status === "success",
+      ),
+    ).toHaveLength(1);
+    const routeIds = entries
+      .filter((entry) => entry.tool === "files" && entry.status === "success")
+      .map((entry) => entry.skillTrace?.routeId);
+    expect(new Set(routeIds).size).toBe(1);
+    expect(routeIds[0]).toBeTruthy();
   });
 
   it("records task-scoped Skill activation and tool-call context in Live Activity", async () => {

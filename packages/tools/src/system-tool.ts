@@ -25,6 +25,8 @@ import {
 } from "./tool-result.js";
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_ROUTE_SKILL_LIMIT = 3;
+const COMPACT_SKILL_INSTRUCTION_CHARS = 1_200;
 
 export const systemDefinition: ToolDefinition = {
   name: "system",
@@ -464,7 +466,45 @@ export async function executeSystem(
       if (action === "skills_route") {
         const agentSkills = requireAgentSkills(context);
         const query = stringInput(object, "query", true)!;
-        const maxResults = numberInput(object, "maxResults", 5);
+        const details = booleanInput(object, "details", false);
+        const existingTrace = context.skillTrace;
+        if (
+          existingTrace?.routeId &&
+          existingTrace.skills.length > 0 &&
+          sameRouteQuery(existingTrace.query, query)
+        ) {
+          const names = existingTrace.skills.map((skill) => skill.name);
+          if (!details) {
+            return {
+              summary: `Reused ${names.length} Agent Skill(s): ${names.join(", ")}`,
+              data: {
+                mode: "compact",
+                routeId: existingTrace.routeId,
+                reused: true,
+                skills: names.map((name) => ({ name })),
+              },
+            };
+          }
+          const skills = await Promise.all(
+            existingTrace.skills.map((skill) => agentSkills.get(skill.name)),
+          );
+          return {
+            summary: `Reused ${names.length} Agent Skill(s): ${names.join(", ")}`,
+            data: routeResponseData({
+              query,
+              routeId: existingTrace.routeId,
+              skills,
+              decisions: existingTrace.routingDecisions ?? [],
+              details,
+              reused: true,
+            }),
+          };
+        }
+        const maxResults = numberInput(
+          object,
+          "maxResults",
+          DEFAULT_ROUTE_SKILL_LIMIT,
+        );
         const plan = await agentSkills.plan(
           query,
           maxResults,
@@ -501,7 +541,14 @@ export async function executeSystem(
             skills.length > 0
               ? `Activated ${skills.length} Agent Skill(s): ${skills.map((skill) => skill.name).join(", ")}`
               : `No Agent Skills passed the runtime routing threshold for '${query}'`,
-          data: { query, routeId, skills, decisions: plan.decisions },
+          data: routeResponseData({
+            query,
+            routeId,
+            skills,
+            decisions: plan.decisions,
+            details,
+            reused: false,
+          }),
         };
       }
       if (action === "skills_search_remote") {
@@ -1071,6 +1118,67 @@ function requiredSkillScope(
   if (scope !== "user" && scope !== "workspace")
     throw new Error("INVALID_INPUT: skill scope must be user or workspace");
   return scope;
+}
+
+function sameRouteQuery(previous: string | undefined, next: string): boolean {
+  if (!previous) return false;
+  return normalizeRouteQuery(previous) === normalizeRouteQuery(next);
+}
+
+function normalizeRouteQuery(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function routeResponseData(input: {
+  query: string;
+  routeId: string;
+  skills: Array<{
+    name: string;
+    description: string;
+    instructions: string;
+    bytes: number;
+    allowedTools?: string[];
+  }>;
+  decisions: unknown[];
+  details: boolean;
+  reused: boolean;
+}): Record<string, unknown> {
+  if (input.details) {
+    return {
+      mode: "diagnostic",
+      query: input.query,
+      routeId: input.routeId,
+      reused: input.reused,
+      skills: input.skills,
+      decisions: input.decisions,
+    };
+  }
+  return {
+    mode: "compact",
+    routeId: input.routeId,
+    reused: input.reused,
+    skills: input.skills.map((skill) => {
+      const instructions = clipRouteText(
+        skill.instructions,
+        COMPACT_SKILL_INSTRUCTION_CHARS,
+      );
+      return {
+        name: skill.name,
+        description: clipRouteText(skill.description, 240),
+        ...(skill.allowedTools?.length
+          ? { allowedTools: [...skill.allowedTools] }
+          : {}),
+        instructions,
+        instructionsTruncated: instructions.length < skill.instructions.length,
+        instructionBytes: skill.bytes,
+      };
+    }),
+  };
+}
+
+function clipRouteText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function requirePlatform(context: ToolContext) {
