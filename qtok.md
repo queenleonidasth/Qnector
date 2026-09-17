@@ -95,3 +95,8 @@ This file `qtok.md` itself is newly created, untracked, and should also appear i
 
 ### Git checkpoint หลังทดสอบ
 - Commit `7eccb2a` (`fix(durable): protect daemon journal ACL and validate recovery health`) บน `feat/durable-runtime-foundation` รวมเฉพาะ 7 ไฟล์ ACL/daemon/store/test ที่แยกได้ชัด (130 insertions / 10 deletions), cached diff check ผ่าน. งาน MCP/stdio/desktop/แพ็กเกจส่วนอื่นยังอยู่ใน working tree และยังไม่ได้ commit หรือเผยแพร่ เพราะมี lockfile churn และ concurrent unrelated changes; ต้องรักษาไว้ไม่ reset. **Commit นี้ไม่ใช่ tag หรือ GitHub Release**.
+
+### อัปเดต Git หลังแก้ปัญหาและทดสอบ Frozen Lockfile (เวลา ~00:18 น.)
+- `pnpm install --lockfile-only --frozen-lockfile --offline --ignore-scripts` สำเร็จด้วย pnpm 10.15.0 ครบ 10 workspace projects; lockfile ปัจจุบัน resolve ได้ แต่มี formatting churn หลายพันบรรทัดใน commit ที่ต้องพิจารณาทำให้น้อยลงในงาน maintenance ถัดไป.
+- Commit `365d175` (`feat(durable): ship opt-in stdio parity desktop jobs and packaged recovery candidate`) รวม 29 ไฟล์ opt-in MCP stdio, daemon client, Desktop integration/Jobs, packaging smoke, lockfile และ qtok; `git diff --cached --check` ผ่านก่อน commit. **ยังไม่มี GitHub release/tag/push/upgrade production** และ release-first P5/P8 gates ไม่ครบ.
+- ข้อความก่อนหน้าในเอกสารที่ว่า MCP/stdio/Desktop ยังไม่ commit เป็นสถานะก่อน commit นี้ ให้ใช้ส่วนนี้เป็นสถานะ Git ล่าสุด. เก็บ `session-bootstrap.ts`, `session-bootstrap.test.ts`, `process-tool.ts` และ `comparekhaihub.txt` ที่ไม่เกี่ยวข้องไว้ใน working tree โดยไม่ stage หรือ reset.
