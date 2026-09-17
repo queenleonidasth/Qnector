@@ -47,6 +47,8 @@ $provenance = [ordered]@{
 $pnpm = (Get-Command "pnpm.cmd" -ErrorAction Stop).Source
 & $pnpm vitest run apps/desktop/src/main/updater-script.test.ts apps/desktop/src/main/updater-core.test.ts apps/desktop/src/main/updater-e2e.test.ts apps/desktop/src/main/startup-splash.test.ts apps/desktop/src/main/release-pipeline.test.ts apps/desktop/src/renderer/styles.test.ts apps/desktop/src/renderer/royal-effects.test.ts apps/desktop/src/renderer/gold-matrix-rain.test.ts apps/desktop/src/renderer/window-animation.test.ts apps/desktop/src/renderer/scroll-completeness.test.ts apps/desktop/src/renderer/qc-regressions.test.ts apps/desktop/src/renderer/skill-manager.test.ts apps/desktop/src/renderer/activity-feed.test.ts packages/tools/src/tools.test.ts packages/tools/src/skill-routing-guard.test.ts packages/mcp-server/src/session-bootstrap.test.ts packages/mcp-server/src/server.test.ts
 if ($LASTEXITCODE -ne 0) { throw "Desktop release regression gate failed; refusing to package" }
+& $pnpm vitest run packages/tools/src/external-mcp.test.ts
+if ($LASTEXITCODE -ne 0) { throw "External MCP integration gate failed; refusing to package" }
 & (Join-Path $PSScriptRoot "accept-skill-layout.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Skill discovery layout gate failed; refusing to package" }
 & $pnpm build:clean
