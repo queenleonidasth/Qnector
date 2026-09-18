@@ -64,6 +64,9 @@ describe("session memory bootstrap", () => {
     ]);
     expect(result).toContain("QNECTOR SESSION BOOTSTRAP");
     expect(result).toContain("CURRENT CAPABILITY RULE");
+    expect(result).toContain("short task is default");
+    expect(result).toContain("explicit 'long task'");
+    expect(result).toContain("accepted not completed");
     expect(result).toContain("current tool list outranks conversation history");
     expect(result).toContain(
       "probe system.status before saying Qnector cannot be used",

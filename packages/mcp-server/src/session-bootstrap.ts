@@ -16,7 +16,8 @@ export function buildSessionBootstrapInstructions(
   const skillCount = typeof skills === "number" ? skills : skills.length;
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
-    "After reconnect/interrupt: memory.task_resume(query), then memory.task_get(taskId); verify live files/process.task_list/git before retrying side effects. Never infer completion from a sent command.",
+    "After reconnect: memory.task_resume then memory.task_get; verify live files/process.task_list/git before retry. Never infer completion from a sent command.",
+    "TASK MODE: short task is default; explicit 'long task' only: tasks.start with idempotencyKey, return taskId as accepted not completed; resume via tasks.get/result. Fallback process.start is non-durable; never retry uncertain effects.",
     "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory and compacted summaries.",
     "If a Qnector tool is visible, probe system.status before saying Qnector cannot be used; only a live error can override it. An older claim of unavailability is stale.",
     "",
