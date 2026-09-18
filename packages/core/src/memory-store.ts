@@ -960,10 +960,9 @@ function buildAutomaticCheckpoint(
   const previousWasAutomatic = previous?.label === AUTO_CHECKPOINT_LABEL;
   const existing = state.active;
   const preserveExistingTask = Boolean(existing && !previousWasAutomatic);
-  const completedSteps = dedupeTextValues([
-    ...(existing?.completedSteps ?? []),
-    ...[...changes].reverse().map(changeStep),
-  ]).slice(-AUTO_CHECKPOINT_MAX_STEPS);
+  // File writes and Git operations are evidence of activity, not verified task completion.
+  // Keep only explicitly recorded completed steps; recentChanges retains recovery evidence.
+  const completedSteps = existing?.completedSteps ?? [];
   const safeSummary = sanitizeText(input.summary).value.trim();
   const active = sanitizeActive({
     currentTask:

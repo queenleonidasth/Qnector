@@ -214,9 +214,8 @@ describe("MemoryStore", () => {
     }
     recalled = await store.recall();
     expect(recalled.counts.checkpoints).toBe(2);
-    expect(recalled.state.active?.completedSteps).toEqual(
-      expect.arrayContaining(["files: Wrote src/e.ts (src/e.ts)"]),
-    );
+    expect(recalled.state.active?.completedSteps).toEqual([]);
+    expect(recalled.state.recentChanges[0]?.summary).toBe("Wrote src/e.ts");
 
     await store.clear("checkpoints");
     expect((await store.recall()).counts.checkpoints).toBe(0);

@@ -87,6 +87,14 @@ const drawerOrder: PrimaryDrawerName[] = [
   "settings",
 ];
 
+// Older releases auto-promoted tool logs to completion. Show those entries as
+// unverified instead of presenting a misleading green checkmark.
+function isLegacyAutoCompletion(step: string): boolean {
+  return /^(?:(?:files|git|manual): |(?:files|git|process|browser|computer)\.[a-z_]+: )/i.test(
+    step,
+  );
+}
+
 interface MemoryActiveView {
   currentTask: string;
   completedSteps: string[];
@@ -1945,9 +1953,19 @@ function App(): React.ReactElement {
                                   {task.currentTask}
                                 </div>
                                 <div className="memory-v2-task-stats">
-                                  {task.completedSteps.length} done ·{" "}
-                                  {task.pendingSteps.length} pending ·{" "}
-                                  {task.touchedPaths.length} files ·{" "}
+                                  {
+                                    task.completedSteps.filter(
+                                      (step) => !isLegacyAutoCompletion(step),
+                                    ).length
+                                  }{" "}
+                                  explicit steps ·{" "}
+                                  {
+                                    task.completedSteps.filter(
+                                      isLegacyAutoCompletion,
+                                    ).length
+                                  }{" "}
+                                  legacy unverified · {task.pendingSteps.length}{" "}
+                                  pending · {task.touchedPaths.length} files ·{" "}
                                   {task.sessionCount} session bindings
                                 </div>
                               </div>
@@ -2043,11 +2061,18 @@ function App(): React.ReactElement {
                             {memory?.state.active?.completedSteps?.map(
                               (step, idx) => (
                                 <div
-                                  className="memory-checklist-item done"
+                                  className={`memory-checklist-item ${isLegacyAutoCompletion(step) ? "pending" : "done"}`}
                                   key={`done-${idx}`}
                                 >
-                                  <span className="check-icon">✓</span>
-                                  <span>{step}</span>
+                                  <span className="check-icon">
+                                    {isLegacyAutoCompletion(step) ? "?" : "✓"}
+                                  </span>
+                                  <span>
+                                    {step}
+                                    {isLegacyAutoCompletion(step)
+                                      ? " (legacy: verify outcome)"
+                                      : ""}
+                                  </span>
                                 </div>
                               ),
                             )}

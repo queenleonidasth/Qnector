@@ -83,7 +83,23 @@ export function buildSessionBootstrapInstructions(
     const resumeNext = active.pendingSteps.find((entry) => entry.trim());
     if (resumeNext) lines.push(`Resume next: ${clip(resumeNext, 135)}`);
     pushList(lines, "Pending steps", active.pendingSteps, 3, 105);
-    pushList(lines, "Completed steps", active.completedSteps, 1, 110);
+    const explicitSteps = active.completedSteps.filter(
+      (step) =>
+        !/^(?:(?:files|git|manual): |(?:files|git|process|browser|computer)\.[a-z_]+: )/i.test(
+          step,
+        ),
+    );
+    pushList(
+      lines,
+      "Recorded completion (verify outcome)",
+      explicitSteps,
+      1,
+      110,
+    );
+    if (explicitSteps.length !== active.completedSteps.length)
+      lines.push(
+        "Legacy auto-completed tool entries omitted: verify live state before trusting them.",
+      );
     if (active.criticalContext) {
       lines.push("", "Critical context:", clip(active.criticalContext, 230));
     }

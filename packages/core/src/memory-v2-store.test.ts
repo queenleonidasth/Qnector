@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryV2Store } from "./memory-v2-store.js";
 
@@ -31,6 +32,8 @@ describe("MemoryV2Store", () => {
       title: "Desktop UI",
       currentTask: "Improve maid controls",
     });
+    expect(store.resumeTask().task).toBeNull(); // Two chats: never guess by recency.
+    expect(store.resumeTask("Convert Peridot to VRM").taskId).toBe(model.id);
 
     store.recordToolEvent({
       taskId: model.id,
@@ -191,5 +194,110 @@ describe("MemoryV2Store", () => {
       "3:checkpoint.created",
     ]);
     store.close();
+  });
+
+  it("never equates tool success with verified progress and recovers after restart", async () => {
+    const { workspace, file } = await fixture();
+    const store = new MemoryV2Store(workspace, { file });
+    const task = store.createTask({ title: "Release fix" });
+    store.recordToolEvent({
+      taskId: task.id,
+      source: "files",
+      action: "write",
+      status: "success",
+      summary: "Edited source, not yet tested",
+      paths: [path.join(workspace, "src", "fix.ts")],
+    });
+    expect(store.getTask(task.id)?.completedSteps).toEqual([]);
+    expect(store.recoveryContext(task.id).checkpoint?.label).toContain(
+      "unverified",
+    );
+    store.updateTask({
+      taskId: task.id,
+      completedSteps: ["Tests verified against fix"],
+      pendingSteps: ["Verify packaged release"],
+    });
+    store.recordToolEvent({
+      taskId: task.id,
+      source: "git",
+      action: "commit",
+      status: "success",
+      summary: "Committed fix (not released)",
+      workspaceEvidence: [workspace],
+    });
+    store.recordToolEvent({
+      taskId: task.id,
+      source: "process",
+      action: "run",
+      status: "error",
+      summary: "Packaging interrupted",
+      workspaceEvidence: [workspace],
+    });
+    expect(store.getTask(task.id)?.completedSteps).toEqual([
+      "Tests verified against fix",
+    ]);
+    expect(store.getTask(task.id)?.status).toBe("active");
+    store.close();
+
+    const restored = new MemoryV2Store(workspace, { file });
+    const recovery = restored.recoveryContext(task.id);
+    expect(recovery.recentEvents.map((event) => event.status)).toEqual([
+      "error",
+      "success",
+      "success",
+    ]);
+    expect(recovery.checkpoint?.label).toContain("unverified");
+    expect(restored.getTask(task.id)?.pendingSteps).toEqual([
+      "Verify packaged release",
+    ]);
+    expect(restored.getTask(task.id)?.completedSteps).toEqual([
+      "Tests verified against fix",
+    ]);
+    restored.close();
+  });
+
+  it("bounds automatic checkpoints but retains manually verified checkpoints", async () => {
+    const { workspace, file } = await fixture();
+    const store = new MemoryV2Store(workspace, { file });
+    const task = store.createTask({ title: "Multiple Git milestones" });
+    store.saveTaskCheckpoint(
+      task.id,
+      {
+        currentTask: task.currentTask,
+        completedSteps: ["User verified baseline"],
+        pendingSteps: ["Finish release"],
+        criticalContext: "Do not repeat deploy",
+      },
+      "Manual verified baseline",
+    );
+    for (let index = 0; index < 18; index += 1) {
+      store.recordToolEvent({
+        taskId: task.id,
+        source: "git",
+        action: "commit",
+        status: "success",
+        summary: `Committed change ${index}`,
+        workspaceEvidence: [workspace],
+      });
+    }
+    expect(store.getTask(task.id)?.completedSteps).toEqual([
+      "User verified baseline",
+    ]);
+    store.close();
+    const db = new DatabaseSync(file);
+    const rows = db
+      .prepare(
+        "SELECT label, COUNT(*) AS total FROM task_checkpoints WHERE task_id=? GROUP BY label",
+      )
+      .all(task.id) as unknown as Array<{ label: string; total: number }>;
+    expect(
+      rows.find((row) => row.label === "Manual verified baseline")?.total,
+    ).toBe(1);
+    expect(
+      rows.find(
+        (row) => row.label === "Auto recovery - unverified tool activity",
+      )?.total,
+    ).toBe(12);
+    db.close();
   });
 });

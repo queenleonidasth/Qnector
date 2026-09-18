@@ -18,8 +18,12 @@ import { localSemanticSimilarity } from "./semantic-search.js";
 
 const DEFAULT_EVENT_LIMIT = 40;
 const DEFAULT_TASK_LIMIT = 24;
-const AUTO_CHECKPOINT_EVENT_COUNT = 4;
+// The event journal records tool outcomes; only explicit task updates verify completed steps.
+// Keep automatic recovery snapshots sparse and bounded, without deleting manual checkpoints.
+const AUTO_CHECKPOINT_EVENT_COUNT = 6;
 const AUTO_CHECKPOINT_MAX_AGE_MS = 10 * 60 * 1_000;
+const MAX_AUTO_CHECKPOINTS_PER_TASK = 12;
+const AUTO_CHECKPOINT_LABEL = "Auto recovery - unverified tool activity";
 
 export interface MemoryV2StoreOptions {
   file?: string;
@@ -226,11 +230,13 @@ export class MemoryV2Store {
 
   public resumeTask(query?: string): MemoryTaskResumeResult {
     const tasks = this.listTasks(100).filter(
-      (task) => task.status !== "completed",
+      (task) => task.status !== "completed" && task.id !== this.defaultTaskId,
     );
     if (tasks.length === 0) return { task: null, taskId: null, score: 0 };
     const normalizedQuery = normalizeSearch(query ?? "");
     if (!normalizedQuery) {
+      // Do not silently resume the wrong chat's task in a shared workspace.
+      if (tasks.length !== 1) return { task: null, taskId: null, score: 0 };
       const task = tasks[0]!;
       return { task, taskId: task.id, score: 1 };
     }
@@ -242,6 +248,8 @@ export class MemoryV2Store {
           Date.parse(right.task.updatedAt) - Date.parse(left.task.updatedAt),
       );
     const best = ranked[0]!;
+    if (best.score < 8 || (ranked[1] && best.score === ranked[1].score))
+      return { task: null, taskId: null, score: best.score };
     return { task: best.task, taskId: best.task.id, score: best.score };
   }
 
@@ -325,18 +333,14 @@ export class MemoryV2Store {
         | undefined;
       if (!taskRow)
         throw new Error(`MEMORY_TASK_NOT_FOUND: task '${taskId}' disappeared`);
-      const completed =
-        event.status === "success"
-          ? dedupe([
-              ...parseStringArray(taskRow.completed_json),
-              eventStep(event),
-            ]).slice(-40)
-          : parseStringArray(taskRow.completed_json);
+      // A successful tool invocation is NOT proof that a user-visible task step is done.
+      // Preserve explicitly verified completedSteps; the event remains in the journal.
+      const completed = parseStringArray(taskRow.completed_json);
       this.db
         .prepare(
-          "UPDATE tasks SET completed_json=?, last_event_at=?, updated_at=? WHERE id=? AND workspace_id=?",
+          "UPDATE tasks SET last_event_at=?, updated_at=? WHERE id=? AND workspace_id=?",
         )
-        .run(JSON.stringify(completed), now, now, taskId, this.workspaceId);
+        .run(now, now, taskId, this.workspaceId);
       const touch = this.db.prepare(
         `INSERT INTO task_files (workspace_id, task_id, path, last_touched_at)
          VALUES (?, ?, ?, ?)
@@ -363,9 +367,10 @@ export class MemoryV2Store {
         : Number.POSITIVE_INFINITY;
       const milestone = isCheckpointMilestone(event);
       if (
+        !lastCheckpoint ||
+        milestone ||
         Number(countRow.count ?? 0) >= AUTO_CHECKPOINT_EVENT_COUNT ||
-        age >= AUTO_CHECKPOINT_MAX_AGE_MS ||
-        milestone
+        (age >= AUTO_CHECKPOINT_MAX_AGE_MS && Number(countRow.count ?? 0) >= 2)
       ) {
         automaticCheckpointId = `checkpoint_${randomUUID()}`;
         const active: MemoryActiveState = {
@@ -384,8 +389,26 @@ export class MemoryV2Store {
             this.workspaceId,
             taskId,
             now,
-            "Auto checkpoint - Memory v2 progress",
+            AUTO_CHECKPOINT_LABEL,
             JSON.stringify(active),
+          );
+        this.db
+          .prepare(
+            `DELETE FROM task_checkpoints
+             WHERE workspace_id=? AND task_id=? AND label=? AND id NOT IN (
+               SELECT id FROM task_checkpoints
+               WHERE workspace_id=? AND task_id=? AND label=?
+               ORDER BY created_at DESC, rowid DESC LIMIT ?
+             )`,
+          )
+          .run(
+            this.workspaceId,
+            taskId,
+            AUTO_CHECKPOINT_LABEL,
+            this.workspaceId,
+            taskId,
+            AUTO_CHECKPOINT_LABEL,
+            MAX_AUTO_CHECKPOINTS_PER_TASK,
           );
       }
       this.db.exec("COMMIT");
@@ -398,10 +421,52 @@ export class MemoryV2Store {
       this.emit(
         "checkpoint.created",
         taskId,
-        "Auto checkpoint - Memory v2 progress",
+        AUTO_CHECKPOINT_LABEL,
         automaticCheckpointId,
       );
     return event;
+  }
+
+  /** Small, read-only recovery pointer. Tool success here never means task completion. */
+  public recoveryContext(taskId: string): {
+    checkpoint: { id: string; createdAt: string; label: string | null } | null;
+    recentEvents: MemoryV2Event[];
+    instruction: string;
+  } {
+    this.requireTask(taskId);
+    const checkpoint = this.db
+      .prepare(
+        `SELECT id, created_at, label FROM task_checkpoints
+         WHERE workspace_id=? AND task_id=?
+         ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(this.workspaceId, taskId) as
+      { id: string; created_at: string; label: string | null } | undefined;
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM events WHERE workspace_id=? AND task_id=?
+         ORDER BY timestamp DESC, rowid DESC LIMIT 3`,
+      )
+      .all(this.workspaceId, taskId) as unknown as EventRow[];
+    return {
+      checkpoint: checkpoint
+        ? {
+            id: checkpoint.id,
+            createdAt: checkpoint.created_at,
+            label: checkpoint.label,
+          }
+        : null,
+      recentEvents: rows.map((row) => {
+        const event = eventFromRow(row);
+        return {
+          ...event,
+          summary: event.summary.slice(0, 240),
+          paths: event.paths.slice(0, 3),
+        };
+      }),
+      instruction:
+        "Tool success confirms only that invocation. Inspect the latest file/process/Git state before retrying interrupted operations; only explicit verified steps belong in completedSteps.",
+    };
   }
 
   public saveTaskCheckpoint(
@@ -513,7 +578,12 @@ export class MemoryV2Store {
   }
 
   public snapshot(
-    options: { eventLimit?: number; taskLimit?: number; taskId?: string } = {},
+    options: {
+      eventLimit?: number;
+      taskLimit?: number;
+      memoryLimit?: number;
+      taskId?: string;
+    } = {},
   ): MemoryV2Snapshot {
     const tasks = this.listTasks(options.taskLimit ?? DEFAULT_TASK_LIMIT);
     const taskId =
@@ -539,7 +609,7 @@ export class MemoryV2Store {
             clamp(options.eventLimit ?? DEFAULT_EVENT_LIMIT, 1, 200),
           ) as unknown as EventRow[]);
     const events = eventRows.map(eventFromRow);
-    const memories = this.listMemories(taskId, 100);
+    const memories = this.listMemories(taskId, options.memoryLimit ?? 100);
     const conflicts = detectConflicts(tasks);
     const updatedAt =
       [
@@ -1013,9 +1083,7 @@ function taskScore(task: MemoryTask, query: string): number {
   return score;
 }
 
-function eventStep(event: MemoryV2Event): string {
-  return `${event.source}.${event.action}: ${event.summary}`.slice(0, 1_000);
-}
+// Tool-event summaries are recovery evidence, never automatically completed steps.
 
 function isCheckpointMilestone(event: MemoryV2Event): boolean {
   if (event.status !== "success") return false;

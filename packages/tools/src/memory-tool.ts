@@ -119,6 +119,7 @@ export async function executeMemory(
         ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
         eventLimit: numberInput(object, "eventLimit", 12),
         taskLimit: numberInput(object, "taskLimit", 8),
+        memoryLimit: numberInput(object, "factLimit", 12),
       });
       return {
         summary: result.available
@@ -170,12 +171,15 @@ export async function executeMemory(
       return {
         summary: resumed.task
           ? `Resumed Memory v2 task '${resumed.task.title}'`
-          : "No resumable Memory v2 task was found",
+          : "No unambiguous Memory v2 task was found; inspect the task list",
         data: {
           ...resumed,
+          ...(resumed.task
+            ? { recovery: context.memoryV2.recoveryContext(resumed.task.id) }
+            : {}),
           instruction: resumed.task
-            ? "Pass the returned taskId as memoryTaskId on every related Qnector tool call in this chat/session."
-            : "Start a new task with memory.task_start before making project changes.",
+            ? "Pass the taskId as memoryTaskId on related calls. Read recovery.recentEvents and verify live state before replaying an interrupted operation; successful tool calls are not verified completed steps."
+            : "Call memory.task_list and choose a matching task explicitly; start a new task only if none matches. Never guess across concurrent chats.",
         },
       };
     }
@@ -202,7 +206,14 @@ export async function executeMemory(
         summary: task
           ? `Read Memory v2 task '${task.title}'`
           : "Memory v2 task not found",
-        data: { found: Boolean(task), task, taskId },
+        data: {
+          found: Boolean(task),
+          task,
+          taskId,
+          ...(task
+            ? { recovery: context.memoryV2.recoveryContext(taskId) }
+            : {}),
+        },
       };
     }
 
@@ -462,13 +473,13 @@ async function workingSetAction(
 ) {
   const baseRecall = await memory.recall({
     checkpointLimit: 1,
-    factLimit: 12,
-    changeLimit: 20,
+    factLimit: 8,
+    changeLimit: 10,
   });
   const activity = context.activity
     .list()
     .filter((entry) => entry.status !== "running")
-    .slice(-100)
+    .slice(-40)
     .reverse();
   const fileReads: string[] = [];
   const fileWrites: string[] = [];
@@ -522,10 +533,10 @@ async function workingSetAction(
   }
   const workflowRuns = context.workflowManager
     ? await context.workflowManager
-        .listRuns(context.getConfig().activeWorkspace, 10)
+        .listRuns(context.getConfig().activeWorkspace, 5)
         .catch(() => [])
     : [];
-  const recentActions = activity.slice(0, 30).map((entry) => ({
+  const recentActions = activity.slice(0, 12).map((entry) => ({
     timestamp: entry.timestamp,
     tool: entry.tool,
     action: entry.action,
@@ -540,14 +551,14 @@ async function workingSetAction(
   const recall = contextQuery
     ? await memory.recall({
         checkpointLimit: 1,
-        factLimit: 12,
-        changeLimit: 20,
+        factLimit: 8,
+        changeLimit: 10,
         query: contextQuery,
       })
     : baseRecall;
   const recentErrors = activity
     .filter((entry) => entry.status === "error")
-    .slice(0, 10)
+    .slice(0, 5)
     .map((entry) => ({
       timestamp: entry.timestamp,
       tool: entry.tool,
@@ -565,16 +576,17 @@ async function workingSetAction(
       recentChanges: recall.state.recentChanges,
       recentActions,
       resumeHint: buildResumeHint(recall.state.active, recentErrors),
-      lastFilesRead: fileReads.slice(0, 20),
-      lastFilesModified: fileWrites.slice(0, 20),
-      lastCommands: commands.slice(0, 20),
+      lastFilesRead: fileReads.slice(0, 8),
+      lastFilesModified: fileWrites.slice(0, 8),
+      lastCommands: commands.slice(0, 8),
       recentErrors,
-      managedProcesses: context.processManager.list().slice(-30),
+      managedProcesses: context.processManager.list().slice(-10),
       workflowRuns,
       memoryV2: context.memoryV2?.snapshot({
         ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
-        eventLimit: 30,
-        taskLimit: 20,
+        eventLimit: 8,
+        taskLimit: 6,
+        memoryLimit: 8,
       }),
     },
   };

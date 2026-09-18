@@ -78,6 +78,22 @@ describe("session memory bootstrap", () => {
     expect(result).toContain("Recent working set");
     expect(result).toContain("Updated runtime dashboard");
     expect(Buffer.byteLength(result, "utf8")).toBeLessThanOrEqual(3_000);
+    const polluted: MemoryRecall = {
+      ...memory,
+      state: {
+        ...memory.state,
+        facts: [],
+        active: {
+          ...active,
+          criticalContext: "",
+          completedSteps: ["files: Wrote a file", "Verified release manually"],
+        },
+      },
+    };
+    const recovered = buildSessionBootstrapInstructions(polluted);
+    expect(recovered).toContain("Legacy auto-completed tool entries omitted");
+    expect(recovered).not.toContain("files: Wrote a file");
+    expect(recovered).toContain("Verified release manually");
 
     const memoryV2: MemoryV2Snapshot = {
       version: 2,
