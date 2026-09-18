@@ -246,6 +246,23 @@ describe("P1-P10 capability upgrades", () => {
         (entry) => entry.name === "DefaultStockExportService",
       ),
     ).toBe(true);
+    const detailed = await service.documentSymbols({
+      workspaceRoot: root,
+      path: "src/service.ts",
+    });
+    const outline = await service.documentSymbols({
+      workspaceRoot: root,
+      path: "src/service.ts",
+      outline: true,
+    });
+    expect(detailed.total).toBeGreaterThan(outline.total);
+    expect(outline.symbols.map((entry) => entry.name).sort()).toEqual([
+      "DefaultStockExportService",
+      "StockExportService",
+    ]);
+    expect(outline.symbols.every((entry) => entry.container === null)).toBe(
+      true,
+    );
   });
 });
 

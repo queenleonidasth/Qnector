@@ -38,6 +38,7 @@ export const workspaceDefinition: ToolDefinition = {
           "summary",
           "diagnostics",
           "document_symbols",
+          "document_outline",
           "definition",
           "references",
           "hover",
@@ -361,6 +362,7 @@ export async function executeWorkspace(
     if (
       [
         "document_symbols",
+        "document_outline",
         "definition",
         "references",
         "hover",
@@ -379,11 +381,27 @@ export async function executeWorkspace(
         maxResults,
         offset,
       };
-      if (action === "document_symbols") {
-        const result = await context.codeIntelligence.documentSymbols(common);
+      if (action === "document_symbols" || action === "document_outline") {
+        const outline = action === "document_outline";
+        const result = await context.codeIntelligence.documentSymbols({
+          ...common,
+          ...(outline ? { outline: true } : {}),
+        });
         return {
-          summary: `Found ${result.symbols.length} of ${result.total} symbol(s) in ${sourcePath}`,
-          data: result,
+          summary: `Found ${result.symbols.length} of ${result.total} ${outline ? "top-level" : "detailed"} symbol(s) in ${sourcePath}`,
+          data: outline
+            ? {
+                ...result,
+                symbols: result.symbols.map(
+                  ({ name, kind, line, endLine }) => ({
+                    name,
+                    kind,
+                    line,
+                    endLine,
+                  }),
+                ),
+              }
+            : result,
           truncated: result.truncated,
           nextCursor: result.nextOffset,
         };

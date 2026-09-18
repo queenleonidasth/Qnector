@@ -3,14 +3,21 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { Client } from "@modelcontextprotocol/client";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
 import {
   StdioClientTransport,
   getDefaultEnvironment,
 } from "@modelcontextprotocol/client/stdio";
 
 interface ExternalMcpServerConfig {
-  command: string;
+  command?: string;
+  /** Remote Streamable HTTP endpoint; mutually exclusive with command. */
+  url?: string;
+  /** Optional DPAPI-encrypted bearer token file, supplied explicitly by owner. */
+  bearerTokenFile?: string;
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
@@ -32,6 +39,7 @@ export interface ExternalMcpServerSummary {
   name: string;
   enabled: boolean;
   command: string;
+  url?: string;
   args: string[];
   cwd?: string;
   envKeys: string[];
@@ -82,9 +90,41 @@ function validateServerConfig(
       `MCP_SERVER_DISABLED: External MCP server '${name}' is disabled`,
     );
   }
-  if (typeof value.command !== "string" || !value.command.trim()) {
+  if (
+    (value.command !== undefined && typeof value.command !== "string") ||
+    (value.url !== undefined && typeof value.url !== "string") ||
+    Boolean(value.command?.trim()) === Boolean(value.url?.trim())
+  ) {
     throw new Error(
-      `MCP_CONFIG_ERROR: External MCP server '${name}' has no command`,
+      `MCP_CONFIG_ERROR: External MCP server '${name}' requires exactly one command or url`,
+    );
+  }
+  if (value.url) {
+    let url: URL;
+    try {
+      url = new URL(value.url);
+    } catch {
+      throw new Error(`MCP_CONFIG_ERROR: Invalid URL for '${name}'`);
+    }
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (
+      (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error(
+        `MCP_CONFIG_ERROR: '${name}' requires HTTPS or loopback HTTP without URL credentials/query/fragment`,
+      );
+    }
+  }
+  if (
+    value.bearerTokenFile &&
+    (!value.url || typeof value.bearerTokenFile !== "string")
+  ) {
+    throw new Error(
+      `MCP_CONFIG_ERROR: Bearer token files require a remote URL for '${name}'`,
     );
   }
   if (value.args !== undefined && !Array.isArray(value.args)) {
@@ -190,16 +230,33 @@ async function withClient<T>(
   callback: (client: Client) => Promise<T>,
 ): Promise<T> {
   const server = await configuredServer(serverName);
-  const env = await serverEnvironment(server);
+  const env = server.url ? undefined : await serverEnvironment(server);
   const stderrChunks: string[] = [];
-  const transport = new StdioClientTransport({
-    command: server.command,
-    args: server.args ?? [],
-    ...(server.cwd ? { cwd: server.cwd } : {}),
-    ...(env ? { env } : {}),
-    stderr: "pipe",
-  });
-  transport.stderr?.on("data", (chunk) => {
+  const stdio = server.url
+    ? undefined
+    : new StdioClientTransport({
+        command: server.command!,
+        args: server.args ?? [],
+        ...(server.cwd ? { cwd: server.cwd } : {}),
+        ...(env ? { env } : {}),
+        stderr: "pipe",
+      });
+  const bearer = server.bearerTokenFile
+    ? await decryptDpapiSecret(server.bearerTokenFile)
+    : undefined;
+  if (server.bearerTokenFile && !bearer)
+    throw new Error(
+      `MCP_SECRET_ERROR: No bearer token configured for '${serverName}'`,
+    );
+  const transport = server.url
+    ? new StreamableHTTPClientTransport(new URL(server.url), {
+        requestInit: {
+          redirect: "error",
+          ...(bearer ? { headers: { Authorization: `Bearer ${bearer}` } } : {}),
+        },
+      })
+    : stdio!;
+  stdio?.stderr?.on("data", (chunk) => {
     stderrChunks.push(String(chunk));
     if (stderrChunks.length > 20) stderrChunks.shift();
   });
@@ -245,6 +302,7 @@ export async function listExternalMcpServers(): Promise<{
       name,
       enabled: server.enabled !== false,
       command: typeof server.command === "string" ? server.command : "",
+      ...(typeof server.url === "string" ? { url: server.url } : {}),
       args: Array.isArray(server.args)
         ? server.args.filter(
             (value): value is string => typeof value === "string",
@@ -257,10 +315,10 @@ export async function listExternalMcpServers(): Promise<{
         server.env && typeof server.env === "object"
           ? Object.keys(server.env).sort()
           : [],
-      secretEnvKeys:
-        server.dpapiEnv && typeof server.dpapiEnv === "object"
-          ? Object.keys(server.dpapiEnv).sort()
-          : [],
+      secretEnvKeys: [
+        ...Object.keys(server.dpapiEnv ?? {}),
+        ...(server.bearerTokenFile ? ["BEARER_TOKEN"] : []),
+      ].sort(),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return { configPath: externalMcpConfigPath(), servers };

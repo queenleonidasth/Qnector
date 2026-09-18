@@ -63,6 +63,8 @@ export interface FileIntelligenceInput {
   tsconfig?: string;
   maxResults?: number;
   offset?: number;
+  /** Return only top-level declarations instead of all nested symbols. */
+  outline?: boolean;
 }
 
 export interface PositionIntelligenceInput extends FileIntelligenceInput {
@@ -214,6 +216,7 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
       prepared.workspaceRoot,
       prepared.file,
       symbols,
+      input.outline ? 0 : Infinity,
     );
     const page = paginate(symbols, offset, maxResults);
     return {
@@ -724,6 +727,7 @@ function collectNavigationSymbols(
   workspaceRoot: string,
   file: string,
   output: CodeSymbol[],
+  depth = Infinity,
 ): void {
   for (const item of items) {
     const span = item.spans[0];
@@ -734,13 +738,15 @@ function collectNavigationSymbols(
       container,
       ...locationFromSpan(file, span, workspaceRoot),
     });
-    collectNavigationSymbols(
-      item.childItems ?? [],
-      item.text,
-      workspaceRoot,
-      file,
-      output,
-    );
+    if (depth > 0)
+      collectNavigationSymbols(
+        item.childItems ?? [],
+        item.text,
+        workspaceRoot,
+        file,
+        output,
+        depth - 1,
+      );
   }
 }
 

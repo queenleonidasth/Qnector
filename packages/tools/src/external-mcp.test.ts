@@ -1,4 +1,6 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -137,5 +139,88 @@ describe("external MCP stdio client", () => {
     expect(result).toMatchObject({ isError: true, truncated: true });
     expect(result.originalChars).toBeGreaterThan(5_000);
     expect(String(result.result)).toHaveLength(1_000);
+  });
+
+  it("supports an explicitly configured loopback HTTP MCP without leaking credentials", async () => {
+    const upstream = createServer(async (request, reply) => {
+      let body = "";
+      for await (const chunk of request) body += String(chunk);
+      if (!body.trim()) {
+        reply.writeHead(405).end();
+        return;
+      }
+      const message = JSON.parse(body) as {
+        id?: number;
+        method: string;
+        params?: { arguments?: Record<string, unknown> };
+      };
+      if (message.id === undefined) {
+        reply.writeHead(202).end();
+        return;
+      }
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-06-18",
+              capabilities: { tools: {} },
+              serverInfo: { name: "http-peer", version: "1" },
+            }
+          : message.method === "tools/list"
+            ? {
+                tools: [
+                  { name: "remote_echo", inputSchema: { type: "object" } },
+                ],
+              }
+            : {
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(message.params?.arguments ?? {}),
+                  },
+                ],
+              };
+      reply.writeHead(200, { "content-type": "application/json" });
+      reply.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+    await new Promise<void>((resolve) =>
+      upstream.listen(0, "127.0.0.1", resolve),
+    );
+    try {
+      const url = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}/mcp`;
+      await writeFile(
+        configFile,
+        JSON.stringify({ servers: { remote: { url } } }),
+      );
+      expect((await listExternalMcpServers()).servers[0]).toMatchObject({
+        url,
+        command: "",
+      });
+      expect((await listExternalMcpTools("remote")).tools[0]?.name).toBe(
+        "remote_echo",
+      );
+      const result = await callExternalMcpTool("remote", "remote_echo", {
+        value: 42,
+      });
+      expect(result.isError).toBe(false);
+      expect(JSON.stringify(result.result)).toContain("42");
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+
+  it("rejects unsafe remote endpoints before connecting", async () => {
+    for (const url of [
+      "http://example.com/mcp",
+      "https://example.com/mcp?token=secret",
+      "https://user:pass@example.com/mcp",
+    ]) {
+      await writeFile(
+        configFile,
+        JSON.stringify({ servers: { remote: { url } } }),
+      );
+      await expect(listExternalMcpTools("remote")).rejects.toThrow(
+        "MCP_CONFIG_ERROR",
+      );
+    }
   });
 });
