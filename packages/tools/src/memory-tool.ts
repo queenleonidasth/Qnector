@@ -108,17 +108,17 @@ export async function executeMemory(
 
     if (action === "recall") {
       const result = await memory.recall({
-        checkpointLimit: numberInput(object, "checkpointLimit", 10),
-        factLimit: numberInput(object, "factLimit", 100),
-        changeLimit: numberInput(object, "changeLimit", 100),
+        checkpointLimit: numberInput(object, "checkpointLimit", 3),
+        factLimit: numberInput(object, "factLimit", 12),
+        changeLimit: numberInput(object, "changeLimit", 12),
         ...(stringInput(object, "query")
           ? { query: stringInput(object, "query") }
           : {}),
       });
       const v2 = context.memoryV2?.snapshot({
         ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
-        eventLimit: numberInput(object, "eventLimit", 40),
-        taskLimit: numberInput(object, "taskLimit", 24),
+        eventLimit: numberInput(object, "eventLimit", 12),
+        taskLimit: numberInput(object, "taskLimit", 8),
       });
       return {
         summary: result.available
@@ -274,8 +274,8 @@ export async function executeMemory(
         throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
       const snapshot = context.memoryV2.snapshot({
         ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
-        eventLimit: numberInput(object, "eventLimit", 40),
-        taskLimit: numberInput(object, "taskLimit", 24),
+        eventLimit: numberInput(object, "eventLimit", 12),
+        taskLimit: numberInput(object, "taskLimit", 8),
       });
       return {
         summary: `Prepared Memory v2 snapshot with ${snapshot.counts.tasks} task(s)`,

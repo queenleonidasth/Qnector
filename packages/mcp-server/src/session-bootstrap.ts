@@ -16,7 +16,7 @@ export function buildSessionBootstrapInstructions(
   const skillCount = typeof skills === "number" ? skills : skills.length;
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
-    "Resume saved work; verify live files before changes. Do not redo completed steps.",
+    "After reconnect/interrupt: memory.task_resume(query), then memory.task_get(taskId); verify live files/process.task_list/git before retrying side effects. Never infer completion from a sent command.",
     "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory and compacted summaries.",
     "If a Qnector tool is visible, probe system.status before saying Qnector cannot be used; only a live error can override it. An older claim of unavailability is stale.",
     "",
