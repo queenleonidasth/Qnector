@@ -65,6 +65,9 @@ export interface ActivityEntry {
   tool: string;
   action: string;
   argsSummary: string;
+  /** Explicit correlation only; never infer an unrelated chat's task. */
+  taskId?: string;
+  workflowRunId?: string;
   durationMs?: number;
   status: "running" | "success" | "error";
   outputSize?: number;

@@ -65,6 +65,7 @@ export const processDefinition: ToolDefinition = {
       ptyId: { type: "string" },
       taskId: { type: "string" },
       workflowName: { type: "string" },
+      idempotencyKey: { type: "string", minLength: 1, maxLength: 256 },
       runId: { type: "string" },
       stepId: { type: "string" },
       mode: { type: "string", enum: ["sequential", "graph"] },
@@ -146,6 +147,7 @@ export async function executeProcess(
           workspace,
           stringInput(object, "workflowName", true)!,
           context.memoryTaskId,
+          stringInput(object, "idempotencyKey"),
         );
         return {
           summary: `Started workflow ${run.workflow} as ${run.runId}`,
@@ -163,6 +165,9 @@ export async function executeProcess(
           mode: workflowModeInput(object, "graph"),
           maxConcurrency: numberInput(object, "maxConcurrency", 4),
           steps: object.steps as WorkflowStep[],
+          ...(stringInput(object, "idempotencyKey")
+            ? { idempotencyKey: stringInput(object, "idempotencyKey") }
+            : {}),
           ...(context.memoryTaskId
             ? { memoryTaskId: context.memoryTaskId }
             : {}),
@@ -187,6 +192,9 @@ export async function executeProcess(
           mode: "graph",
           maxConcurrency: numberInput(object, "maxConcurrency", 4),
           steps,
+          ...(stringInput(object, "idempotencyKey")
+            ? { idempotencyKey: stringInput(object, "idempotencyKey") }
+            : {}),
           ...(context.memoryTaskId
             ? { memoryTaskId: context.memoryTaskId }
             : {}),
@@ -380,17 +388,24 @@ export async function executeProcess(
       let timedOut = false;
       try {
         snapshot = await context.processManager.waitForExit(
-          processId, boundedWaitTimeout(object, 3_000), context.abortSignal,
+          processId,
+          boundedWaitTimeout(object, 3_000),
+          context.abortSignal,
         );
       } catch (error) {
-        if (!(error instanceof Error) || !error.message.startsWith("PROCESS_WAIT_TIMEOUT:")) throw error;
+        if (
+          !(error instanceof Error) ||
+          !error.message.startsWith("PROCESS_WAIT_TIMEOUT:")
+        )
+          throw error;
         snapshot = context.processManager.snapshot(processId);
         timedOut = true;
       }
       return {
-        summary: timedOut ? `${processId} is still ${snapshot.state}; wait ended, process continues. Poll by ID.`
+        summary: timedOut
+          ? `${processId} is still ${snapshot.state}; wait ended, process continues. Poll by ID.`
           : `${processId} reached ${snapshot.state}`,
-        data: {...snapshot, waitTimedOut: timedOut},
+        data: { ...snapshot, waitTimedOut: timedOut },
       };
     }
     if (action === "wait_for_output") {
@@ -523,22 +538,44 @@ export async function executeProcess(
         : { summary: `Started ${command}`, data: snapshot };
     }
     if (action === "run") {
-      const timeoutMs = Math.max(100, Math.min(numberInput(
-        object, "timeoutMs", context.getConfig().shell.defaultTimeoutMs,
-      ), 600_000));
-      const outcome = await context.processManager.runOrBackground({
-        command, cwd, shell, timeoutMs, env,
-        maxChars: Math.max(1, Math.min(numberInput(object, "maxChars", 20_000), 200_000)),
-        outputMode: outputMode(object),
-      }, 5_000);
+      const timeoutMs = Math.max(
+        100,
+        Math.min(
+          numberInput(
+            object,
+            "timeoutMs",
+            context.getConfig().shell.defaultTimeoutMs,
+          ),
+          600_000,
+        ),
+      );
+      const outcome = await context.processManager.runOrBackground(
+        {
+          command,
+          cwd,
+          shell,
+          timeoutMs,
+          env,
+          maxChars: Math.max(
+            1,
+            Math.min(numberInput(object, "maxChars", 20_000), 200_000),
+          ),
+          outputMode: outputMode(object),
+        },
+        5_000,
+      );
       if (outcome.background) {
         const snapshot = outcome.snapshot;
         return {
           summary: `Command dispatched once as ${snapshot.id}; status ${snapshot.state}. Tool wait ended after 5 seconds, NOT execution. Poll process.output and process.task_get; do not rerun.`,
           data: {
-            processId: snapshot.id, taskId: snapshot.id, state: snapshot.state,
-            cursor: 0, outputSize: snapshot.outputSize,
-            runtimeTimeoutMs: timeoutMs, escalated: true,
+            processId: snapshot.id,
+            taskId: snapshot.id,
+            state: snapshot.state,
+            cursor: 0,
+            outputSize: snapshot.outputSize,
+            runtimeTimeoutMs: timeoutMs,
+            escalated: true,
             hint: `Use process {action: "output", processId: "${snapshot.id}", cursor: 0} for output and {action: "task_get", taskId: "${snapshot.id}"} for state. Do not repeat process.run.`,
           },
         };

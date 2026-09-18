@@ -351,6 +351,20 @@ export async function runWithActivity<T>(
   work: () => Promise<T>,
 ): Promise<ToolResult<T>> {
   const startedAt = Date.now();
+  const taskCorrelation = context.memoryTaskId
+    ? { taskId: context.memoryTaskId }
+    : {};
+  const workflowInputId =
+    tool === "process" &&
+    action.startsWith("workflow_") &&
+    isRecord(input) &&
+    typeof input.runId === "string" &&
+    /^workflow_[a-z0-9-]+$/i.test(input.runId)
+      ? input.runId
+      : undefined;
+  const workflowCorrelation = workflowInputId
+    ? { workflowRunId: workflowInputId }
+    : {};
   const skillRoutingWarning = missingSkillRoutingWarning(
     tool,
     action,
@@ -364,6 +378,8 @@ export async function runWithActivity<T>(
   const runningEntry = {
     tool,
     action,
+    ...taskCorrelation,
+    ...workflowCorrelation,
     argsSummary: argsSummary(input),
     status: "running" as const,
     ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
@@ -391,9 +407,20 @@ export async function runWithActivity<T>(
         : `${tool}.${action} completed`;
     const summary = sanitizeText(rawSummary).value;
     const completedSkillTrace = activitySkillTrace(context, tool, action);
+    const reportedRun =
+      isRecord(result) &&
+      isRecord(result.data) &&
+      typeof result.data.runId === "string" &&
+      /^workflow_[a-z0-9-]+$/i.test(result.data.runId)
+        ? result.data.runId
+        : undefined;
     const successEntry = {
       tool,
       action,
+      ...taskCorrelation,
+      ...(workflowInputId || reportedRun
+        ? { workflowRunId: workflowInputId ?? reportedRun }
+        : {}),
       argsSummary: argsSummary(input),
       status: "success" as const,
       durationMs: Date.now() - startedAt,
@@ -439,6 +466,8 @@ export async function runWithActivity<T>(
     const errorEntry = {
       tool,
       action,
+      ...taskCorrelation,
+      ...workflowCorrelation,
       argsSummary: argsSummary(input),
       status: "error" as const,
       error: parsed,

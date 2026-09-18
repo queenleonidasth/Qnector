@@ -408,7 +408,11 @@ function DurableJobsPanel(): React.ReactElement {
   const [snapshot, setSnapshot] = useState<DurableJobsSnapshot>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [output, setOutput] = useState<{taskId: string; text: string; complete: boolean}>();
+  const [output, setOutput] = useState<{
+    taskId: string;
+    text: string;
+    complete: boolean;
+  }>();
   const refresh = async (): Promise<void> => {
     setBusy(true);
     try {
@@ -420,9 +424,16 @@ function DurableJobsPanel(): React.ReactElement {
       setBusy(false);
     }
   };
-  useEffect(() => {void refresh();}, []);
+  useEffect(() => {
+    void refresh();
+  }, []);
   const cancel = async (taskId: string): Promise<void> => {
-    if (!window.confirm(`Cancel durable job ${taskId}? This stops its process tree.`)) return;
+    if (
+      !window.confirm(
+        `Cancel durable job ${taskId}? This stops its process tree.`,
+      )
+    )
+      return;
     setBusy(true);
     try {
       await window.qnector.cancelDurableJob(taskId);
@@ -437,7 +448,7 @@ function DurableJobsPanel(): React.ReactElement {
     setBusy(true);
     try {
       const page = await window.qnector.durableOutput(taskId, "stdout");
-      setOutput({taskId, text: page.text, complete: page.complete});
+      setOutput({ taskId, text: page.text, complete: page.complete });
       setError(undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -449,38 +460,119 @@ function DurableJobsPanel(): React.ReactElement {
     <details className="runtime-section" open data-testid="durable-jobs-panel">
       <summary>
         <span>Durable jobs · preview</span>
-        <span className="runtime-section-count">{snapshot?.jobs.length ?? 0} recent</span>
+        <span className="runtime-section-count">
+          {snapshot?.jobs.length ?? 0} recent
+        </span>
       </summary>
       <div className="runtime-section-body runtime-list">
-        <p className="runtime-intro">Jobs run in a separate daemon. Disconnecting ChatGPT or closing this panel does not cancel them. Legacy workflows are not durable yet.</p>
-        <button type="button" className="btn-drawer-action" disabled={busy} onClick={() => void refresh()}>
+        <p className="runtime-intro">
+          Jobs run in a separate daemon. Disconnecting ChatGPT or closing this
+          panel does not cancel them. Legacy workflows are not durable yet.
+        </p>
+        <button
+          type="button"
+          className="btn-drawer-action"
+          disabled={busy}
+          onClick={() => void refresh()}
+        >
           {busy ? "Refreshing…" : "Refresh jobs"}
         </button>
-        {snapshot?.state === "disabled" && <div className="runtime-empty">Durable Preview is off. Legacy tasks are unchanged.</div>}
-        {snapshot?.state === "unavailable" && <div role="alert" className="runtime-empty">Daemon unavailable: {snapshot.message}</div>}
-        {error && <div role="alert" className="runtime-empty">{error}</div>}
-        {snapshot?.state === "ready" && snapshot.jobs.length === 0 && <div className="runtime-empty">No durable jobs for the active workspace.</div>}
-        {snapshot?.jobs.map(job => (
+        {snapshot?.health && (
+          <div className="runtime-list-row" role="status">
+            <div>
+              <strong>Daemon: {snapshot.health?.state}</strong>
+              <span>
+                Job Host:{" "}
+                {snapshot.health?.jobHostEnabled ? "enabled" : "unavailable"} ·
+                Protocol {snapshot.health.protocol}
+              </span>
+              <small>
+                Local daemon health only; does not verify ChatGPT Web or the
+                tunnel.
+              </small>
+            </div>
+          </div>
+        )}
+        {snapshot?.state === "disabled" && (
+          <div className="runtime-empty">
+            Durable Preview is off. Legacy tasks are unchanged.
+          </div>
+        )}
+        {snapshot?.state === "unavailable" && (
+          <div role="alert" className="runtime-empty">
+            Daemon unavailable: {snapshot.message}
+          </div>
+        )}
+        {error && (
+          <div role="alert" className="runtime-empty">
+            {error}
+          </div>
+        )}
+        {snapshot?.state === "ready" && snapshot.jobs.length === 0 && (
+          <div className="runtime-empty">
+            No durable jobs for the active workspace.
+          </div>
+        )}
+        {snapshot?.jobs.map((job) => (
           <div className="runtime-list-row" key={job.taskId}>
-            <span className={`item-bead ${job.state === "succeeded" ? "success" : job.state === "failed" || job.state === "interrupted" ? "error" : "running"}`} />
+            <span
+              className={`item-bead ${job.state === "succeeded" ? "success" : job.state === "failed" || job.state === "interrupted" ? "error" : "running"}`}
+            />
             <div>
               <strong title={job.taskId}>{job.taskId.slice(0, 19)}…</strong>
-              <span>{job.state} · {job.outcome} outcome · {formatTime(job.createdAt)}</span>
-              <button type="button" className="btn-drawer-action" disabled={busy} onClick={() => void showOutput(job.taskId)}>Show stdout</button>{" "}
-              {["queued", "starting", "running", "canceling"].includes(job.state) && (
-                <button type="button" className="btn-drawer-action" disabled={busy || job.state === "canceling"} onClick={() => void cancel(job.taskId)}>Cancel job</button>
+              <span>
+                {job.state} · {job.outcome} outcome ·{" "}
+                {formatTime(job.createdAt)}
+              </span>
+              <button
+                type="button"
+                className="btn-drawer-action"
+                disabled={busy}
+                onClick={() => void showOutput(job.taskId)}
+              >
+                Show stdout
+              </button>{" "}
+              {["queued", "starting", "running", "canceling"].includes(
+                job.state,
+              ) && (
+                <button
+                  type="button"
+                  className="btn-drawer-action"
+                  disabled={busy || job.state === "canceling"}
+                  onClick={() => void cancel(job.taskId)}
+                >
+                  Cancel job
+                </button>
               )}
             </div>
           </div>
         ))}
-        {output && <div className="runtime-list-row" role="region" aria-label="Durable job output">
-          <div>
-            <strong>Output · {output.taskId.slice(0, 19)}…</strong>
-            <pre className="activity-detail-code">{output.text || "No stdout yet"}</pre>
-            <small>{output.complete ? "Output complete" : "First 4 KiB only; more output may be available"}</small>
-            <button type="button" className="btn-drawer-action" onClick={() => setOutput(undefined)}>Hide output</button>
+        {output && (
+          <div
+            className="runtime-list-row"
+            role="region"
+            aria-label="Durable job output"
+          >
+            <div>
+              <strong>Output · {output.taskId.slice(0, 19)}…</strong>
+              <pre className="activity-detail-code">
+                {output.text || "No stdout yet"}
+              </pre>
+              <small>
+                {output.complete
+                  ? "Output complete"
+                  : "First 4 KiB only; more output may be available"}
+              </small>
+              <button
+                type="button"
+                className="btn-drawer-action"
+                onClick={() => setOutput(undefined)}
+              >
+                Hide output
+              </button>
+            </div>
           </div>
-        </div>}
+        )}
       </div>
     </details>
   );

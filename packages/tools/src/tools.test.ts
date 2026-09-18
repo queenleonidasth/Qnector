@@ -52,6 +52,43 @@ describe("Qnector grouped tools", () => {
     });
   });
 
+  it("provides opt-in minimal/coding/full context profiles without hiding tools", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-context-profile-"));
+    const context = makeContext(defaultConfig(root));
+    const registry = new ToolRegistry();
+    const minimal = await registry.call("system", context, {
+      action: "context_snapshot",
+      profile: "minimal",
+    });
+    const coding = await registry.call("system", context, {
+      action: "context_snapshot",
+      profile: "coding",
+    });
+    const full = await registry.call("system", context, {
+      action: "context_snapshot",
+      profile: "full",
+    });
+    expect(minimal.ok && coding.ok && full.ok).toBe(true);
+    const value = (response: typeof minimal) =>
+      (
+        response.data as {
+          data: {
+            mode: string;
+            capabilities: unknown;
+            managedProcesses: unknown[];
+            recentActivity: unknown[];
+          };
+        }
+      ).data;
+    expect(value(minimal).mode).toBe("minimal");
+    expect(value(coding).mode).toBe("coding");
+    expect(value(full).mode).toBe("full");
+    expect(value(minimal).managedProcesses).toEqual([]);
+    expect(value(minimal).recentActivity).toEqual([]);
+    expect(value(minimal).capabilities).toEqual(value(coding).capabilities);
+    expect(registry.list()).toHaveLength(8);
+  });
+
   it("advertises eight grouped tools and supports file mutations", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-tools-"));
     const config = defaultConfig(root);
@@ -584,9 +621,10 @@ describe("Qnector grouped tools", () => {
       documentIntelligence: new DocumentIntelligenceService(),
     };
 
-    const started = await registry.call("process", context, {
+    const batchRequest = {
       action: "workflow_document_batch",
       workflowName: "document-batch-fixture",
+      idempotencyKey: "document-batch-fixture-request-1",
       maxConcurrency: 3,
       documents: [
         {
@@ -600,7 +638,8 @@ describe("Qnector grouped tools", () => {
           ],
         },
       ],
-    });
+    };
+    const started = await registry.call("process", context, batchRequest);
     expect(started.ok).toBe(true);
     const runId = (started.data as { data?: { runId?: string } } | undefined)
       ?.data?.runId;
@@ -625,6 +664,11 @@ describe("Qnector grouped tools", () => {
     expect(result.ok).toBe(true);
     expect(JSON.stringify(result.data)).toContain("brief-validate");
     expect(JSON.stringify(result.data)).toContain("brief-edit-2");
+    const retry = await registry.call("process", context, batchRequest);
+    expect(retry.ok).toBe(true);
+    expect(
+      (retry.data as { data?: { runId?: string } } | undefined)?.data?.runId,
+    ).toBe(runId);
   });
 
   it("removes parallel from the public schema and rejects hidden parallel requests", async () => {
@@ -888,21 +932,29 @@ describe("Qnector grouped tools", () => {
     const registry = new ToolRegistry();
     const startedAt = Date.now();
     const launched = await registry.call("process", context, {
-      action: "run", shell: "direct", timeoutMs: 15_000,
+      action: "run",
+      shell: "direct",
+      timeoutMs: 15_000,
       command: `"${process.execPath}" -e "setTimeout(() => console.log('LONG_DONE'), 5700)"`,
     });
     expect(launched.ok).toBe(true);
     expect(Date.now() - startedAt).toBeLessThan(8_000);
-    const data = (launched.data as {data?: {processId?: string; escalated?: boolean}})?.data;
+    const data = (
+      launched.data as { data?: { processId?: string; escalated?: boolean } }
+    )?.data;
     expect(data?.escalated).toBe(true);
     expect(data?.processId).toMatch(/^proc_/);
     const waited = await registry.call("process", context, {
-      action: "wait_for_exit", processId: data!.processId, timeoutMs: 4_000,
+      action: "wait_for_exit",
+      processId: data!.processId,
+      timeoutMs: 4_000,
     });
     expect(waited.ok).toBe(true);
     expect(JSON.stringify(waited.data)).toContain('"state":"exited"');
     const output = await registry.call("process", context, {
-      action: "output", processId: data!.processId, cursor: 0,
+      action: "output",
+      processId: data!.processId,
+      cursor: 0,
     });
     expect(JSON.stringify(output.data)).toContain("LONG_DONE");
   }, 15_000);

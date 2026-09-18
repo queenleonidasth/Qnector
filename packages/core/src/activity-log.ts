@@ -124,6 +124,17 @@ export class ActivityLogger {
       tool: input.tool,
       action: input.action,
       argsSummary: sanitizeArgsSummary(input.argsSummary),
+      ...(input.taskId
+        ? { taskId: sanitizeText(input.taskId).value.slice(0, 256) }
+        : {}),
+      ...(input.workflowRunId
+        ? {
+            workflowRunId: sanitizeText(input.workflowRunId).value.slice(
+              0,
+              256,
+            ),
+          }
+        : {}),
       status: input.status,
       ...(input.durationMs === undefined
         ? {}

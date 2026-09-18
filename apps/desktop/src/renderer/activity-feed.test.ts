@@ -23,6 +23,44 @@ function activity(
 }
 
 describe("activity feed coalescing", () => {
+  it("never coalesces identical concurrent calls belonging to different tasks", () => {
+    const running = activity("a", "running", "2026-08-31T09:00:00.000Z", {
+      taskId: "task-a",
+    });
+    const done = activity("b", "success", "2026-08-31T09:00:01.000Z", {
+      taskId: "task-b",
+    });
+    expect(coalesceActivity([running, done])).toHaveLength(2);
+  });
+
+  it("coalesces workflow start once its runId becomes available on completion", () => {
+    const running = activity("started", "running", "2026-08-31T09:00:00.000Z", {
+      tool: "process",
+      action: "workflow_run",
+      taskId: "memory-1",
+    });
+    const completed = activity(
+      "completed",
+      "success",
+      "2026-08-31T09:00:01.000Z",
+      {
+        tool: "process",
+        action: "workflow_run",
+        taskId: "memory-1",
+        workflowRunId: "workflow_new",
+      },
+    );
+    expect(coalesceActivity([running, completed])).toEqual([
+      { ...completed, id: running.id },
+    ]);
+  });
+
+  it("shows task and workflow identity beside skill route evidence", async () => {
+    const source = await readFile(rendererUrl, "utf8");
+    expect(source).toContain("selectedActivity.taskId");
+    expect(source).toContain("selectedActivity.workflowRunId");
+  });
+
   it("replaces a matching running row with its completed tool call", () => {
     const running = activity("run-1", "running", "2026-08-31T09:00:00.000Z");
     const success = activity("done-1", "success", "2026-08-31T09:00:00.050Z", {

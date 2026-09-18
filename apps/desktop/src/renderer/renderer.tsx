@@ -368,6 +368,33 @@ const ActivityPanel = React.memo(function ActivityPanel({
                 </strong>
               </div>
             </div>
+            {(selectedActivity.taskId || selectedActivity.workflowRunId) && (
+              <div className="activity-detail-section">
+                <span className="activity-detail-label">
+                  TASK → TOOL → SKILL
+                </span>
+                <div className="activity-detail-summary">
+                  {selectedActivity.taskId && (
+                    <div>
+                      Task: <code>{selectedActivity.taskId}</code>
+                    </div>
+                  )}
+                  {selectedActivity.workflowRunId && (
+                    <div>
+                      Workflow: <code>{selectedActivity.workflowRunId}</code>
+                    </div>
+                  )}
+                  <div>
+                    Tool: {selectedActivity.tool}.{selectedActivity.action}
+                  </div>
+                  <div>
+                    Skills:{" "}
+                    {selectedActivity.skillTrace?.skills.join(", ") ||
+                      "No correlated Skill evidence"}
+                  </div>
+                </div>
+              </div>
+            )}
             {selectedActivity.skillRoutingWarning && (
               <div className="activity-detail-section activity-routing-warning">
                 <span className="activity-detail-label">SKILL ROUTING</span>

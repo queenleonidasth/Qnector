@@ -128,6 +128,9 @@ export interface WorkflowRun {
   definition: WorkflowDefinition;
 
   memoryTaskId?: string;
+  /** Stable caller key and definition fingerprint prevent duplicate dispatch after a lost response. */
+  idempotencyKey?: string;
+  definitionFingerprint?: string;
   error?: string;
 }
 
@@ -231,6 +234,7 @@ export class WorkflowManager {
     Map<string, AbortController>
   >();
   private readonly writeQueues = new Map<string, Promise<void>>();
+  private readonly startLocks = new Map<string, Promise<WorkflowRun>>();
   private readonly executeTool?: WorkflowToolExecutor;
   private readonly resourceCoordinator: ResourceCoordinator;
   private accepting = true;
@@ -337,9 +341,15 @@ export class WorkflowManager {
     workspace: string,
     name: string,
     memoryTaskId?: string,
+    idempotencyKey?: string,
   ): Promise<WorkflowRun> {
     const definition = await this.get(workspace, name);
-    return this.startDefinition(workspace, definition, memoryTaskId);
+    return this.startDefinition(
+      workspace,
+      definition,
+      memoryTaskId,
+      idempotencyKey,
+    );
   }
 
   public async run(
@@ -351,6 +361,7 @@ export class WorkflowManager {
       maxConcurrency?: number;
       steps: WorkflowStep[];
       memoryTaskId?: string;
+      idempotencyKey?: string;
     },
   ): Promise<WorkflowRun> {
     const now = new Date().toISOString();
@@ -367,13 +378,93 @@ export class WorkflowManager {
       createdAt: now,
       updatedAt: now,
     });
-    return this.startDefinition(workspace, definition, input.memoryTaskId);
+    return this.startDefinition(
+      workspace,
+      definition,
+      input.memoryTaskId,
+      input.idempotencyKey,
+    );
   }
 
   private async startDefinition(
     workspace: string,
     definition: WorkflowDefinition,
     memoryTaskId?: string,
+    idempotencyKey?: string,
+  ): Promise<WorkflowRun> {
+    if (idempotencyKey !== undefined) {
+      if (!idempotencyKey.trim() || idempotencyKey.length > 256)
+        throw new Error(
+          "INVALID_INPUT: idempotencyKey must be 1..256 characters",
+        );
+      const key = idempotencyKey.trim();
+      const runId = `workflow_${createHash("sha256").update(path.resolve(workspace)).update("\0").update(key).digest("hex").slice(0, 32)}`;
+      const fingerprint = createHash("sha256")
+        .update(
+          JSON.stringify({
+            name: definition.name,
+            description: definition.description ?? "",
+            mode: definition.mode,
+            maxConcurrency: definition.maxConcurrency,
+            steps: definition.steps,
+          }),
+        )
+        .digest("hex");
+      const existing = this.startLocks.get(runId);
+      if (existing) {
+        const run = await existing;
+        if (run.definitionFingerprint !== fingerprint)
+          throw new Error(
+            "WORKFLOW_IDEMPOTENCY_CONFLICT: different workflow for this key",
+          );
+        return cloneRun(run);
+      }
+      const pending = (async (): Promise<WorkflowRun> => {
+        const live = this.runs.get(runId);
+        const stored =
+          live ??
+          (await this.loadRun(workspace, runId).catch((error: unknown) => {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+            throw error;
+          }));
+        if (stored) {
+          if (
+            stored.idempotencyKey !== key ||
+            stored.definitionFingerprint !== fingerprint
+          )
+            throw new Error(
+              "WORKFLOW_IDEMPOTENCY_CONFLICT: different workflow for this key",
+            );
+          this.runs.set(runId, stored);
+          return cloneRun(stored);
+        }
+        return this.startDefinitionOnce(
+          workspace,
+          definition,
+          memoryTaskId,
+          runId,
+          key,
+          fingerprint,
+        );
+      })();
+      this.startLocks.set(runId, pending);
+      try {
+        return await pending;
+      } finally {
+        if (this.startLocks.get(runId) === pending)
+          this.startLocks.delete(runId);
+      }
+    }
+    return this.startDefinitionOnce(workspace, definition, memoryTaskId);
+  }
+
+  private async startDefinitionOnce(
+    workspace: string,
+    definition: WorkflowDefinition,
+    memoryTaskId?: string,
+    idempotentRunId?: string,
+    idempotencyKey?: string,
+    definitionFingerprint?: string,
   ): Promise<WorkflowRun> {
     if (!this.accepting)
       throw new Error(
@@ -381,7 +472,7 @@ export class WorkflowManager {
       );
     const now = new Date().toISOString();
     const run: WorkflowRun = {
-      runId: `workflow_${randomUUID()}`,
+      runId: idempotentRunId ?? `workflow_${randomUUID()}`,
       workflow: definition.name,
       workspace: path.resolve(workspace),
       state: "pending",
@@ -393,6 +484,7 @@ export class WorkflowManager {
       activeSteps: [],
       definition: structuredClone(definition),
       ...(memoryTaskId ? { memoryTaskId } : {}),
+      ...(idempotencyKey ? { idempotencyKey, definitionFingerprint } : {}),
       steps: definition.steps.map((step, index) => ({
         index,
         id: step.id!,
@@ -1233,6 +1325,13 @@ export class WorkflowManager {
       definition,
       ...(typeof parsed.memoryTaskId === "string"
         ? { memoryTaskId: parsed.memoryTaskId }
+        : {}),
+      ...(typeof parsed.idempotencyKey === "string" &&
+      typeof parsed.definitionFingerprint === "string"
+        ? {
+            idempotencyKey: parsed.idempotencyKey,
+            definitionFingerprint: parsed.definitionFingerprint,
+          }
         : {}),
       ...(typeof parsed.error === "string" ? { error: parsed.error } : {}),
       steps: definition.steps.map((step, index) => {

@@ -7,6 +7,11 @@ export function sameActivityCall(
   return (
     left.tool === right.tool &&
     left.action === right.action &&
+    left.taskId === right.taskId &&
+    (left.workflowRunId === right.workflowRunId ||
+      (left.tool === "process" &&
+        left.action.startsWith("workflow_") &&
+        (!left.workflowRunId || !right.workflowRunId))) &&
     left.argsSummary === right.argsSummary
   );
 }

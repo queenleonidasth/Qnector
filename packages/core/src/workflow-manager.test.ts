@@ -36,6 +36,48 @@ afterEach(async () => {
 });
 
 describe("WorkflowManager harness", () => {
+  it("reuses an idempotent run across reconnects and rejects changed steps", async () => {
+    const root = await temporaryRoot("qnector-workflow-idempotency-");
+    const manager = createManager();
+    const definition = {
+      name: "safe",
+      idempotencyKey: "retry-42",
+      mode: "sequential" as const,
+      steps: [{ id: "once", type: "delay" as const, delayMs: 1 }],
+    };
+    const first = await manager.run(root, definition);
+    await manager.wait(root, first.runId, 5_000);
+    const second = await manager.run(root, definition);
+    expect(second.runId).toBe(first.runId);
+    expect(second.steps[0]?.attempt).toBe(1);
+    const restarted = createManager();
+    const recovered = await restarted.run(root, definition);
+    expect(recovered.runId).toBe(first.runId);
+    await expect(
+      restarted.run(root, {
+        ...definition,
+        steps: [{ id: "other", type: "delay", delayMs: 1 }],
+      }),
+    ).rejects.toThrow("WORKFLOW_IDEMPOTENCY_CONFLICT");
+  });
+
+  it("coalesces concurrent idempotent workflow starts", async () => {
+    const root = await temporaryRoot("qnector-workflow-concurrent-");
+    const manager = createManager();
+    const definition = {
+      name: "safe-concurrent",
+      idempotencyKey: "retry-43",
+      steps: [{ id: "once", type: "delay" as const, delayMs: 25 }],
+    };
+    const [first, second] = await Promise.all([
+      manager.run(root, definition),
+      manager.run(root, definition),
+    ]);
+    expect(second.runId).toBe(first.runId);
+    expect(await manager.listRuns(root)).toHaveLength(1);
+    await manager.wait(root, first.runId, 5_000);
+  });
+
   it("kills an active command before reporting the run canceled", async () => {
     const root = await temporaryRoot("qnector-workflow-cancel-");
     const manager = createManager();

@@ -145,6 +145,12 @@ export const systemDefinition: ToolDefinition = {
       maxResults: { type: "integer", minimum: 1, maximum: 1000 },
       offset: { type: "integer", minimum: 0 },
       details: { type: "boolean" },
+      profile: {
+        type: "string",
+        enum: ["minimal", "coding", "full"],
+        description:
+          "Optional context_snapshot verbosity only; does not change available MCP tools or permissions",
+      },
       keys: {
         type: "array",
         items: { type: "string" },
@@ -327,15 +333,25 @@ export async function executeSystem(
       }
       if (action === "context_snapshot") {
         const config = context.getConfig();
-        const details = booleanInput(object, "details", false);
+        const requestedProfile = stringInput(object, "profile");
+        if (
+          requestedProfile &&
+          !["minimal", "coding", "full"].includes(requestedProfile)
+        )
+          throw new Error(
+            "INVALID_INPUT: profile must be minimal, coding, or full",
+          );
+        const details =
+          booleanInput(object, "details", false) || requestedProfile === "full";
+        const minimal = requestedProfile === "minimal" && !details;
         const [build, memory, release, nativeQnector, windows] =
           await Promise.all([
             getBuildIdentity(),
             context.memory
               ?.recall({
                 checkpointLimit: 1,
-                factLimit: details ? 8 : 4,
-                changeLimit: details ? 8 : 4,
+                factLimit: minimal ? 1 : details ? 8 : 4,
+                changeLimit: minimal ? 1 : details ? 8 : 4,
               })
               .catch(() => undefined),
             details
@@ -352,23 +368,25 @@ export async function executeSystem(
               ? context.uiAutomation?.windows(30).catch(() => [])
               : Promise.resolve([]),
           ]);
-        const recentActivity = context.activity
-          .list()
-          .filter((entry) => entry.status !== "running")
-          .slice(details ? -20 : -8)
-          .reverse()
-          .map((entry) => ({
-            timestamp: entry.timestamp,
-            tool: entry.tool,
-            action: entry.action,
-            status: entry.status,
-            summary: entry.summary ?? entry.error?.message ?? "",
-          }));
+        const recentActivity = minimal
+          ? []
+          : context.activity
+              .list()
+              .filter((entry) => entry.status !== "running")
+              .slice(details ? -20 : -8)
+              .reverse()
+              .map((entry) => ({
+                timestamp: entry.timestamp,
+                tool: entry.tool,
+                action: entry.action,
+                status: entry.status,
+                summary: entry.summary ?? entry.error?.message ?? "",
+              }));
         return {
           summary: `Context snapshot for ${config.activeWorkspace}${details ? " (expanded)" : " (compact)"}`,
           data: {
             capturedAt: new Date().toISOString(),
-            mode: details ? "expanded" : "compact",
+            mode: requestedProfile ?? (details ? "expanded" : "compact"),
             machine: {
               hostname: os.hostname(),
               platform: process.platform,
@@ -385,9 +403,9 @@ export async function executeSystem(
                   facts: memory.state.facts,
                 }
               : null,
-            managedProcesses: context.processManager
-              .list()
-              .slice(details ? -50 : -15),
+            managedProcesses: minimal
+              ? []
+              : context.processManager.list().slice(details ? -50 : -15),
             nativeQnectorProcesses: details
               ? (nativeQnector?.processes ?? [])
               : [],
