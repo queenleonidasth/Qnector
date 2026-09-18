@@ -1,6 +1,11 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
+# A clean release worktree has no workspace dist yet. Build dependencies before
+# bundling the durable daemon, which imports @qnector/execution/dist/index.js.
+$pnpm = (Get-Command "pnpm.cmd" -ErrorAction Stop).Source
+& $pnpm build
+if ($LASTEXITCODE -ne 0) { throw "Initial workspace build failed; refusing to package" }
 $dotnet = Join-Path $env:ProgramFiles "dotnet\dotnet.exe"
 if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = "dotnet" }
 & $dotnet publish (Join-Path $projectRoot "tools\uia-helper\Qnector.UiaHelper.csproj") -c Release -r win-x64 --self-contained true -o (Join-Path $projectRoot "tools\uia-helper\publish")
