@@ -697,7 +697,7 @@ export class QnectorRuntime {
     }
     if (this.durableDaemonRoot) {
       server.registerTool("tasks", {
-        title: "Qnector durable tasks (OPT-IN PREVIEW)",
+        title: "Qnector durable tasks (experimental Windows)",
         description: "Use an already-running independent daemon. start requires a caller-stable idempotencyKey. A lost MCP connection stops waiting, not work. Use taskId with wait, result or output; cancel is explicit. Development preview, not Job Object or production ready.",
         inputSchema: fromJsonSchema(durableTaskSchema),
         annotations: {destructiveHint: true, openWorldHint: false},

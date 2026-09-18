@@ -24,7 +24,7 @@ describe("missing skill routing diagnostic", () => {
     ).toMatchObject({ code: "SKILL_ROUTING_MISSING" });
   });
 
-  it("warns when a route exists but activated no skills or no skill supports the tool", () => {
+  it("does not falsely report a missing route when routing completed without an applicable skill", () => {
     expect(
       missingSkillRoutingWarning(
         "files",
@@ -35,7 +35,7 @@ describe("missing skill routing diagnostic", () => {
           skills: [],
         },
       )?.code,
-    ).toBe("SKILL_ROUTING_MISSING");
+    ).toBeUndefined();
     expect(
       missingSkillRoutingWarning(
         "files",
@@ -46,7 +46,7 @@ describe("missing skill routing diagnostic", () => {
           skills: [{ name: "browser-only", allowedTools: ["browser"] }],
         },
       )?.code,
-    ).toBe("SKILL_ROUTING_MISSING");
+    ).toBeUndefined();
   });
 
   it("does not flag read-only calls or work that already has route context", () => {

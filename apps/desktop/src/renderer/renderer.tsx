@@ -283,7 +283,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
                         className="activity-routing-missing-badge"
                         title={item.skillRoutingWarning.message}
                       >
-                        ROUTING MISSING
+                        ROUTE UNVERIFIED
                       </span>
                     )}
                     {item.status === "running" ? (
@@ -372,7 +372,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
               <div className="activity-detail-section activity-routing-warning">
                 <span className="activity-detail-label">SKILL ROUTING</span>
                 <div className="activity-detail-summary">
-                  <strong>ROUTING MISSING</strong> ·{" "}
+                  <strong>ROUTE UNVERIFIED</strong> ·{" "}
                   {selectedActivity.skillRoutingWarning.message}
                 </div>
               </div>

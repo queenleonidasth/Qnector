@@ -119,18 +119,12 @@ export function missingSkillRoutingWarning(
   trace?: SkillTraceState,
 ): ActivitySkillRoutingWarning | undefined {
   if (!isSubstantiveMutation(tool, action, input)) return undefined;
-  if (
-    trace?.routeId &&
-    trace.activatedAt &&
-    trace.skills.some(
-      (skill) =>
-        !skill.allowedTools?.length || skill.allowedTools.includes(tool),
-    )
-  )
-    return undefined;
+  // A successful route is not missing merely because no selected skill applies
+  // to this tool. Skill applicability is shown separately by activitySkillTrace.
+  if (trace?.routeId && trace.activatedAt) return undefined;
   return {
     code: "SKILL_ROUTING_MISSING",
-    message: `Substantive ${tool}.${action} work ran without an activated Agent Skill route. Call system.skills_route before related mutations so Skill context and trace evidence are explicit.`,
+    message: `No applicable Skill route evidence was attached to ${tool}.${action}. This does not prove routing was skipped: stateless MCP calls must pass skillRouteId or memoryTaskId to correlate their route. Reuse the activated routeId; do not reroute automatically.`,
   };
 }
 

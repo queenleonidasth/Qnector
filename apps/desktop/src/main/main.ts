@@ -49,6 +49,7 @@ import {
 } from "./login-item.js";
 import { DesktopUpdater } from "./updater.js";
 import { ensurePreviewDaemon, watchPreviewDaemon } from "./durable-daemon.js";
+import { shouldEnableDurableTasks } from "./durable-policy.js";
 import { cancelDurableJob, listDurableJobs, readDurableJobOutput } from "./durable-jobs.js";
 import { openTerminalWindow } from "./terminal-launcher.js";
 import { closeSplashWindow, createSplashWindow } from "./splash-window.js";
@@ -176,9 +177,10 @@ async function initializeRuntime(
   qnectorPerformance.mark("mcp-runtime-imported", {
     importMs: Date.now() - importStarted,
   });
-  // Explicit preview only; legacy tools remain untouched by default.
+  // Durable task API is additive on Windows; existing tools stay available.
+  // QNECTOR_DURABLE_PREVIEW=0 disables daemon startup without deleting jobs.
   let durableDaemonRoot: string | undefined;
-  if (process.platform === "win32" && process.env.QNECTOR_DURABLE_PREVIEW === "1") {
+  if (shouldEnableDurableTasks(process.platform, process.env.QNECTOR_DURABLE_PREVIEW)) {
     const bundleDirectory = app.isPackaged
       ? path.join(process.resourcesPath, "durable-runtime")
       : path.resolve(app.getAppPath(), "../../packages/execution/job-host/dist");

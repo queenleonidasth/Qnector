@@ -73,7 +73,8 @@ describe("2026-09-11 QC regression guards", () => {
 
   it("surfaces missing Agent Skill routing in Live Activity", () => {
     expect(renderer).toContain("skillRoutingWarning");
-    expect(renderer).toContain("ROUTING MISSING");
+    expect(renderer).toContain("ROUTE UNVERIFIED");
+    expect(renderer).not.toContain("ROUTING MISSING");
     expect(renderer).toContain("SKILL ROUTING");
     expect(styles).toContain(".activity-routing-missing-badge");
   });
