@@ -64,9 +64,10 @@ describe("session memory bootstrap", () => {
     ]);
     expect(result).toContain("QNECTOR SESSION BOOTSTRAP");
     expect(result).toContain("CURRENT CAPABILITY RULE");
-    expect(result).toContain("short task is default");
-    expect(result).toContain("explicit 'long task'");
-    expect(result).toContain("accepted not completed");
+    expect(result).toContain("short default");
+    expect(result).toContain("'/long '");
+    expect(result).toContain("'long task'");
+    expect(result).toContain("accepted taskId, not completion");
     expect(result).toContain("current tool list outranks conversation history");
     expect(result).toContain(
       "probe system.status before saying Qnector cannot be used",
@@ -140,6 +141,8 @@ describe("session memory bootstrap", () => {
     const dense = buildSessionBootstrapInstructions(memory, [], memoryV2, 24);
     expect(Buffer.byteLength(dense, "utf8")).toBeLessThanOrEqual(3_000);
     expect(dense).toContain("Agent Skills: 24 available");
+    expect(dense).toContain("'/long '");
+    expect(dense).toContain("'/long' alone needs a task description");
     expect(dense).toContain("task-3 [blocked]");
     expect(dense).not.toContain("task-0 [active]");
     expect(dense).toContain("Task conflict warning");

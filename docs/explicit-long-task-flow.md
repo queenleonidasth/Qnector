@@ -2,7 +2,7 @@
 
 ## Rule
 
-Short task is the default. Only an explicit user instruction containing `long task` opts into background execution. This is an agent-facing session-bootstrap rule, **not** a deterministic server-side classifier of chat messages. Do not infer long task from duration alone. The installed desktop must be rebuilt/released to receive this new bootstrap instruction.
+Short task is the default. Only an explicit `long task` request or a user message starting with `/long ` (followed by the task description) opts into background execution; `/long` alone does not submit a task. This is an agent-facing session-bootstrap rule, **not** a deterministic server-side classifier of chat messages. Do not infer long task from duration alone. The installed desktop must be rebuilt/released to receive this new bootstrap instruction.
 
 For suitable shell/CLI work, prefer the opt-in `tasks` MCP tool when actually advertised and an independent daemon is running. Submit once with `action: start`, a stable caller-generated `idempotencyKey`, and a command; default `waitTimeoutMs: 0`. Return the acknowledged `taskId` as *accepted*, never *completed*. Later query `tasks.get`, `tasks.output` and `tasks.result` before reporting verified completion. A lost response is recovered with the SAME idempotency key, never a new submission. A command cannot encompass work that requires further model reasoning, consent, user GUI interaction, or unreviewed release/deletion: pause for review instead. User instructions and permissions still apply.
 
