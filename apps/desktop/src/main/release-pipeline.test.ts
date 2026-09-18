@@ -39,6 +39,7 @@ describe("GitHub release pipeline", () => {
     expect(script).toContain("build-provenance.json");
     expect(script).toContain("sourceRevision");
     expect(script).toContain("lockfileSha256");
+    expect(script).toContain('"qnector-icon.ico"');
   });
 
   it("declares the runtime MCP client as a desktop production dependency", async () => {

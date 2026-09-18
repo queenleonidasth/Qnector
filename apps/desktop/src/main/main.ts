@@ -50,7 +50,11 @@ import {
 import { DesktopUpdater } from "./updater.js";
 import { ensurePreviewDaemon, watchPreviewDaemon } from "./durable-daemon.js";
 import { shouldEnableDurableTasks } from "./durable-policy.js";
-import { cancelDurableJob, listDurableJobs, readDurableJobOutput } from "./durable-jobs.js";
+import {
+  cancelDurableJob,
+  listDurableJobs,
+  readDurableJobOutput,
+} from "./durable-jobs.js";
 import { openTerminalWindow } from "./terminal-launcher.js";
 import { closeSplashWindow, createSplashWindow } from "./splash-window.js";
 
@@ -180,21 +184,40 @@ async function initializeRuntime(
   // Durable task API is additive on Windows; existing tools stay available.
   // QNECTOR_DURABLE_PREVIEW=0 disables daemon startup without deleting jobs.
   let durableDaemonRoot: string | undefined;
-  if (shouldEnableDurableTasks(process.platform, process.env.QNECTOR_DURABLE_PREVIEW)) {
+  if (
+    shouldEnableDurableTasks(
+      process.platform,
+      process.env.QNECTOR_DURABLE_PREVIEW,
+    )
+  ) {
     const bundleDirectory = app.isPackaged
       ? path.join(process.resourcesPath, "durable-runtime")
-      : path.resolve(app.getAppPath(), "../../packages/execution/job-host/dist");
+      : path.resolve(
+          app.getAppPath(),
+          "../../packages/execution/job-host/dist",
+        );
     try {
       durableDaemonRoot = await ensurePreviewDaemon(
-        path.join(configDirectory(), "durable-preview-job-v1"), bundleDirectory, process.execPath,
+        path.join(configDirectory(), "durable-preview-job-v1"),
+        bundleDirectory,
+        process.execPath,
       );
       stopDaemonSupervisor?.();
       previewDaemonRoot = durableDaemonRoot;
-      stopDaemonSupervisor = watchPreviewDaemon(durableDaemonRoot, bundleDirectory, process.execPath, {
-        onError: error => console.error("Durable preview supervisor:", error.message),
-      });
+      stopDaemonSupervisor = watchPreviewDaemon(
+        durableDaemonRoot,
+        bundleDirectory,
+        process.execPath,
+        {
+          onError: (error) =>
+            console.error("Durable preview supervisor:", error.message),
+        },
+      );
     } catch (error) {
-      console.error("Durable preview unavailable; legacy tools remain active:", error);
+      console.error(
+        "Durable preview unavailable; legacy tools remain active:",
+        error,
+      );
     }
   }
   const instance = new Runtime({
@@ -305,7 +328,9 @@ function createWindow(options?: {
   if (process.platform === "win32") {
     mainWindow.setAppDetails({
       appId: WINDOWS_APP_ID,
-      appIconPath: process.execPath,
+      appIconPath: app.isPackaged
+        ? path.join(process.resourcesPath, "qnector-icon.ico")
+        : getResourcePath("icon.ico"),
       appIconIndex: 0,
     });
   }
@@ -445,16 +470,31 @@ function registerIpc(): void {
   ipcMain.handle("activity:list", () => runtime?.activity.list() ?? []);
   ipcMain.handle("durable:jobs", async () => {
     const current = await requireRuntime();
-    return listDurableJobs(previewDaemonRoot, current.getConfig().activeWorkspace);
+    return listDurableJobs(
+      previewDaemonRoot,
+      current.getConfig().activeWorkspace,
+    );
   });
   ipcMain.handle("durable:cancel", async (_event, taskId: string) => {
     const current = await requireRuntime();
-    return cancelDurableJob(previewDaemonRoot, current.getConfig().activeWorkspace, taskId);
+    return cancelDurableJob(
+      previewDaemonRoot,
+      current.getConfig().activeWorkspace,
+      taskId,
+    );
   });
-  ipcMain.handle("durable:output", async (_event, taskId: string, stream: "stdout" | "stderr") => {
-    const current = await requireRuntime();
-    return readDurableJobOutput(previewDaemonRoot, current.getConfig().activeWorkspace, taskId, stream);
-  });
+  ipcMain.handle(
+    "durable:output",
+    async (_event, taskId: string, stream: "stdout" | "stderr") => {
+      const current = await requireRuntime();
+      return readDurableJobOutput(
+        previewDaemonRoot,
+        current.getConfig().activeWorkspace,
+        taskId,
+        stream,
+      );
+    },
+  );
   ipcMain.handle(
     "memory:call",
     async (_event, input: Record<string, unknown>) => {

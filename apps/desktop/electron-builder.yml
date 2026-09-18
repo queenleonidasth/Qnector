@@ -22,6 +22,9 @@ files:
   - "!node_modules/node-pty/third_party/conpty/**/win10-arm64/**"
 asar: true
 extraResources:
+  # Windows Shell needs a real filesystem path for taskbar app details.
+  - from: resources/icon.ico
+    to: qnector-icon.ico
   - from: ../../skills
     to: skills
     filter:

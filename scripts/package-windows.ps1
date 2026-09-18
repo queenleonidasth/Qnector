@@ -95,7 +95,8 @@ $requiredPackagedResources = @(
   "typescript-lib\lib.d.ts",
   "typescript-lib\lib.es2022.d.ts",
   "typescript-lib\lib.dom.d.ts",
-  "build-provenance.json"
+  "build-provenance.json",
+  "qnector-icon.ico"
 )
 foreach ($relative in $requiredPackagedResources) {
   $candidate = Join-Path $resourceRoot $relative
