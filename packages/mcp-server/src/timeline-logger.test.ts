@@ -100,6 +100,7 @@ describe("MCP timeline diagnostics", () => {
     }
     expect(related.find(event => event.phase === "tool_start")?.toolName).toBe("system");
     expect(related.find(event => event.phase === "rpc_parsed")?.detail?.rpcId).toBe("2");
+    expect(related.find(event => event.phase === "response_flushed")?.detail?.socketBytesDelta).toBeGreaterThan(0);
     expect(JSON.stringify(related)).not.toContain("arguments");
     const probeEvents = (await events(file)).filter(event =>
       event.requestId === probe.headers.get("x-qnector-trace-id"));

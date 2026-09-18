@@ -491,11 +491,15 @@ export class QnectorRuntime {
         ? {rpcId: String(rpc.id).slice(0, 80)} : {}),
     });
     const startedAt = Date.now();
+    // Capture before finish: reply.raw.socket may be cleared on close.
+    const responseSocket = reply.raw.socket;
+    const initialSocketBytes = responseSocket?.bytesWritten ?? 0;
+    const socketByteDelta = () => Math.max(0, (responseSocket?.bytesWritten ?? initialSocketBytes) - initialSocketBytes);
     let traceRecorded = false;
     const recordTrace = (status: "success" | "error", summary: string) => {
       if (traceRecorded) return;
       traceRecorded = true;
-      const socketBytesWritten = reply.raw.socket?.bytesWritten ?? 0;
+      const socketBytesDelta = socketByteDelta();
       this.activity.recordBuffered({
         tool: "mcp",
         action: "exchange",
@@ -506,7 +510,7 @@ export class QnectorRuntime {
           path: request.url.split("?", 1)[0],
           statusCode: reply.raw.statusCode,
           durationMs: Date.now() - startedAt,
-          socketBytesWritten,
+          socketBytesDelta,
           aborted: reply.raw.destroyed && !reply.raw.writableFinished,
         }),
         status,
@@ -530,7 +534,7 @@ export class QnectorRuntime {
       this.timeline.record(timelineContext, "client_aborted", {source: "req"}));
     reply.raw.once("finish", () => this.timeline.record(timelineContext,
       "response_flushed", {statusCode: reply.raw.statusCode,
-        bytesWritten: reply.raw.socket?.bytesWritten ?? 0}));
+        socketBytesDelta: socketByteDelta()}));
     const originalWriteHead = reply.raw.writeHead;
     let responseWritten = false;
     const observedWriteHead = ((...args: Parameters<typeof originalWriteHead>) => {
