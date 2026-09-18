@@ -55,7 +55,9 @@ import type {
 import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry } from "@qnector/tools";
 import { durableTaskSchema, executeDurableTask } from "./durable-task-tool.js";
-import { attachSseHeartbeat, boundMcpToolResult } from "./mcp-reliability.js";
+import { attachSseHeartbeat, boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
+import { TimelineLogger, timelineLogPath } from "./timeline-logger.js";
+import { runTimeoutProbe, type ProbeMode } from "./timeout-probe.js";
 import type { SkillTraceStore, ToolContext } from "@qnector/tools";
 import {
   buildSessionBootstrapError,
@@ -74,6 +76,10 @@ const LONG_CONTEXT_TOOL_ANCHOR =
 const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
 
 export interface QnectorRuntimeOptions {
+  /** Override diagnostics path for isolated tests. */
+  timelineLogFile?: string;
+  /** Diagnostics only; never publish this long-running tool without opt-in. */
+  enableTimeoutProbe?: boolean;
   /** Explicit opt-in; daemon must already be running at this isolated root. */
   durableDaemonRoot?: string;
   config?: QnectorConfig;
@@ -102,6 +108,8 @@ export interface QnectorRuntimeOptions {
 }
 
 export class QnectorRuntime {
+  private readonly timeline: TimelineLogger;
+  private readonly enableTimeoutProbe: boolean;
   private readonly durableDaemonRoot?: string;
   public readonly app: FastifyInstance;
   public readonly registry = new ToolRegistry();
@@ -163,6 +171,8 @@ export class QnectorRuntime {
       },
     };
     this.configFile = options.configFile;
+    this.timeline = new TimelineLogger(options.timelineLogFile ?? (() => timelineLogPath(this.configFile)));
+    this.enableTimeoutProbe = options.enableTimeoutProbe ?? process.env.QNECTOR_TIMEOUT_PROBE === "1";
     this.processManager =
       options.processManager ?? new ProcessManager(this.config.shell.windows);
     this.codeIntelligence =
@@ -397,6 +407,7 @@ export class QnectorRuntime {
     await this.processManager.stopAll();
     await this.activity.flush();
     if (this.listening) await this.app.close();
+    await this.timeline.flush();
     this.memoryV2.close();
     this.listening = false;
     this.state = "disconnected";
@@ -470,6 +481,15 @@ export class QnectorRuntime {
       return;
     }
     const traceId = randomUUID();
+    const timelineContext = this.timeline.start(traceId);
+    this.timeline.record(timelineContext, "request_received", {method: request.method});
+    const rpc = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+      ? request.body as Record<string, unknown> : undefined;
+    this.timeline.record(timelineContext, "rpc_parsed", {
+      method: typeof rpc?.method === "string" ? rpc.method.slice(0, 80) : request.method,
+      ...(typeof rpc?.id === "number" || typeof rpc?.id === "string"
+        ? {rpcId: String(rpc.id).slice(0, 80)} : {}),
+    });
     const startedAt = Date.now();
     let traceRecorded = false;
     const recordTrace = (status: "success" | "error", summary: string) => {
@@ -495,27 +515,66 @@ export class QnectorRuntime {
       });
     };
     reply.raw.once("close", () => {
+      this.timeline.record(timelineContext, "stream_closed", {
+        source: "res", finished: reply.raw.writableFinished,
+      });
+      if (!reply.raw.writableFinished)
+        this.timeline.record(timelineContext, "client_aborted", {source: "res"});
       if (!reply.raw.writableFinished)
         recordTrace(
           "error",
           "MCP exchange disconnected before response finished",
         );
     });
+    request.raw.once("aborted", () =>
+      this.timeline.record(timelineContext, "client_aborted", {source: "req"}));
+    reply.raw.once("finish", () => this.timeline.record(timelineContext,
+      "response_flushed", {statusCode: reply.raw.statusCode,
+        bytesWritten: reply.raw.socket?.bytesWritten ?? 0}));
+    const originalWriteHead = reply.raw.writeHead;
+    let responseWritten = false;
+    const observedWriteHead = ((...args: Parameters<typeof originalWriteHead>) => {
+      if (!responseWritten) {
+        responseWritten = true;
+        this.timeline.record(timelineContext, "response_written", {
+          statusCode: typeof args[0] === "number" ? args[0] : reply.raw.statusCode,
+        });
+      }
+      return Reflect.apply(originalWriteHead, reply.raw, args) as typeof reply.raw;
+    }) as typeof reply.raw.writeHead;
+    reply.raw.writeHead = observedWriteHead;
+    const restoreWriteHead = () => {
+      if (reply.raw.writeHead === observedWriteHead) reply.raw.writeHead = originalWriteHead;
+    };
+    reply.raw.once("finish", restoreWriteHead);
+    reply.raw.once("close", restoreWriteHead);
+    reply.raw.socket?.setNoDelay(true);
     reply.raw.setHeader("X-Qnector-Trace-Id", traceId);
     reply.raw.setHeader("X-Qnector-Schema-Revision", MCP_SCHEMA_REVISION);
     reply.raw.setHeader("X-Qnector-Capability", "live");
     reply.hijack();
     // Never emit SSE comments into JSON or stdio. The guard only writes when
     // the MCP library has committed an actual event-stream response.
-    const stopHeartbeat = attachSseHeartbeat(reply.raw);
+    const call = rpc?.params && typeof rpc.params === "object" && !Array.isArray(rpc.params)
+      ? rpc.params as Record<string, unknown> : undefined;
+    const callArgs = call?.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments)
+      ? call.arguments as Record<string, unknown> : undefined;
+    const quietProbe = this.enableTimeoutProbe && rpc?.method === "tools/call" &&
+      call?.name === "system.timeout_probe" &&
+      (callArgs?.mode === "silent" || callArgs?.mode === "progress");
+    const stopHeartbeat = quietProbe ? () => undefined : attachSseHeartbeat(reply.raw, undefined, () =>
+      this.timeline.record(timelineContext, "keepalive_sent"));
     try {
-      await this.mcpNodeHandler(
+      await this.timeline.run(timelineContext, () => this.mcpNodeHandler(
         request.raw,
         reply.raw,
         request.method === "POST" ? request.body : undefined,
-      );
+      ));
       recordTrace("success", "MCP exchange completed");
     } catch (error) {
+      this.timeline.record(timelineContext, "error", {
+        source: "mcp_handler", errorType: error instanceof Error ? error.name : "unknown",
+      });
       recordTrace(
         "error",
         `MCP exchange failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -552,15 +611,36 @@ export class QnectorRuntime {
             "qnector/skillsRouting": "required-for-substantive-work",
           },
         },
-        async (input) => {
-          const result = await this.registry.call(
-            definition.name,
-            this.context(
-              skillTraceSessionId || undefined,
-              requestContext?.requestInfo?.signal,
-            ),
-            input,
-          );
+        async (input, extra) => {
+          const toolTimeline = this.timeline.current();
+          const progressToken = (extra.mcpReq._meta as {progressToken?: string | number} | undefined)?.progressToken;
+          // Only log token presence, never its actual value.
+          this.timeline.record(toolTimeline, "tool_start", {progressTokenProvided: progressToken !== undefined}, definition.name);
+          let result: Awaited<ReturnType<typeof this.registry.call>>;
+          try {
+            result = await withToolProgressHeartbeat({
+              progressToken,
+              notify: notification => extra.mcpReq.notify(notification),
+              signal: extra.mcpReq.signal,
+              onSent: count => this.timeline.record(toolTimeline, "tool_progress", {count}, definition.name),
+              onError: error => this.timeline.record(toolTimeline, "error", {
+                source: "progress_heartbeat", errorType: error instanceof Error ? error.name : "unknown",
+              }, definition.name),
+            }, () => this.registry.call(
+              definition.name,
+              this.context(
+                skillTraceSessionId || undefined,
+                requestContext?.requestInfo?.signal,
+              ),
+              input,
+            ));
+          } catch (error) {
+            this.timeline.record(toolTimeline, "error", {
+              source: "tool", errorType: error instanceof Error ? error.name : "unknown",
+            }, definition.name);
+            throw error;
+          }
+          this.timeline.record(toolTimeline, "tool_end", {ok: result.ok}, definition.name);
           const bounded = boundMcpToolResult(result);
           const { attachments, ...jsonResult } = bounded;
           return {
@@ -577,6 +657,39 @@ export class QnectorRuntime {
           };
         },
       );
+    }
+    if (this.enableTimeoutProbe) {
+      server.registerTool("system.timeout_probe", {
+        title: "Qnector timeout diagnostic (opt-in only)",
+        description: "Diagnostic: hold this tool call for durationSec (0..300). Run only in a controlled timeout test. Progress needs a client progressToken; keepalive works only for actual SSE responses.",
+        inputSchema: fromJsonSchema({type: "object", additionalProperties: false,
+          properties: {durationSec: {type: "integer", minimum: 0, maximum: 300},
+            mode: {type: "string", enum: ["silent", "progress", "keepalive", "both"]}},
+          required: ["durationSec", "mode"]}),
+      }, async (input, ctx) => {
+        const probeInput = input as Record<string, unknown>;
+        const span = this.timeline.current();
+        this.timeline.record(span, "tool_start", undefined, "system.timeout_probe");
+        try {
+          const token = (ctx.mcpReq._meta as {progressToken?: string | number} | undefined)?.progressToken;
+          const result = await runTimeoutProbe({
+            durationSec: probeInput.durationSec as number,
+            mode: probeInput.mode as ProbeMode,
+            progressToken: token,
+            notify: notification => ctx.mcpReq.notify(notification),
+            signal: ctx.mcpReq.signal,
+            onProgress: count => this.timeline.record(span, "tool_progress", {count}, "system.timeout_probe"),
+          });
+          this.timeline.record(span, "tool_end", {ok: true, actualMs: result.actualMs}, "system.timeout_probe");
+          return {content: [{type: "text" as const, text: JSON.stringify(result)}],
+            structuredContent: result};
+        } catch (error) {
+          this.timeline.record(span, "error", {source: "timeout_probe",
+            errorType: error instanceof Error ? error.name : "unknown"}, "system.timeout_probe");
+          return {isError: true, content: [{type: "text" as const,
+            text: error instanceof Error ? error.message : "PROBE_FAILED"}]};
+        }
+      });
     }
     if (this.durableDaemonRoot) {
       server.registerTool("tasks", {

@@ -46,5 +46,5 @@ describe("P3 bounded waiting over durable IPC", () => {
       .toMatchObject({text: "WAIT_OK", complete: true});
     expect(await daemonRequest(root, {action: "wait", taskId, waitTimeoutMs: 20_001}))
       .toMatchObject({ok: false, error: "INVALID_INPUT: waitTimeoutMs must be 0..20000"});
-  });
+  }, 15_000); // Windows Job Host startup can exceed Vitest's 5-second default.
 });

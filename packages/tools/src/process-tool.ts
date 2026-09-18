@@ -12,7 +12,7 @@ import type { ProcessShell, WorkflowStep } from "@qnector/core";
 export const processDefinition: ToolDefinition = {
   name: "process",
   description:
-    "Run PowerShell, cmd, direct CLI commands, long-running processes, interactive PTY/ConPTY terminals, and persistent workflow graphs. Use start/output for background commands and pty_start/pty_read/pty_write for terminal programs that require interactive input.",
+    "Run PowerShell, cmd, direct CLI commands, long-running processes, interactive PTY/ConPTY terminals, and persistent workflow graphs. process.run auto-escalates after 5 seconds: if it returns a processId, poll action=output with cursor and action=task_get until finished; if the response is lost, use action=task_list to recover the running process by command/start time before deciding whether to rerun. Use start/output for known long-running commands and pty_start/pty_read/pty_write for interactive input.",
   inputSchema: {
     type: "object",
     properties: {
@@ -218,7 +218,7 @@ export async function executeProcess(
         const result = await context.workflowManager.wait(
           workspace,
           runId,
-          numberInput(object, "timeoutMs", 120_000),
+          boundedWaitTimeout(object, 3_000),
         );
         return {
           summary: result.timedOut
@@ -376,14 +376,21 @@ export async function executeProcess(
       const processId =
         stringInput(object, "processId") ??
         stringInput(object, "taskId", true)!;
-      const snapshot = await context.processManager.waitForExit(
-        processId,
-        boundedWaitTimeout(object, 30_000),
-        context.abortSignal,
-      );
+      let snapshot;
+      let timedOut = false;
+      try {
+        snapshot = await context.processManager.waitForExit(
+          processId, boundedWaitTimeout(object, 3_000), context.abortSignal,
+        );
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith("PROCESS_WAIT_TIMEOUT:")) throw error;
+        snapshot = context.processManager.snapshot(processId);
+        timedOut = true;
+      }
       return {
-        summary: `${processId} reached ${snapshot.state}`,
-        data: snapshot,
+        summary: timedOut ? `${processId} is still ${snapshot.state}; wait ended, process continues. Poll by ID.`
+          : `${processId} reached ${snapshot.state}`,
+        data: {...snapshot, waitTimedOut: timedOut},
       };
     }
     if (action === "wait_for_output") {
@@ -394,7 +401,7 @@ export async function executeProcess(
         processId,
         pattern: stringInput(object, "pattern", true)!,
         cursor: numberInput(object, "cursor", 0),
-        timeoutMs: boundedWaitTimeout(object, 30_000),
+        timeoutMs: boundedWaitTimeout(object, 3_000),
         caseSensitive: booleanInput(object, "caseSensitive", false),
         signal: context.abortSignal,
       });
@@ -409,7 +416,7 @@ export async function executeProcess(
       const result = await context.processManager.waitForPort({
         host: stringInput(object, "host") ?? "127.0.0.1",
         port: numberInput(object, "port", Number.NaN),
-        timeoutMs: boundedWaitTimeout(object, 30_000),
+        timeoutMs: boundedWaitTimeout(object, 3_000),
         intervalMs: numberInput(object, "intervalMs", 200),
         signal: context.abortSignal,
       });
@@ -516,28 +523,27 @@ export async function executeProcess(
         : { summary: `Started ${command}`, data: snapshot };
     }
     if (action === "run") {
-      const result = await context.processManager.run({
-        command,
-        cwd,
-        shell,
-        timeoutMs: numberInput(
-          object,
-          "timeoutMs",
-          context.getConfig().shell.defaultTimeoutMs,
-        ),
-        env,
-        maxChars: Math.max(
-          1,
-          Math.min(numberInput(object, "maxChars", 100_000), 1_000_000),
-        ),
+      const timeoutMs = Math.max(100, Math.min(numberInput(
+        object, "timeoutMs", context.getConfig().shell.defaultTimeoutMs,
+      ), 600_000));
+      const outcome = await context.processManager.runOrBackground({
+        command, cwd, shell, timeoutMs, env,
+        maxChars: Math.max(1, Math.min(numberInput(object, "maxChars", 20_000), 200_000)),
         outputMode: outputMode(object),
-        signal: context.abortSignal,
-      });
-      const timeoutMs = numberInput(
-        object,
-        "timeoutMs",
-        context.getConfig().shell.defaultTimeoutMs,
-      );
+      }, 5_000);
+      if (outcome.background) {
+        const snapshot = outcome.snapshot;
+        return {
+          summary: `Command dispatched once as ${snapshot.id}; status ${snapshot.state}. Tool wait ended after 5 seconds, NOT execution. Poll process.output and process.task_get; do not rerun.`,
+          data: {
+            processId: snapshot.id, taskId: snapshot.id, state: snapshot.state,
+            cursor: 0, outputSize: snapshot.outputSize,
+            runtimeTimeoutMs: timeoutMs, escalated: true,
+            hint: `Use process {action: "output", processId: "${snapshot.id}", cursor: 0} for output and {action: "task_get", taskId: "${snapshot.id}"} for state. Do not repeat process.run.`,
+          },
+        };
+      }
+      const result = outcome.result;
       if (result.exitCode === null && result.durationMs >= timeoutMs)
         throw new Error(`COMMAND_TIMEOUT: Command exceeded ${timeoutMs} ms`);
       return {
@@ -723,6 +729,6 @@ function boundedWaitTimeout(
 ): number {
   return Math.max(
     100,
-    Math.min(Math.floor(numberInput(input, "timeoutMs", fallback)), 120_000),
+    Math.min(Math.floor(numberInput(input, "timeoutMs", fallback)), 10_000),
   );
 }

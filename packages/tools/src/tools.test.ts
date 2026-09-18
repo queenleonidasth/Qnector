@@ -882,6 +882,31 @@ describe("Qnector grouped tools", () => {
     expect(JSON.stringify(result)).toMatch(/v\d+/);
   });
 
+  it("returns a tracked process ID rather than blocking a long MCP call", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-escalation-"));
+    const context = makeContext(defaultConfig(root));
+    const registry = new ToolRegistry();
+    const startedAt = Date.now();
+    const launched = await registry.call("process", context, {
+      action: "run", shell: "direct", timeoutMs: 15_000,
+      command: `"${process.execPath}" -e "setTimeout(() => console.log('LONG_DONE'), 5700)"`,
+    });
+    expect(launched.ok).toBe(true);
+    expect(Date.now() - startedAt).toBeLessThan(8_000);
+    const data = (launched.data as {data?: {processId?: string; escalated?: boolean}})?.data;
+    expect(data?.escalated).toBe(true);
+    expect(data?.processId).toMatch(/^proc_/);
+    const waited = await registry.call("process", context, {
+      action: "wait_for_exit", processId: data!.processId, timeoutMs: 4_000,
+    });
+    expect(waited.ok).toBe(true);
+    expect(JSON.stringify(waited.data)).toContain('"state":"exited"');
+    const output = await registry.call("process", context, {
+      action: "output", processId: data!.processId, cursor: 0,
+    });
+    expect(JSON.stringify(output.data)).toContain("LONG_DONE");
+  }, 15_000);
+
   it("returns structured TypeScript diagnostics with pagination and invalidates changed source", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-diagnostics-"));
     await mkdir(path.join(root, "src"), { recursive: true });

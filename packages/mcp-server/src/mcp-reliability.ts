@@ -11,6 +11,7 @@ export const MCP_SSE_HEARTBEAT_MS = 15_000;
 export function attachSseHeartbeat(
   response: ServerResponse,
   intervalMs = MCP_SSE_HEARTBEAT_MS,
+  onHeartbeat?: () => void,
 ): () => void {
   let stopped = false;
   let writtenContentType: string | undefined;
@@ -55,13 +56,59 @@ export function attachSseHeartbeat(
         (trailing !== "" && !/\r?\n\r?\n$/.test(trailing))) return;
     const contentType = response.getHeader("content-type") ?? writtenContentType;
     if (typeof contentType !== "string" || !/^text\/event-stream(?:\s*;|\s*$)/i.test(contentType)) return;
-    try { response.write(": qnector-keepalive\n\n"); }
-    catch { stop(); }
+    try {
+      response.write(": qnector-keepalive\n\n");
+      onHeartbeat?.();
+    } catch { stop(); }
   }, Math.max(10, intervalMs));
   timer.unref();
   response.once("close", stop);
   response.once("finish", stop);
   return stop;
+}
+
+/** MCP progress is a separate channel from SSE comments. Only a client-supplied
+ * progressToken allows sending it; it cannot bypass the platform's hard limit. */
+export async function withToolProgressHeartbeat<T>(options: {
+  progressToken?: string | number;
+  notify: (notification: {method: "notifications/progress";
+    params: {progressToken: string | number; progress: number}}) => Promise<void>;
+  signal?: AbortSignal;
+  intervalMs?: number;
+  onSent?: (count: number) => void;
+  onError?: (error: unknown) => void;
+}, work: () => Promise<T>): Promise<T> {
+  if (options.progressToken === undefined) return work();
+  const token = options.progressToken;
+  let count = 0;
+  let stopped = false;
+  let reportedError = false;
+  const reportError = (error: unknown): void => {
+    if (reportedError) return;
+    reportedError = true;
+    try { options.onError?.(error); } catch { /* diagnostics are non-fatal */ }
+  };
+  const tick = (): void => {
+    if (stopped || options.signal?.aborted) return;
+    const progress = ++count;
+    try {
+      void options.notify({method: "notifications/progress", params: {
+        progressToken: token, progress,
+      }}).then(() => options.onSent?.(progress)).catch(reportError);
+    } catch (error) {
+      reportError(error); // A failed heartbeat must never fail the tool.
+    }
+  };
+  const stop = (): void => { stopped = true; clearInterval(timer); };
+  const timer = setInterval(tick, Math.max(10, options.intervalMs ?? 10_000));
+  timer.unref();
+  options.signal?.addEventListener("abort", stop, {once: true});
+  try {
+    return await work();
+  } finally {
+    stop();
+    options.signal?.removeEventListener("abort", stop);
+  }
 }
 
 /** Preserve execution truth and continuation metadata, never cut JSON midway.

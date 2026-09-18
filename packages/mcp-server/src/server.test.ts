@@ -130,6 +130,7 @@ describe("Qnector MCP runtime", () => {
       params: {},
     });
     const listedText = JSON.stringify(listed.body);
+    expect(listedText).not.toContain("system.timeout_probe");
     expect(listedText).not.toContain("Continue the saved Qnector task");
     for (const expected of [
       "workspace",

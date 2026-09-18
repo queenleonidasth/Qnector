@@ -47,7 +47,12 @@ interface ManagedProcess {
   output: string;
   baseCursor: number;
   listeners: Set<(snapshot: ProcessSnapshot) => void>;
+  runCapture?: { stdout: OutputCollector; stderr: OutputCollector; hash: ReturnType<typeof createHash> };
 }
+
+export type EscalatedRun =
+  | { background: false; result: RunResult }
+  | { background: true; snapshot: ProcessSnapshot };
 
 export interface ProcessOutput {
   processId: string;
@@ -282,7 +287,50 @@ export class ProcessManager {
     };
   }
 
-  public start(options: RunOptions): ProcessSnapshot {
+  /** Start only once, return ordinary output for short commands or a tracked
+   * process handle after the UI wait budget. The child is not tied to HTTP. */
+  public async runOrBackground(options: RunOptions, foregroundMs = 5_000): Promise<EscalatedRun> {
+    const initial = this.start(options, true);
+    let snapshot: ProcessSnapshot;
+    try {
+      snapshot = await this.waitForExit(initial.id, foregroundMs);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("PROCESS_WAIT_TIMEOUT:")) {
+        // Long output is already bounded in the tracked ring buffer. Drop the
+        // extra foreground collectors to avoid multi-megabyte memory retention.
+        const managed = this.processes.get(initial.id);
+        if (managed) managed.runCapture = undefined;
+        return {background: true, snapshot: this.snapshot(initial.id)};
+      }
+      throw error;
+    }
+    const managed = this.processes.get(initial.id);
+    const capture = managed?.runCapture;
+    if (!capture) throw new Error("PROCESS_CAPTURE_MISSING");
+    if (snapshot.state === "failed" && snapshot.exitCode == null) {
+      managed!.runCapture = undefined;
+      throw new Error(`PROCESS_FAILED: ${this.output(initial.id, 0, 1000).text}`);
+    }
+    const maxChars = Math.max(1, Math.min(options.maxChars ?? 20_000, 200_000));
+    const mode = options.outputMode ?? "smart";
+    const stdout = reduceOutput(capture.stdout.value(), maxChars, mode, capture.stdout.totalChars);
+    const stderr = reduceOutput(capture.stderr.value(), maxChars, mode, capture.stderr.totalChars);
+    const sha256 = capture.hash.digest("hex");
+    managed!.runCapture = undefined;
+    return {background: false, result: {
+      exitCode: snapshot.exitCode ?? null,
+      signal: null,
+      stdout: stdout.text, stderr: stderr.text,
+      durationMs: Date.now() - Date.parse(initial.startedAt),
+      truncated: stdout.truncated || stderr.truncated,
+      omittedChars: stdout.omittedChars + stderr.omittedChars,
+      omittedLines: stdout.omittedLines + stderr.omittedLines,
+      originalSize: {stdout: capture.stdout.totalChars, stderr: capture.stderr.totalChars},
+      sha256, reductionMode: mode,
+    }};
+  }
+
+  public start(options: RunOptions, captureRunResult = false): ProcessSnapshot {
     this.pruneCompletedHistory(Math.max(0, this.maxTrackedProcesses - 1));
     const id = `proc_${randomUUID()}`;
     const child = this.spawnProcess(options);
@@ -302,9 +350,18 @@ export class ProcessManager {
       output: "",
       baseCursor: 0,
       listeners: new Set(),
+      ...(captureRunResult ? {runCapture: {
+        stdout: new OutputCollector(), stderr: new OutputCollector(), hash: createHash("sha256"),
+      }} : {}),
     };
     this.processes.set(id, managed);
     const append = (prefix: string, chunk: Buffer): void => {
+      if (managed.runCapture && (prefix === "" || prefix === "[stderr] ")) {
+        const channel = prefix === "" ? "stdout" : "stderr";
+        managed.runCapture[channel].append(chunk);
+        managed.runCapture.hash.update(`${channel}\u0000`);
+        managed.runCapture.hash.update(chunk);
+      }
       managed.output += `${prefix}${chunk.toString("utf8")}`;
       managed.snapshot.outputSize = managed.baseCursor + managed.output.length;
       managed.snapshot.cursor = managed.snapshot.outputSize;
@@ -317,7 +374,19 @@ export class ProcessManager {
     };
     child.stdout?.on("data", (chunk: Buffer) => append("", chunk));
     child.stderr?.on("data", (chunk: Buffer) => append("[stderr] ", chunk));
+    const runtimeMs = Math.max(100, Math.min(options.timeoutMs, 600_000));
+    let exceededDeadline = false;
+    // Explicit start/task_start may intentionally host persistent services;
+    // enforce this deadline only for run calls that auto-escalated.
+    const runtimeTimer = captureRunResult ? setTimeout(() => {
+      if (managed.snapshot.state !== "running") return;
+      exceededDeadline = true;
+      append("[timeout] ", Buffer.from(`COMMAND_TIMEOUT: execution exceeded ${runtimeMs} ms`));
+      void this.stopChild(child).catch(() => undefined);
+    }, runtimeMs) : undefined;
+    runtimeTimer?.unref();
     child.once("error", (error) => {
+      clearTimeout(runtimeTimer);
       append(
         "[error] ",
         Buffer.from(error instanceof Error ? error.message : String(error)),
@@ -328,9 +397,10 @@ export class ProcessManager {
       this.pruneCompletedHistory();
     });
     child.once("close", (exitCode) => {
+      clearTimeout(runtimeTimer);
       managed.snapshot.exitCode = exitCode;
       managed.snapshot.state =
-        managed.snapshot.state === "stopped"
+        exceededDeadline ? "failed" : managed.snapshot.state === "stopped"
           ? "stopped"
           : exitCode === 0
             ? "exited"
@@ -515,7 +585,13 @@ export class ProcessManager {
         resolve(snapshot);
       });
       signal?.addEventListener("abort", onAbort, { once: true });
-      if (signal?.aborted) onAbort();
+      if (signal?.aborted) { onAbort(); return; }
+      // Close may race between the first snapshot and subscription.
+      const latest = this.snapshot(processId);
+      if (latest.state !== "running") {
+        cleanup();
+        resolve(latest);
+      }
     });
   }
 
