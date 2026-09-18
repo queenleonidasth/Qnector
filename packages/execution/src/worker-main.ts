@@ -132,9 +132,9 @@ async function main(): Promise<void> {
     catch { try { return child.kill("SIGKILL"); } catch { return false; } }
   };
   const cancelInterval = setInterval(() => {
-    if (cancelRequested || !existsSync(cancelFile)) return;
+    if (!existsSync(cancelFile)) return;
     cancelRequested = true;
-    if (!useJobHost) cancelConfirmed = stopTree();
+    if (!useJobHost && !cancelConfirmed) cancelConfirmed = stopTree();
   }, 75);
   const timeout = useJobHost ? undefined : setTimeout(() => { timedOut = true; stopTree(); }, bootstrap.timeoutMs);
   const exit = await new Promise<{code: number | null; signal: NodeJS.Signals | null}>((resolve) => {
