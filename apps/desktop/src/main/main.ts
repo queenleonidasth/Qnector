@@ -45,7 +45,7 @@ import { ElectronPlatformServices } from "./platform-services.js";
 import {
   createWindowsLoginItemSettings,
   LEGACY_WINDOWS_LOGIN_ITEM_NAME,
-  WINDOWS_LOGIN_ITEM_NAME,
+  windowsAppUserModelId,
 } from "./login-item.js";
 import { DesktopUpdater } from "./updater.js";
 import { ensurePreviewDaemon, watchPreviewDaemon } from "./durable-daemon.js";
@@ -60,7 +60,7 @@ import { closeSplashWindow, createSplashWindow } from "./splash-window.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
-const WINDOWS_APP_ID = WINDOWS_LOGIN_ITEM_NAME;
+const WINDOWS_APP_ID = windowsAppUserModelId(app.isPackaged);
 let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let runtime: QnectorRuntime | undefined;
@@ -1014,6 +1014,8 @@ function broadcast(channel: string, payload: unknown): void {
 
 function applyLoginItemSetting(config: QnectorConfig): void {
   if (process.platform !== "win32" && process.platform !== "darwin") return;
+  // Never let a development Electron executable replace the installed startup entry.
+  if (process.platform === "win32" && !app.isPackaged) return;
   const openAtLogin = config.ui.startAtLogin === true;
   if (process.platform === "win32") {
     app.setLoginItemSettings(

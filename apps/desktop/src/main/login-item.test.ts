@@ -3,9 +3,15 @@ import {
   createWindowsLoginItemSettings,
   resolveLoginExecutablePath,
   WINDOWS_LOGIN_ITEM_NAME,
+  windowsAppUserModelId,
 } from "./login-item.js";
 
 describe("Windows login item settings", () => {
+  it("keeps development Electron separate from the installed taskbar group", () => {
+    expect(windowsAppUserModelId(true)).toBe(WINDOWS_LOGIN_ITEM_NAME);
+    expect(windowsAppUserModelId(false)).toBe("app.qnector.desktop.dev");
+  });
+
   it("uses the portable launcher instead of the extracted child executable", () => {
     const settings = createWindowsLoginItemSettings(
       true,

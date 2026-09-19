@@ -10,6 +10,13 @@ export const PORTABLE_EXECUTABLE_FILE = "PORTABLE_EXECUTABLE_FILE";
 export const WINDOWS_LOGIN_ITEM_NAME = "app.qnector.desktop";
 export const LEGACY_WINDOWS_LOGIN_ITEM_NAME = "electron.app.Qnector";
 
+/** Dev Electron must not claim the installed app's taskbar identity. */
+export function windowsAppUserModelId(isPackaged: boolean): string {
+  return isPackaged
+    ? WINDOWS_LOGIN_ITEM_NAME
+    : `${WINDOWS_LOGIN_ITEM_NAME}.dev`;
+}
+
 export interface WindowsLoginItemSettings {
   openAtLogin: boolean;
   path: string;
