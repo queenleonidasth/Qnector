@@ -7,15 +7,25 @@ import { DurableRunner, type SubmitCommand } from "@qnector/execution";
 import { secureExecutionRoot } from "./private-root.js";
 
 export function daemonSocketPath(root: string): string {
-  if (process.platform !== "win32") return path.join(path.resolve(root), "daemon.sock");
+  if (process.platform !== "win32")
+    return path.join(path.resolve(root), "daemon.sock");
   const identity = createHash("sha256")
-    .update(JSON.stringify([os.userInfo().username, path.resolve(root).toLowerCase()]))
-    .digest("hex").slice(0, 28);
+    .update(
+      JSON.stringify([
+        os.userInfo().username,
+        path.resolve(root).toLowerCase(),
+      ]),
+    )
+    .digest("hex")
+    .slice(0, 28);
   return `\\\\.\\pipe\\qnector-durable-${identity}`;
 }
 
 export function daemonAuthToken(root: string): string {
-  return readFileSync(path.join(path.resolve(root), "daemon-token"), "utf8").trim();
+  return readFileSync(
+    path.join(path.resolve(root), "daemon-token"),
+    "utf8",
+  ).trim();
 }
 
 type Request = {
@@ -43,9 +53,11 @@ export class DurableDaemon {
   private token = "";
   private recoveryTimer: NodeJS.Timeout | undefined;
 
-  public constructor(root: string, options: {jobHostPath?: string} = {}) {
+  public constructor(root: string, options: { jobHostPath?: string } = {}) {
     this.root = path.resolve(root);
-    this.jobHostPath = options.jobHostPath ? path.resolve(options.jobHostPath) : undefined;
+    this.jobHostPath = options.jobHostPath
+      ? path.resolve(options.jobHostPath)
+      : undefined;
     this.socketPath = daemonSocketPath(this.root);
   }
 
@@ -53,51 +65,89 @@ export class DurableDaemon {
     if (this.server) throw new Error("DAEMON_ALREADY_STARTED");
     // Reject an incomplete preview before binding the pipe or accepting tasks.
     // Otherwise each accepted job could fail after the irreversible DB commit.
-    if (this.jobHostPath && (process.platform !== "win32" || !existsSync(this.jobHostPath)))
+    if (
+      this.jobHostPath &&
+      (process.platform !== "win32" || !existsSync(this.jobHostPath))
+    )
       throw new Error("JOB_HOST_MISSING_OR_UNSUPPORTED");
     secureExecutionRoot(this.root);
-    const server = net.createServer(socket => this.handleConnection(socket));
-    // Bind before opening SQLite. The OS disallows two listeners with the same pipe name.
-    try {
-      await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen({path: this.socketPath, readableAll: false, writableAll: false}, () => {
-          server.off("error", reject);
-          resolve();
+    let server = net.createServer((socket) => this.handleConnection(socket));
+    // Pipe ownership must be established before opening SQLite. Windows can hold a
+    // closed pipe briefly; bounded retries never allow concurrent journal writers.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once("error", reject);
+          server.listen(
+            { path: this.socketPath, readableAll: false, writableAll: false },
+            () => {
+              server.off("error", reject);
+              resolve();
+            },
+          );
         });
-      });
-    } catch (error) {
-      server.close(() => undefined);
-      throw error;
+        break;
+      } catch (error) {
+        server.close(() => undefined);
+        if (
+          process.platform !== "win32" ||
+          !(
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "EADDRINUSE"
+          ) ||
+          attempt >= 19
+        )
+          throw error;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        server = net.createServer((socket) => this.handleConnection(socket));
+      }
     }
     this.server = server;
     try {
       const tokenFile = path.join(this.root, "daemon-token");
       if (!existsSync(tokenFile)) {
-        try { writeFileSync(tokenFile, randomBytes(32).toString("hex"), {flag: "wx", mode: 0o600}); }
-        catch (error) {
-          if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+        try {
+          writeFileSync(tokenFile, randomBytes(32).toString("hex"), {
+            flag: "wx",
+            mode: 0o600,
+          });
+        } catch (error) {
+          if (!(
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "EEXIST"
+          ))
+            throw error;
         }
       }
       if (process.platform !== "win32") chmodSync(tokenFile, 0o600);
       this.token = daemonAuthToken(this.root);
-      if (!/^[a-f0-9]{64}$/.test(this.token)) throw new Error("DAEMON_TOKEN_INVALID");
-      this.runner = new DurableRunner(this.root, {jobHostPath: this.jobHostPath});
+      if (!/^[a-f0-9]{64}$/.test(this.token))
+        throw new Error("DAEMON_TOKEN_INVALID");
+      this.runner = new DurableRunner(this.root, {
+        jobHostPath: this.jobHostPath,
+      });
       this.runner.recover();
       this.recoveryTimer = setInterval(() => {
-        try { this.runner?.recover(); } catch { /* exposed by diagnostics in later phases */ }
+        try {
+          this.runner?.recover();
+        } catch {
+          /* exposed by diagnostics in later phases */
+        }
       }, 1_000);
     } catch (error) {
       this.runner?.close();
       this.runner = undefined;
-      await new Promise<void>(resolve => server.close(() => resolve()));
+      await new Promise<void>((resolve) => server.close(() => resolve()));
       this.server = undefined;
       throw error;
     }
   }
 
   private authenticated(candidate: string | undefined): boolean {
-    if (typeof candidate !== "string" || candidate.length !== this.token.length) return false;
+    if (typeof candidate !== "string" || candidate.length !== this.token.length)
+      return false;
     return timingSafeEqual(Buffer.from(candidate), Buffer.from(this.token));
   }
 
@@ -116,7 +166,7 @@ export class DurableDaemon {
       if (done) return;
       data += chunk;
       if (Buffer.byteLength(data, "utf8") > 64 * 1024) {
-        respond({ok: false, error: "IPC_REQUEST_TOO_LARGE"});
+        respond({ ok: false, error: "IPC_REQUEST_TOO_LARGE" });
         return;
       }
       if (!data.includes("\n")) return;
@@ -124,42 +174,76 @@ export class DurableDaemon {
         if (!data.endsWith("\n") || data.indexOf("\n") !== data.length - 1)
           throw new Error("IPC_SINGLE_REQUEST_REQUIRED");
         const request = JSON.parse(data.slice(0, -1)) as Request;
-        if (!this.authenticated(request.token)) throw new Error("IPC_UNAUTHORIZED");
+        if (!this.authenticated(request.token))
+          throw new Error("IPC_UNAUTHORIZED");
         void this.route(request, waitController.signal)
-          .then(result => respond({ok: true, data: result}))
-          .catch(error => respond({ok: false, error: error instanceof Error ? error.message : "IPC_ERROR"}));
+          .then((result) => respond({ ok: true, data: result }))
+          .catch((error) =>
+            respond({
+              ok: false,
+              error: error instanceof Error ? error.message : "IPC_ERROR",
+            }),
+          );
       } catch (error) {
-        respond({ok: false, error: error instanceof Error ? error.message : "IPC_ERROR"});
+        respond({
+          ok: false,
+          error: error instanceof Error ? error.message : "IPC_ERROR",
+        });
       }
     });
-    socket.on("error", () => { /* client disconnect cancels only this subscription */ });
+    socket.on("error", () => {
+      /* client disconnect cancels only this subscription */
+    });
   }
 
-  private async route(request: Request, waitSignal: AbortSignal): Promise<unknown> {
+  private async route(
+    request: Request,
+    waitSignal: AbortSignal,
+  ): Promise<unknown> {
     const runner = this.runner;
     if (!runner) throw new Error("DAEMON_NOT_READY");
     switch (request.action) {
-      case "ping": return {state: "ready", protocol: 1,
-        jobHostEnabled: Boolean(this.jobHostPath)};
+      case "ping":
+        return {
+          state: "ready",
+          protocol: 1,
+          jobHostEnabled: Boolean(this.jobHostPath),
+        };
       case "doctor": {
         const storage = runner.store.doctor();
-        return {state: storage.integrity === "ok" ? "ready" : "degraded", protocol: 1,
-          jobHostEnabled: Boolean(this.jobHostPath), storage,
-          note: "Local execution health only; does not diagnose ChatGPT Web or tunnel availability"};
+        return {
+          state: storage.integrity === "ok" ? "ready" : "degraded",
+          protocol: 1,
+          jobHostEnabled: Boolean(this.jobHostPath),
+          storage,
+          note: "Local execution health only; does not diagnose ChatGPT Web or tunnel availability",
+        };
       }
       case "submit": {
-        if (!request.command) throw new Error("INVALID_INPUT: command required");
-        const {task, reused} = runner.submit({
-          workspace: request.workspace ?? "", idempotencyKey: request.idempotencyKey ?? "",
-          command: request.command, timeoutMs: request.timeoutMs,
+        if (!request.command)
+          throw new Error("INVALID_INPUT: command required");
+        const { task, reused } = runner.submit({
+          workspace: request.workspace ?? "",
+          idempotencyKey: request.idempotencyKey ?? "",
+          command: request.command,
+          timeoutMs: request.timeoutMs,
         });
-        return {taskId: task.taskId, state: task.state, reused, nextAction: "get"};
+        return {
+          taskId: task.taskId,
+          state: task.state,
+          reused,
+          nextAction: "get",
+        };
       }
       case "cancel": {
         if (!request.taskId) throw new Error("INVALID_INPUT: taskId required");
         const task = runner.cancel(request.taskId);
-        return {taskId: task.taskId, state: task.state, outcome: task.outcome,
-          nextAction: task.state === "canceling" ? "wait" : "result"};
+        return {
+          taskId: task.taskId,
+          state: task.state,
+          outcome: task.outcome,
+          nextAction: task.state === "canceling" ? "wait" : "result",
+        };
       }
       case "inspect": {
         if (!request.taskId) throw new Error("INVALID_INPUT: taskId required");
@@ -168,10 +252,32 @@ export class DurableDaemon {
       case "get": {
         const task = runner.get(request.taskId ?? "");
         if (!task) return null;
-        const {taskId, attemptId, workspace, state, outputState, verificationState, outcome,
-          resultManifest, reason, createdAt, updatedAt} = task;
-        return {taskId, attemptId, workspace, state, outputState, verificationState, outcome,
-          resultManifest, reason, createdAt, updatedAt};
+        const {
+          taskId,
+          attemptId,
+          workspace,
+          state,
+          outputState,
+          verificationState,
+          outcome,
+          resultManifest,
+          reason,
+          createdAt,
+          updatedAt,
+        } = task;
+        return {
+          taskId,
+          attemptId,
+          workspace,
+          state,
+          outputState,
+          verificationState,
+          outcome,
+          resultManifest,
+          reason,
+          createdAt,
+          updatedAt,
+        };
       }
       case "wait": {
         if (!request.taskId) throw new Error("INVALID_INPUT: taskId required");
@@ -183,34 +289,67 @@ export class DurableDaemon {
           if (waitSignal.aborted) throw new Error("IPC_WAIT_CANCELED");
           const task = runner.get(request.taskId);
           if (!task) throw new Error("TASK_NOT_FOUND");
-          const active = ["queued", "starting", "running", "canceling"].includes(task.state);
+          const active = [
+            "queued",
+            "starting",
+            "running",
+            "canceling",
+          ].includes(task.state);
           if (!active || Date.now() >= deadline)
-            return {taskId: task.taskId, attemptId: task.attemptId, state: task.state,
-              nextAction: active ? "wait" : "result"};
-          await new Promise(resolve => setTimeout(resolve, Math.min(250, deadline - Date.now())));
+            return {
+              taskId: task.taskId,
+              attemptId: task.attemptId,
+              state: task.state,
+              nextAction: active ? "wait" : "result",
+            };
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.min(250, deadline - Date.now())),
+          );
         }
       }
       case "result": {
         const task = runner.get(request.taskId ?? "");
         if (!task) throw new Error("TASK_NOT_FOUND");
-        const manifest = task.resultManifest ? JSON.parse(readFileSync(task.resultManifest, "utf8")) as unknown : null;
-        return {taskId: task.taskId, state: task.state, outcome: task.outcome,
-          outputState: task.outputState, verificationState: task.verificationState, manifest};
+        const manifest = task.resultManifest
+          ? (JSON.parse(readFileSync(task.resultManifest, "utf8")) as unknown)
+          : null;
+        return {
+          taskId: task.taskId,
+          state: task.state,
+          outcome: task.outcome,
+          outputState: task.outputState,
+          verificationState: task.verificationState,
+          manifest,
+        };
       }
       case "list": {
-        if (!request.workspace) throw new Error("INVALID_INPUT: workspace required");
-        return runner.store.list(request.workspace, request.limit).map(task => ({
-          taskId: task.taskId, state: task.state, outcome: task.outcome,
-          attemptId: task.attemptId, createdAt: task.createdAt,
-        }));
+        if (!request.workspace)
+          throw new Error("INVALID_INPUT: workspace required");
+        return runner.store
+          .list(request.workspace, request.limit)
+          .map((task) => ({
+            taskId: task.taskId,
+            state: task.state,
+            outcome: task.outcome,
+            attemptId: task.attemptId,
+            createdAt: task.createdAt,
+          }));
       }
       case "output": {
-        if (!request.taskId || !["stdout", "stderr"].includes(request.stream ?? ""))
+        if (
+          !request.taskId ||
+          !["stdout", "stderr"].includes(request.stream ?? "")
+        )
           throw new Error("INVALID_INPUT: taskId and stream required");
-        return runner.output(request.taskId, request.stream!, request.cursor,
-          Math.min(request.maxBytes ?? 32 * 1024, 32 * 1024));
+        return runner.output(
+          request.taskId,
+          request.stream!,
+          request.cursor,
+          Math.min(request.maxBytes ?? 32 * 1024, 32 * 1024),
+        );
       }
-      default: throw new Error("IPC_ACTION_UNSUPPORTED");
+      default:
+        throw new Error("IPC_ACTION_UNSUPPORTED");
     }
   }
 
@@ -222,6 +361,7 @@ export class DurableDaemon {
     this.runner = undefined;
     const server = this.server;
     this.server = undefined;
-    if (server) await new Promise<void>(resolve => server.close(() => resolve()));
+    if (server)
+      await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
