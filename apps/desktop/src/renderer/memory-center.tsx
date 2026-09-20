@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
 import type { MemoryV2Snapshot, MemoryFact, MemoryTask } from "@qnector/shared";
 import {
+  currentSavedTask,
   filterMemories,
-  pendingTasks,
+  latestLinkedSessionTask,
   presentMemories,
+  recentSavedLog,
 } from "./memory-center-model.js";
 import "./memory-center.css";
 
@@ -35,29 +37,30 @@ export interface MemoryCenterData {
       criticalContext: string;
     } | null;
     facts: LegacyFact[];
+    recentChanges?: Array<{ timestamp: string; summary: string }>;
   };
   v2?: MemoryV2Snapshot;
   counts: { facts: number; checkpoints: number; recentChanges: number };
 }
-const categories = [
-  { id: "rule", name: "กฎของโปรเจกต์" },
-  { id: "decision", name: "การตัดสินใจ" },
-  { id: "fact", name: "ข้อมูลสำคัญ" },
-  { id: "note", name: "บันทึกอื่น" },
-  { id: "unknown", name: "รายการที่ต้องตรวจสอบประเภท" },
-] as const;
-function taskStatus(status: string): string {
-  return (
-    (
-      {
-        active: "กำลังทำ",
-        blocked: "ติดขัด",
-        idle: "พักไว้",
-        completed: "เสร็จแล้ว",
-      } as Record<string, string>
-    )[status] ?? "ไม่ทราบสถานะ"
-  );
+
+const INITIAL_VISIBLE = 12;
+const LOG_VISIBLE = 6;
+function formatTime(timestamp?: string): string {
+  if (!timestamp) return "Unknown time";
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime())
+    ? "Unknown time"
+    : date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
+function taskStatus(status: MemoryTask["status"]): string {
+  return {
+    active: "In progress",
+    blocked: "Blocked",
+    idle: "Paused",
+    completed: "Completed",
+  }[status];
+}
+
 export function MemoryCenter({
   memory,
   workspace,
@@ -74,32 +77,29 @@ export function MemoryCenter({
   onClear: () => void;
 }): React.ReactElement {
   const [query, setQuery] = useState("");
-  const [visibleMemories, setVisibleMemories] = useState(12);
+  const [visibleMemories, setVisibleMemories] = useState(INITIAL_VISIBLE);
   const [showTasks, setShowTasks] = useState(false);
+  const [showAllLog, setShowAllLog] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
-  const [showLegacy, setShowLegacy] = useState(false);
-  const [v2Page, setV2Page] = useState<InventoryPage<V2MemoryRecord> | null>(
-    null,
-  );
-  const [legacyPage, setLegacyPage] =
-    useState<InventoryPage<LegacyFact> | null>(null);
-  const [taskPage, setTaskPage] = useState<InventoryPage<MemoryTask> | null>(
-    null,
-  );
+  const [v2Page, setV2Page] = useState<InventoryPage<V2MemoryRecord> | null>(null);
+  const [legacyPage, setLegacyPage] = useState<InventoryPage<LegacyFact> | null>(null);
+  const [taskPage, setTaskPage] = useState<InventoryPage<MemoryTask> | null>(null);
   const [loadingPage, setLoadingPage] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
+
   const v2Records = useMemo(() => {
     const byId = new Map<string, MemoryFact | V2MemoryRecord>();
-    for (const item of v2Page?.items ?? []) byId.set(item.id, item);
-    for (const item of memory?.v2?.memories ?? [])
+    // Favor the fresh snapshot when a saved page contains an older copy.
+    for (const item of memory?.v2?.memories ?? []) byId.set(item.id, item);
+    for (const item of v2Page?.items ?? [])
       if (!byId.has(item.id)) byId.set(item.id, item);
     return Array.from(byId.values());
   }, [memory, v2Page]);
   const legacyRecords = useMemo(() => {
     const byId = new Map<string, LegacyFact>();
-    for (const item of memory?.state.facts ?? []) byId.set(item.id, item);
     for (const item of legacyPage?.items ?? []) byId.set(item.id, item);
+    for (const item of memory?.state.facts ?? []) byId.set(item.id, item);
     return Array.from(byId.values());
   }, [memory, legacyPage]);
   const records = useMemo(
@@ -110,26 +110,36 @@ export function MemoryCenter({
   const tasks = useMemo(() => {
     const byId = new Map<string, MemoryTask>();
     for (const item of taskPage?.items ?? []) byId.set(item.id, item);
-    for (const item of memory?.v2?.tasks ?? [])
-      if (!byId.has(item.id)) byId.set(item.id, item);
-    return Array.from(byId.values());
+    for (const item of memory?.v2?.tasks ?? []) byId.set(item.id, item);
+    return Array.from(byId.values()).sort((a, b) =>
+      (b.lastEventAt ?? b.updatedAt).localeCompare(a.lastEventAt ?? a.updatedAt),
+    );
   }, [memory, taskPage]);
-  const openTasks = pendingTasks(tasks);
+  const lastSessionTask = latestLinkedSessionTask(tasks);
+  const savedSession = memory?.v2?.lastSession;
+  const latestTopic = lastSessionTask ?? tasks.find((task) => task.title !== "General workspace activity");
+  const currentTask = currentSavedTask(tasks);
+  const otherTasks = tasks.filter((task) => task.id !== currentTask?.id && (task.title !== "General workspace activity" || task.sessionCount > 0 || task.status !== "idle"));
+  const log = useMemo(
+    () => recentSavedLog(memory?.v2?.events ?? [], memory?.state.recentChanges ?? []),
+    [memory],
+  );
+
   const requestPage = async <T,>(
     input: Record<string, unknown>,
   ): Promise<InventoryPage<T>> => {
     const result = await window.qnector.callMemory(input);
     if (!result.ok) throw new Error(result.error?.message ?? result.summary);
     const wrapped = result.data as { data?: unknown } | undefined;
-    const raw = (wrapped?.data ?? wrapped) as (InventoryPage<T> & { facts?: T[] }) | undefined;
+    const raw = (wrapped?.data ?? wrapped) as
+      | (InventoryPage<T> & { facts?: T[] })
+      | undefined;
     const items = Array.isArray(raw?.items) ? raw.items : raw?.facts;
     if (!raw || !Array.isArray(items) || !Number.isFinite(raw.total))
       throw new Error("Invalid memory inventory response");
     return { ...raw, items };
   };
-  const loadPage = async (
-    kind: "memories" | "tasks" | "legacy",
-  ): Promise<void> => {
+  const loadPage = async (kind: "memories" | "tasks" | "legacy"): Promise<void> => {
     if (loadingPage || !memory) return;
     setLoadingPage(kind);
     setPageError(null);
@@ -140,8 +150,7 @@ export function MemoryCenter({
           cursor: legacyPage?.nextCursor ?? 0,
           limit: 100,
         });
-        if (memory.workspaceId && page.workspaceId !== memory.workspaceId)
-          return;
+        if (memory.workspaceId && page.workspaceId !== memory.workspaceId) return;
         setLegacyPage((current) => ({
           ...page,
           items: [...(current?.items ?? []), ...page.items],
@@ -178,363 +187,292 @@ export function MemoryCenter({
     }
   };
   const workspaceName =
-    workspace
-      ?.replace(/[\\/]+$/, "")
-      .split(/[\\/]/)
-      .pop() ?? "";
+    workspace?.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "";
+  const hasMoreV2 = Boolean(
+    memory?.v2 &&
+      (v2Page === null
+        ? memory.v2.counts.memories > memory.v2.memories.length
+        : v2Page.nextCursor !== null),
+  );
+  const hasMoreTasks = Boolean(
+    memory?.v2 &&
+      (taskPage === null
+        ? memory.v2.tasks.length >= 12
+        : taskPage.nextCursor !== null),
+  );
+  const hasMoreLegacy = Boolean(
+    memory &&
+      memory.counts.facts > legacyRecords.length &&
+      (legacyPage === null || legacyPage.nextCursor !== null),
+  );
+
   return (
     <div className="memory-center">
       <header className="memory-center-intro">
-        <strong>ความจำของโปรเจกต์นี้</strong>
-        <span>
-          ความจำใน QNECTOR เฉพาะ Workspace ไม่ใช่ความจำทั้งหมดของ ChatGPT
-        </span>
-        <code title={workspace}>{workspace || "ยังไม่ได้เลือก Workspace"}</code>
-        <small>
-          อัปเดตข้อมูล:{" "}
-          {memory?.updatedAt
-            ? new Date(memory.updatedAt).toLocaleString()
-            : "ยังไม่ทราบ"}
-        </small>
+        <strong>Memory at a glance</strong>
+        <span title={workspace}>Workspace: {workspaceName || "Not selected"}</span>
+        <small>Saved locally by QNECTOR · Not ChatGPT's complete chat history</small>
       </header>
       {memory?.warning && (
-        <p role="alert" className="memory-center-warning">
-          {memory.warning}
-        </p>
+        <p role="alert" className="memory-center-warning">{memory.warning}</p>
       )}
-      {!memory ? (
-        <p role="status">กำลังโหลดความจำ…</p>
-      ) : (
-        <>
-          <div className="memory-center-counts" aria-label="ภาพรวมความจำ">
-            <div>
-              <strong>
-                {v2Records.length} + {legacyRecords.length}
-              </strong>
-              <span>v2 + เดิม (อาจซ้ำ)</span>
-            </div>
-            <div>
-              <strong>{openTasks.length}</strong>
-              <span>งานค้างที่แสดง</span>
-            </div>
-            <div>
-              <strong>{memory.v2?.conflicts.length ?? 0}</strong>
-              <span>ความขัดแย้งที่พบ</span>
-            </div>
-          </div>
-          <section aria-label="ความจำที่บันทึกไว้">
-            <h3>สิ่งที่ QNECTOR จำไว้</h3>
+      {pageError && (
+        <p role="alert" className="memory-center-warning">Could not load more: {pageError}</p>
+      )}
+
+      <section className="memory-center-panel" aria-labelledby="memory-last-session">
+        <div className="memory-center-panel-heading">
+          <span className="memory-center-panel-number">01</span>
+          <h3 id="memory-last-session">Last Session</h3>
+        </div>
+        {!memory ? (
+          <p className="memory-center-note" role="status">Loading saved context…</p>
+        ) : savedSession || latestTopic ? (
+          <>
+            <strong className="memory-center-primary">{savedSession?.title ?? latestTopic?.title}</strong>
+            {(savedSession?.currentTask || latestTopic?.currentTask) &&
+              (savedSession?.currentTask ?? latestTopic?.currentTask) !== (savedSession?.title ?? latestTopic?.title) && (
+                <p className="memory-center-main-text">Saved task context: {savedSession?.currentTask ?? latestTopic?.currentTask}</p>
+              )}
+            <p className="memory-center-note">
+              {savedSession
+                ? "Most recently linked session (saved topic only)."
+                : lastSessionTask
+                  ? "Latest session-linked task (session timestamp unavailable)."
+                  : "Latest saved task. No linked chat session was recorded."}
+            </p>
+            <small className="memory-center-time">
+              {savedSession ? "Session linked: " : "Task last updated: "}
+              {formatTime(savedSession?.linkedAt ?? latestTopic?.lastEventAt ?? latestTopic?.updatedAt)}
+            </small>
+          </>
+        ) : (
+          <p className="memory-center-note">
+            No saved session topic for this workspace yet.
+          </p>
+        )}
+        <p className="memory-center-disclaimer">
+          QNECTOR stores task context, not the words spoken in ChatGPT.
+        </p>
+        {memory && (
+          <details className="memory-center-optional">
+            <summary>Saved context · {records.length} loaded</summary>
+            <p className="memory-center-note">
+              Saved notes from both memory systems are shown separately. Some may overlap.
+              Search covers loaded items only.
+            </p>
             <label className="memory-center-search">
-              ค้นหาในรายการที่โหลดมา
+              Search saved notes
               <input
                 type="search"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="ค้นหากฎ ข้อมูล หรือการตัดสินใจ"
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setVisibleMemories(INITIAL_VISIBLE);
+                }}
+                placeholder="Search saved notes"
               />
             </label>
-            {memory.counts.facts > legacyRecords.length && (
+            {filtered.length === 0 ? (
               <p className="memory-center-note" role="status">
-                ข้อมูลรุ่นเดิมแสดง {legacyRecords.length} จาก{" "}
-                {memory.counts.facts} รายการ
-              </p>
-            )}
-            {memory.counts.facts > legacyRecords.length &&
-              legacyPage?.nextCursor !== null && (
-                <button
-                  type="button"
-                  disabled={loadingPage !== null}
-                  onClick={() => void loadPage("legacy")}
-                >
-                  {loadingPage === "legacy"
-                    ? "กำลังโหลด…"
-                    : "โหลดความจำรุ่นเดิมเพิ่มจากเครื่อง"}
-                </button>
-              )}
-            {memory.v2 &&
-              (v2Page?.total ?? memory.v2.counts.memories) >
-                v2Records.length && (
-                <p className="memory-center-note" role="status">
-                  Memory v2 แสดง {v2Records.length} จาก{" "}
-                  {v2Page?.total ?? memory.v2.counts.memories}{" "}
-                  รายการรวมทั้งความจำที่ผูกกับงาน
-                </p>
-              )}
-            {memory.v2 &&
-              (v2Page === null
-                ? memory.v2.counts.memories > memory.v2.memories.length
-                : v2Page.nextCursor !== null) && (
-                <button
-                  type="button"
-                  disabled={loadingPage !== null}
-                  onClick={() => void loadPage("memories")}
-                >
-                  {loadingPage === "memories"
-                    ? "กำลังโหลด…"
-                    : "โหลดความจำ Memory v2 เพิ่มจากเครื่อง (รวมความจำรายงาน)"}
-                </button>
-              )}
-            {pageError && (
-              <p role="alert" className="memory-center-warning">
-                โหลดข้อมูลไม่สำเร็จ: {pageError}
-              </p>
-            )}
-            {records.length === 0 ? (
-              <p className="memory-center-note">
-                ยังไม่มีรายการความจำที่โหลดมาใน Workspace นี้
+                {records.length ? "No matching saved notes." : "No saved notes loaded."}
               </p>
             ) : (
-              categories.map((category) => {
-                const entries = filtered.filter((item) =>
-                  category.id === "unknown"
-                    ? !categories.some(
-                        (known) =>
-                          known.id !== "unknown" && known.id === item.category,
-                      )
-                    : item.category === category.id,
-                );
-                return (
-                  <details key={category.id} className="memory-center-section">
-                    <summary>
-                      {category.name} <span>{entries.length} รายการ</span>
-                    </summary>
-                    {entries.length === 0 ? (
-                      <p className="memory-center-note">
-                        ไม่มีรายการที่ตรงกับการค้นหา
-                      </p>
-                    ) : (
-                      entries.slice(0, visibleMemories).map((item) => (
-                        <details
-                          className="memory-center-record"
-                          key={`${item.source}-${item.id}`}
-                        >
-                          <summary>
-                            <strong>{item.key}</strong>
-                            <span>
-                              {item.source}
-                              {item.scope === "task"
-                                ? " · เฉพาะงาน"
-                                : item.source === "Memory v2"
-                                  ? " · Workspace"
-                                  : ""}
-                            </span>
-                          </summary>
-                          <p>{item.value}</p>
-                          {item.scope === "task" && (
-                            <p className="memory-center-note">
-                              งาน:{" "}
-                              {item.taskTitle ||
-                                item.taskId ||
-                                "ไม่ทราบชื่องาน"}
-                            </p>
-                          )}
-                          <small>
-                            บันทึก:{" "}
-                            {item.updatedAt
-                              ? new Date(item.updatedAt).toLocaleString()
-                              : "ไม่ทราบ"}
-                          </small>
-                        </details>
-                      ))
+              <div className="memory-center-saved-list">
+                {filtered.slice(0, visibleMemories).map((item) => (
+                  <details className="memory-center-record" key={`${item.source}-${item.id}`}>
+                    <summary><strong>{item.key}</strong> <span>{item.source}</span></summary>
+                    <p>{item.value}</p>
+                    {item.scope === "task" && (
+                      <p className="memory-center-note">Task: {item.taskTitle || "Unnamed task"}</p>
                     )}
-                    {entries.length > visibleMemories && (
-                      <p className="memory-center-note">
-                        แสดง {Math.min(visibleMemories, entries.length)} จาก{" "}
-                        {entries.length} รายการ — กดโหลดเพิ่มด้านล่าง
-                      </p>
-                    )}
+                    <small>{item.category} · {formatTime(item.updatedAt)}</small>
                   </details>
-                );
-              })
+                ))}
+              </div>
             )}
-            {query && filtered.length === 0 && (
-              <p role="status">ไม่พบรายการที่ตรงกับคำค้น</p>
-            )}
-            <button
-              type="button"
-              className="memory-center-button"
-              onClick={() =>
-                setVisibleMemories((count) =>
-                  count >= filtered.length
-                    ? 12
-                    : Math.min(filtered.length, count + 12),
-                )
-              }
-            >
-              {visibleMemories >= filtered.length
-                ? "แสดงแบบย่อ"
-                : "แสดงเพิ่มอีก 12 รายการ"}
-            </button>
-            <p className="memory-center-note">
-              รายการจากระบบเดิมและ Memory v2 แสดงแยกตามแหล่งข้อมูล
-              เนื่องจากยังไม่มีรหัสจับคู่สำหรับการย้ายข้อมูล จึงอาจมีรายการซ้ำ
-            </p>
-          </section>
-          <section aria-label="งานที่ทำต่อได้">
-            <h3>งานที่ทำต่อได้</h3>
-            {!memory.v2 && (
-              <p className="memory-center-note">
-                ระบบงาน Memory v2 ยังไม่พร้อมใช้งาน
-              </p>
-            )}
-            {memory.v2 && openTasks.length === 0 && (
-              <p className="memory-center-note">
-                ไม่พบงานที่กำลังทำหรือติดขัดในรายการที่โหลดมา
-              </p>
-            )}
-            {(showTasks ? tasks : openTasks.slice(0, 2)).map((task) => (
-              <details className="memory-center-task" key={task.id}>
-                <summary>
-                  <span className="memory-center-badge">
-                    {taskStatus(task.status)}
-                  </span>
-                  <strong>{task.title}</strong>
-                </summary>
-                <p>{task.currentTask || "ยังไม่มีรายละเอียดงาน"}</p>
-                <strong>ขั้นตอนถัดไป</strong>
-                {task.pendingSteps.length ? (
-                  <ul>
-                    {task.pendingSteps.map((step, index) => (
-                      <li key={index}>{step}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>ยังไม่มีขั้นตอนถัดไปที่บันทึกไว้</p>
-                )}
-                {task.criticalContext && <p>บริบท: {task.criticalContext}</p>}
-                <details>
-                  <summary>รายละเอียดทางเทคนิคและขั้นตอนที่เสร็จ</summary>
-                  <code>{task.id}</code>
-                  <ul>
-                    {task.completedSteps.map((step, index) => (
-                      <li key={index}>
-                        {step} —{" "}
-                        {/^(?:(?:files|git|manual): |(?:files|git|process|browser|computer)\.[a-z_]+: )/i.test(
-                          step,
-                        )
-                          ? "ผลเก่าที่ยังไม่ยืนยัน"
-                          : "บันทึกว่าเสร็จแล้ว"}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              </details>
-            ))}
-            {(tasks.length > 2 || memory.v2?.counts.tasks !== tasks.length) && (
+            {filtered.length > visibleMemories && (
               <button
                 type="button"
-                className="memory-center-button"
-                onClick={() => setShowTasks((value) => !value)}
+                onClick={() => setVisibleMemories((count) => count + INITIAL_VISIBLE)}
               >
-                {showTasks ? "ย่อรายการงาน" : "ดูงานทั้งหมดที่โหลดมา"}
+                Show 12 more notes
               </button>
             )}
-            {memory.v2 &&
-              (taskPage === null
-                ? memory.v2.tasks.length >= 12
-                : taskPage.nextCursor !== null) && (
-                <button
-                  type="button"
-                  disabled={loadingPage !== null}
-                  onClick={() => void loadPage("tasks")}
-                >
-                  {loadingPage === "tasks"
-                    ? "กำลังโหลด…"
-                    : "โหลดงานเพิ่มเติมจากเครื่อง"}
-                </button>
-              )}
-            {taskPage && (
-              <p className="memory-center-note">
-                โหลดงานแล้ว {tasks.length} จากทั้งหมด {taskPage.total} งาน
+            <p className="memory-center-note">
+              Loaded: {v2Records.length} Memory v2 / {v2Page?.total ?? memory.v2?.counts.memories ?? 0};{" "}
+              {legacyRecords.length} legacy / {memory.counts.facts}.
+            </p>
+            {hasMoreV2 && (
+              <button type="button" disabled={loadingPage !== null} onClick={() => void loadPage("memories")}>
+                {loadingPage === "memories" ? "Loading…" : "Load more saved notes"}
+              </button>
+            )}
+            {hasMoreLegacy && (
+              <button type="button" disabled={loadingPage !== null} onClick={() => void loadPage("legacy")}>
+                {loadingPage === "legacy" ? "Loading…" : "Load more legacy notes"}
+              </button>
+            )}
+          </details>
+        )}
+      </section>
+
+      <section className="memory-center-panel" aria-labelledby="memory-current-task">
+        <div className="memory-center-panel-heading">
+          <span className="memory-center-panel-number">02</span>
+          <h3 id="memory-current-task">Current Task</h3>
+        </div>
+        {!memory ? (
+          <p className="memory-center-note" role="status">Loading task status…</p>
+        ) : currentTask ? (
+          <>
+            <span className="memory-center-status">{taskStatus(currentTask.status)}</span>
+            <strong className="memory-center-primary">{currentTask.title}</strong>
+            <p className="memory-center-main-text">
+              {currentTask.currentTask || "No current task description saved."}
+            </p>
+            {currentTask.pendingSteps.length > 0 && (
+              <p className="memory-center-next">
+                <span>Next step</span>{currentTask.pendingSteps[0]}
               </p>
             )}
-            {memory.state.active?.currentTask && (
-              <details
-                className="memory-center-section"
-                open={showLegacy}
-                onToggle={(event) => setShowLegacy(event.currentTarget.open)}
-              >
-                <summary>เป้าหมายจาก Memory รุ่นเดิม</summary>
-                <p>{memory.state.active.currentTask}</p>
-                <p>{memory.state.active.criticalContext}</p>
-                <ul>
-                  {memory.state.active.pendingSteps.map((step, index) => (
-                    <li key={index}>{step}</li>
-                  ))}
-                </ul>
+            {(currentTask.pendingSteps.length > 1 || currentTask.criticalContext || currentTask.completedSteps.length > 0) && (
+              <details className="memory-center-optional">
+                <summary>Task details</summary>
+                {currentTask.pendingSteps.length > 1 && (
+                  <ul>{currentTask.pendingSteps.slice(1).map((step, index) => <li key={index}>{step}</li>)}</ul>
+                )}
+                {currentTask.criticalContext && <p>{currentTask.criticalContext}</p>}
+                {currentTask.completedSteps.length > 0 && (
+                  <details>
+                    <summary>Saved completed steps (verify before relying on them)</summary>
+                    <ul>
+                      {currentTask.completedSteps.map((step, index) => (
+                        <li key={index}>
+                          {step} — {/^(?:(?:files|git|manual): |(?:files|git|process|browser|computer)\.[a-z_]+: )/i.test(step)
+                            ? "Unverified historical tool log"
+                            : "Marked completed in memory"}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
               </details>
             )}
-          </section>
-          <details className="memory-center-section">
-            <summary>รายละเอียดสำหรับตรวจสอบ</summary>
-            <p>
-              Checkpoint: {memory.counts.checkpoints} · Event ทั้งหมด:{" "}
-              {memory.v2?.counts.events ?? "ไม่ทราบ"}
-            </p>
-            {memory.v2 &&
-              (taskPage?.total ?? memory.v2.tasks.length) >
-                memory.v2.tasks.length && (
-                <p className="memory-center-note">
-                  การตรวจจับไฟล์ขัดแย้งจาก Snapshot ครอบคลุมเฉพาะ{" "}
-                  {memory.v2.tasks.length} งานแรก ไม่ใช่ทุกงานในฐานข้อมูล
-                </p>
-              )}
-            {memory.v2?.conflicts.map((conflict) => (
-              <p role="alert" key={conflict.id}>
-                ไฟล์ขัดแย้ง: {conflict.taskTitles.join(" / ")} — {conflict.path}
-              </p>
-            ))}
-            {memory.v2?.events.map((event) => (
-              <p key={event.id}>
-                {event.timestamp} · {event.source}.{event.action}:{" "}
-                {event.summary}
-              </p>
+          </>
+        ) : memory.state.active?.currentTask ? (
+          <>
+            <span className="memory-center-status">Legacy saved context · Not live status</span>
+            <strong className="memory-center-primary">{memory.state.active.currentTask}</strong>
+            {memory.state.active.pendingSteps[0] && (
+              <p className="memory-center-next"><span>Next saved step</span>{memory.state.active.pendingSteps[0]}</p>
+            )}
+          </>
+        ) : (
+          <p className="memory-center-note">No active task is recorded. This does not confirm that work has stopped.</p>
+        )}
+        {memory?.v2?.conflicts && memory.v2.conflicts.length > 0 && (
+          <details className="memory-center-optional memory-center-warning">
+            <summary>{memory.v2.conflicts.length} potential file conflict(s)</summary>
+            {memory.v2.conflicts.map((conflict) => (
+              <p key={conflict.id}>{conflict.taskTitles.join(" / ")} — {conflict.path}</p>
             ))}
           </details>
-        </>
-      )}
-      <footer className="memory-center-actions">
-        <button type="button" disabled={busy} onClick={onOpen}>
-          ดู MEMORY.md
-        </button>
-        <button type="button" disabled={busy} onClick={onExport}>
-          Export Memory
-        </button>
-      </footer>
-      <details
-        className="memory-center-danger"
-        open={dangerOpen}
-        onToggle={(event) => setDangerOpen(event.currentTarget.open)}
-      >
-        <summary>จัดการความจำ (ลบข้อมูล)</summary>
-        <p>
-          ลบความจำของ Workspace {workspace} ทั้งระบบเดิมและ Memory v2
-          การลบไม่สามารถย้อนกลับได้
-        </p>
-        <label>
-          พิมพ์ชื่อ Workspace เพื่อยืนยัน
-          <input
-            value={confirmName}
-            onChange={(event) => setConfirmName(event.target.value)}
-            aria-label="พิมพ์ชื่อ Workspace เพื่อยืนยันการลบ"
-          />
-        </label>
-        <button
-          type="button"
-          className="memory-center-delete"
-          disabled={busy || !workspaceName || confirmName !== workspaceName}
-          onClick={() => {
-            onClear();
-            setV2Page(null);
-            setLegacyPage(null);
-            setTaskPage(null);
-            setVisibleMemories(12);
-            setConfirmName("");
-          }}
-        >
-          ลบความจำทั้งหมดของ Workspace นี้
-        </button>
-      </details>
+        )}
+        {memory && (otherTasks.length > 0 || hasMoreTasks) && (
+          <details className="memory-center-optional" open={showTasks} onToggle={(event) => setShowTasks(event.currentTarget.open)}>
+            <summary>Other saved tasks · {otherTasks.length} loaded</summary>
+            {otherTasks.map((task) => (
+              <p key={task.id} className="memory-center-other-task">
+                <strong>{task.title}</strong>
+                <small>{taskStatus(task.status)} · {formatTime(task.lastEventAt ?? task.updatedAt)}</small>
+              </p>
+            ))}
+            {hasMoreTasks && (
+              <button type="button" disabled={loadingPage !== null} onClick={() => void loadPage("tasks")}>
+                {loadingPage === "tasks" ? "Loading…" : "Load more tasks"}
+              </button>
+            )}
+            {taskPage && <p className="memory-center-note">Loaded {tasks.length} of {taskPage.total} tasks.</p>}
+          </details>
+        )}
+      </section>
+
+      <section className="memory-center-panel" aria-labelledby="memory-activity-log">
+        <div className="memory-center-panel-heading">
+          <span className="memory-center-panel-number">03</span>
+          <h3 id="memory-activity-log">Activity Log</h3>
+        </div>
+        <p className="memory-center-note">Recent saved tool events and file changes, not a chat transcript or proof of task completion.</p>
+        {!memory ? (
+          <p className="memory-center-note" role="status">Loading recent activity…</p>
+        ) : log.length === 0 ? (
+          <p className="memory-center-note">No recorded activity in this workspace yet.</p>
+        ) : (
+          <ol className="memory-center-log">
+            {log.slice(0, showAllLog ? 12 : LOG_VISIBLE).map((entry) => (
+              <li key={entry.id}>
+                <time dateTime={entry.timestamp}>{formatTime(entry.timestamp)}</time>
+                <span className="memory-center-log-text">{entry.summary}</span>
+                <small>
+                  {entry.source === "Legacy"
+                    ? "Legacy saved change"
+                    : entry.status === "error"
+                      ? "Tool error"
+                      : "Tool succeeded · task completion not verified"}
+                </small>
+
+              </li>
+            ))}
+          </ol>
+        )}
+        {log.length > LOG_VISIBLE && (
+          <button type="button" onClick={() => setShowAllLog((value) => !value)}>
+            {showAllLog ? "Show fewer events" : "Show all recent events"}
+          </button>
+        )}
+        {memory && (
+          <details className="memory-center-optional memory-center-data-tools">
+            <summary>Data tools</summary>
+            <p className="memory-center-note">Only this workspace. Deleting memory cannot be undone.</p>
+            <div className="memory-center-actions">
+              <button type="button" disabled={busy} onClick={onOpen}>Open MEMORY.md</button>
+              <button type="button" disabled={busy} onClick={onExport}>Export memory</button>
+            </div>
+            <details
+              className="memory-center-danger"
+              open={dangerOpen}
+              onToggle={(event) => setDangerOpen(event.currentTarget.open)}
+            >
+              <summary>Delete workspace memory</summary>
+              <p>This deletes legacy and Memory v2 data for {workspaceName || "this workspace"}. This action cannot be undone.</p>
+              <label>
+                Type the workspace name to confirm
+                <input
+                  value={confirmName}
+                  onChange={(event) => setConfirmName(event.target.value)}
+                  aria-label="Workspace name confirmation"
+                />
+              </label>
+              <button
+                type="button"
+                className="memory-center-delete"
+                disabled={busy || !workspaceName || confirmName !== workspaceName}
+                onClick={() => {
+                  onClear();
+                  setV2Page(null);
+                  setLegacyPage(null);
+                  setTaskPage(null);
+                  setVisibleMemories(INITIAL_VISIBLE);
+                  setConfirmName("");
+                }}
+              >
+                Delete this workspace's memory
+              </button>
+            </details>
+          </details>
+        )}
+      </section>
     </div>
   );
 }

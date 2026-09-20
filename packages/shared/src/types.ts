@@ -191,6 +191,8 @@ export interface MemoryV2Snapshot {
   revision: number;
   tasks: MemoryTask[];
   events: MemoryV2Event[];
+  /** Latest explicit session-to-task binding; not a chat transcript. */
+  lastSession?: { taskId: string; title: string; currentTask: string; linkedAt: string } | null;
   memories: MemoryFact[];
   conflicts: MemoryV2Conflict[];
   counts: {

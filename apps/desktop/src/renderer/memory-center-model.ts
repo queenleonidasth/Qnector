@@ -1,4 +1,4 @@
-import type { MemoryFact, MemoryTask } from "@qnector/shared";
+import type { MemoryFact, MemoryTask, MemoryV2Event } from "@qnector/shared";
 
 export interface DisplayMemory {
   id: string;
@@ -45,4 +45,61 @@ export function pendingTasks(tasks: readonly MemoryTask[]): MemoryTask[] {
 
 export function visibleCount(total: number, pageSize: number): number {
   return Math.min(total, Math.max(0, pageSize));
+}
+
+/** Task context is not a transcript. Only session-linked tasks can name a saved session topic. */
+export function latestLinkedSessionTask(
+  tasks: readonly MemoryTask[],
+): MemoryTask | undefined {
+  return [...tasks]
+    .filter((task) => task.sessionCount > 0)
+    .sort((a, b) =>
+      (b.lastEventAt ?? b.updatedAt).localeCompare(a.lastEventAt ?? a.updatedAt),
+    )[0];
+}
+
+/** Never display idle/completed historical tasks as current work. */
+export function currentSavedTask(
+  tasks: readonly MemoryTask[],
+): MemoryTask | undefined {
+  const latest = (status: MemoryTask["status"]) =>
+    [...tasks]
+      .filter((task) => task.status === status)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  return latest("active") ?? latest("blocked");
+}
+
+export interface DisplayLogEntry {
+  id: string;
+  timestamp: string;
+  summary: string;
+  source: "Memory v2" | "Legacy";
+  status?: MemoryV2Event["status"];
+  action?: string;
+}
+
+/** Preserve provenance and show only a bounded newest-first slice of saved events. */
+export function recentSavedLog(
+  events: readonly MemoryV2Event[],
+  changes: readonly { timestamp: string; summary: string }[],
+  limit = 12,
+): DisplayLogEntry[] {
+  return [
+    ...events.map((event) => ({
+      id: `v2-${event.id}`,
+      timestamp: event.timestamp,
+      summary: event.summary,
+      source: "Memory v2" as const,
+      status: event.status,
+      action: `${event.source}.${event.action}`,
+    })),
+    ...changes.map((change, index) => ({
+      id: `legacy-${index}-${change.timestamp}`,
+      timestamp: change.timestamp,
+      summary: change.summary,
+      source: "Legacy" as const,
+    })),
+  ]
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, Math.max(0, limit));
 }
