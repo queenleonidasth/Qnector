@@ -431,7 +431,7 @@ export function MemoryCenter({
             )}
             {memory.v2 &&
               (taskPage === null
-                ? memory.v2.tasks.length >= 100
+                ? memory.v2.tasks.length >= 12
                 : taskPage.nextCursor !== null) && (
                 <button
                   type="button"

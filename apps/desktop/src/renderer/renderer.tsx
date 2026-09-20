@@ -522,6 +522,8 @@ function App(): React.ReactElement {
   const activeDrawerRef = useRef<DrawerName | null>(null);
   activeDrawerRef.current = activeDrawer;
   const memoryRefreshTimerRef = useRef<number | null>(null);
+  const memoryRefreshInFlightRef = useRef(false);
+  const memoryRefreshPendingRef = useRef(false);
   const memoryRequestSeqRef = useRef(0);
   const memoryWorkspaceRef = useRef<string | undefined>(undefined);
   memoryWorkspaceRef.current = status?.activeWorkspace;
@@ -730,14 +732,19 @@ function App(): React.ReactElement {
   };
 
   const refreshMemory = async (): Promise<void> => {
+    if (memoryRefreshInFlightRef.current) {
+      memoryRefreshPendingRef.current = true;
+      return;
+    }
+    memoryRefreshInFlightRef.current = true;
     const requestSeq = ++memoryRequestSeqRef.current;
     const requestedWorkspace = memoryWorkspaceRef.current;
     try {
       const result = await window.qnector.callMemory({
         action: "recall",
         checkpointLimit: 10,
-        factLimit: 100,
-        taskLimit: 100,
+        factLimit: 30,
+        taskLimit: 12,
         eventLimit: 12,
         changeLimit: 20,
       });
@@ -749,6 +756,12 @@ function App(): React.ReactElement {
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      memoryRefreshInFlightRef.current = false;
+      if (memoryRefreshPendingRef.current) {
+        memoryRefreshPendingRef.current = false;
+        if (activeDrawerRef.current === "memory") void refreshMemory();
+      }
     }
   };
 
@@ -793,12 +806,12 @@ function App(): React.ReactElement {
     });
     const offMemory = window.qnector.onMemory(() => {
       if (activeDrawerRef.current !== "memory") return;
-      if (memoryRefreshTimerRef.current !== null)
-        window.clearTimeout(memoryRefreshTimerRef.current);
+      // Coalesce bursts into at most one refresh every 500 ms, without starvation.
+      if (memoryRefreshTimerRef.current !== null) return;
       memoryRefreshTimerRef.current = window.setTimeout(() => {
         memoryRefreshTimerRef.current = null;
         void refreshMemory();
-      }, 120);
+      }, 500);
     });
     const offUpdate = window.qnector.onUpdate((next) => setUpdateState(next));
 
@@ -808,6 +821,8 @@ function App(): React.ReactElement {
       offStatus();
       offMemory();
       offUpdate();
+      memoryRefreshPendingRef.current = false;
+      memoryRequestSeqRef.current += 1;
       if (memoryRefreshTimerRef.current !== null)
         window.clearTimeout(memoryRefreshTimerRef.current);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
