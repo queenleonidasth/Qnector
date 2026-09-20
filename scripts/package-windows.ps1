@@ -4,6 +4,8 @@ Set-Location $projectRoot
 # A clean release worktree has no workspace dist yet. Build dependencies before
 # bundling the durable daemon, which imports @qnector/execution/dist/index.js.
 $pnpm = (Get-Command "pnpm.cmd" -ErrorAction Stop).Source
+& node (Join-Path $PSScriptRoot "check-version-sync.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Qnector version mismatch; refusing to package" }
 & $pnpm build
 if ($LASTEXITCODE -ne 0) { throw "Initial workspace build failed; refusing to package" }
 $dotnet = Join-Path $env:ProgramFiles "dotnet\dotnet.exe"
