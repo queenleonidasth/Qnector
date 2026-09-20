@@ -1,5 +1,10 @@
 import React, { useMemo, useState } from "react";
 import type { MemoryV2Snapshot, MemoryFact } from "@qnector/shared";
+import {
+  filterMemories,
+  pendingTasks,
+  presentMemories,
+} from "./memory-center-model.js";
 import "./memory-center.css";
 
 type LegacyFact = Omit<
@@ -27,6 +32,7 @@ const categories = [
   { id: "decision", name: "การตัดสินใจ" },
   { id: "fact", name: "ข้อมูลสำคัญ" },
   { id: "note", name: "บันทึกอื่น" },
+  { id: "unknown", name: "รายการที่ต้องตรวจสอบประเภท" },
 ] as const;
 function taskStatus(status: string): string {
   return (
@@ -56,31 +62,19 @@ export function MemoryCenter({
   onClear: () => void;
 }): React.ReactElement {
   const [query, setQuery] = useState("");
-  const [showAll, setShowAll] = useState(false);
+  const [visibleMemories, setVisibleMemories] = useState(12);
   const [showTasks, setShowTasks] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
   const [showLegacy, setShowLegacy] = useState(false);
-  const records = useMemo(() => {
-    if (!memory) return [];
-    // Different stores do not expose a migration identity. Do not silently discard either source.
-    return [
-      ...(memory.v2?.memories ?? []).map((item) => ({
-        ...item,
-        source: "Memory v2",
-      })),
-      ...memory.state.facts.map((item) => ({ ...item, source: "Legacy" })),
-    ];
-  }, [memory]);
-  const filtered = records.filter((item) =>
-    `${item.key} ${item.value} ${item.category}`
-      .toLocaleLowerCase()
-      .includes(query.toLocaleLowerCase()),
+  const records = useMemo(
+    () =>
+      presentMemories(memory?.v2?.memories ?? [], memory?.state.facts ?? []),
+    [memory],
   );
+  const filtered = filterMemories(records, query);
   const tasks = memory?.v2?.tasks ?? [];
-  const openTasks = tasks.filter(
-    (task) => task.status === "active" || task.status === "blocked",
-  );
+  const openTasks = pendingTasks(tasks);
   const workspaceName =
     workspace
       ?.replace(/[\\/]+$/, "")
@@ -112,8 +106,10 @@ export function MemoryCenter({
         <>
           <div className="memory-center-counts" aria-label="ภาพรวมความจำ">
             <div>
-              <strong>{records.length}</strong>
-              <span>รายการที่โหลดมา</span>
+              <strong>
+                {memory.v2?.memories.length ?? 0} + {memory.state.facts.length}
+              </strong>
+              <span>v2 + เดิม (อาจซ้ำ)</span>
             </div>
             <div>
               <strong>{openTasks.length}</strong>
@@ -135,12 +131,18 @@ export function MemoryCenter({
                 placeholder="ค้นหากฎ ข้อมูล หรือการตัดสินใจ"
               />
             </label>
+            {memory.counts.facts > memory.state.facts.length && (
+              <p className="memory-center-note" role="status">
+                ข้อมูลรุ่นเดิมแสดง {memory.state.facts.length} จาก{" "}
+                {memory.counts.facts} รายการ — รายการส่วนที่เหลือยังไม่โหลด
+              </p>
+            )}
             {(memory.v2?.counts.memories ?? 0) >
               (memory.v2?.memories.length ?? 0) && (
               <p className="memory-center-note">
-                Memory v2 แสดง {memory.v2?.memories.length} จาก{" "}
-                {memory.v2?.counts.memories} รายการ —
-                ข้อมูลส่วนที่เหลือยังไม่โหลด
+                Memory v2 แสดงความจำระดับ Workspace {memory.v2?.memories.length}{" "}
+                รายการ; ฐานข้อมูลมี {memory.v2?.counts.memories}{" "}
+                รายการรวมความจำที่ผูกกับงาน ซึ่งไม่ได้รวมอยู่ในรายการนี้
               </p>
             )}
             {records.length === 0 ? (
@@ -149,8 +151,13 @@ export function MemoryCenter({
               </p>
             ) : (
               categories.map((category) => {
-                const entries = filtered.filter(
-                  (item) => item.category === category.id,
+                const entries = filtered.filter((item) =>
+                  category.id === "unknown"
+                    ? !categories.some(
+                        (known) =>
+                          known.id !== "unknown" && known.id === item.category,
+                      )
+                    : item.category === category.id,
                 );
                 return (
                   <details key={category.id} className="memory-center-section">
@@ -162,7 +169,7 @@ export function MemoryCenter({
                         ไม่มีรายการที่ตรงกับการค้นหา
                       </p>
                     ) : (
-                      (showAll ? entries : entries.slice(0, 3)).map((item) => (
+                      entries.slice(0, visibleMemories).map((item) => (
                         <details
                           className="memory-center-record"
                           key={`${item.source}-${item.id}`}
@@ -181,9 +188,10 @@ export function MemoryCenter({
                         </details>
                       ))
                     )}
-                    {!showAll && entries.length > 3 && (
+                    {entries.length > visibleMemories && (
                       <p className="memory-center-note">
-                        แสดง 3 จาก {entries.length} รายการ — กดดูทั้งหมดด้านล่าง
+                        แสดง {Math.min(visibleMemories, entries.length)} จาก{" "}
+                        {entries.length} รายการ — กดโหลดเพิ่มด้านล่าง
                       </p>
                     )}
                   </details>
@@ -196,9 +204,17 @@ export function MemoryCenter({
             <button
               type="button"
               className="memory-center-button"
-              onClick={() => setShowAll((value) => !value)}
+              onClick={() =>
+                setVisibleMemories((count) =>
+                  count >= filtered.length
+                    ? 12
+                    : Math.min(filtered.length, count + 12),
+                )
+              }
             >
-              {showAll ? "แสดงแบบย่อ" : "ดูรายการที่โหลดมาทั้งหมด"}
+              {visibleMemories >= filtered.length
+                ? "แสดงแบบย่อ"
+                : "แสดงเพิ่มอีก 12 รายการ"}
             </button>
             <p className="memory-center-note">
               รายการจากระบบเดิมและ Memory v2 แสดงแยกตามแหล่งข้อมูล

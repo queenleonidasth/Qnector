@@ -522,6 +522,9 @@ function App(): React.ReactElement {
   const activeDrawerRef = useRef<DrawerName | null>(null);
   activeDrawerRef.current = activeDrawer;
   const memoryRefreshTimerRef = useRef<number | null>(null);
+  const memoryRequestSeqRef = useRef(0);
+  const memoryWorkspaceRef = useRef<string | undefined>(undefined);
+  memoryWorkspaceRef.current = status?.activeWorkspace;
   const [busy, setBusy] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [matrixFrozenAfterDisconnect, setMatrixFrozenAfterDisconnect] =
@@ -727,16 +730,21 @@ function App(): React.ReactElement {
   };
 
   const refreshMemory = async (): Promise<void> => {
+    const requestSeq = ++memoryRequestSeqRef.current;
+    const requestedWorkspace = memoryWorkspaceRef.current;
     try {
       const result = await window.qnector.callMemory({
         action: "recall",
         checkpointLimit: 10,
-        factLimit: 50,
+        factLimit: 100,
+        taskLimit: 100,
+        eventLimit: 12,
         changeLimit: 20,
       });
       if (result.ok) {
         const wrapped = result.data as { data?: unknown } | undefined;
-        const next = (wrapped?.data ?? wrapped) as MemoryRecallView;
+        const next = (wrapped?.data ?? wrapped) as MemoryRecallView & { workspacePath?: string };
+        if (requestSeq !== memoryRequestSeqRef.current || requestedWorkspace !== memoryWorkspaceRef.current || (requestedWorkspace && next.workspacePath && next.workspacePath.toLocaleLowerCase() !== requestedWorkspace.toLocaleLowerCase())) return;
         setMemory(next);
       }
     } catch (reason) {
@@ -915,13 +923,16 @@ function App(): React.ReactElement {
 
   const chooseWorkspace = async (): Promise<void> => {
     const next = await window.qnector.chooseWorkspace();
+    memoryRequestSeqRef.current += 1;
+    memoryWorkspaceRef.current = next.activeWorkspace;
+    setMemory(undefined);
     setStatus((current) => (current ? { ...current, ...next } : current));
     setConfig(await window.qnector.getConfig());
     await refreshMemory();
   };
 
   const clearMemory = async (): Promise<void> => {
-    if (!window.confirm("Wipe all memory for the active workspace?")) return;
+    if (!status?.activeWorkspace || !window.confirm(`ลบความจำทั้งหมดของ Workspace ${status.activeWorkspace} ทั้ง Memory รุ่นเดิมและ v2 รวมงานและประวัติที่บันทึกไว้? การกระทำนี้ย้อนกลับไม่ได้`)) return;
     setMemoryBusy(true);
     try {
       const result = await window.qnector.callMemory({

@@ -123,7 +123,7 @@ describe("drawer navigation and content completeness UX", () => {
     );
     expect(renderer).toContain("<MemoryCenter memory={memory}");
     expect(center).toContain("memory.v2?.memories");
-    expect(center).toContain("setShowAll");
+    expect(center).toContain("setVisibleMemories");
     expect(center).toContain("task.pendingSteps.map");
     expect(center).toContain("task.completedSteps.map");
   });
