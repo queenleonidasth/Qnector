@@ -1,0 +1,163 @@
+.memory-center {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-main);
+}
+.memory-center-intro {
+  display: grid;
+  gap: 4px;
+}
+.memory-center-intro strong {
+  font-size: 17px;
+  color: var(--text-gold);
+}
+.memory-center-intro code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 12px;
+}
+.memory-center-intro small,
+.memory-center-note {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.memory-center-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.memory-center-counts div {
+  display: grid;
+  padding: 10px 6px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  text-align: center;
+}
+.memory-center-counts strong {
+  font-size: 20px;
+  color: var(--text-gold);
+}
+.memory-center-counts span {
+  font-size: 11px;
+}
+.memory-center section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.memory-center h3 {
+  font-size: 15px;
+  margin: 0;
+  color: var(--text-gold);
+}
+.memory-center-search,
+.memory-center-danger label {
+  display: grid;
+  gap: 5px;
+}
+.memory-center input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass-inset);
+  color: var(--text-main);
+  font: inherit;
+}
+.memory-center-section,
+.memory-center-task,
+.memory-center-record {
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.memory-center-section summary,
+.memory-center-task > summary,
+.memory-center-record > summary {
+  cursor: pointer;
+  display: list-item;
+  font-size: 13px;
+}
+.memory-center-section summary span,
+.memory-center-record summary span {
+  float: right;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.memory-center-record {
+  margin-top: 8px;
+}
+.memory-center-record p,
+.memory-center-task p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memory-center-task ul {
+  padding-left: 22px;
+}
+.memory-center-badge {
+  border: 1px solid var(--gold-primary);
+  border-radius: 8px;
+  padding: 2px 5px;
+  margin-right: 7px;
+  color: var(--text-gold);
+}
+.memory-center button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 8px;
+  color: var(--text-main);
+  background: var(--glass-inset);
+}
+.memory-center button:focus-visible,
+.memory-center summary:focus-visible,
+.memory-center input:focus-visible {
+  outline: 2px solid var(--gold-primary);
+  outline-offset: 2px;
+}
+.memory-center-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.memory-center-danger {
+  border-top: 1px solid var(--glass-border);
+  padding-top: 10px;
+}
+.memory-center-danger summary {
+  cursor: pointer;
+}
+.memory-center .memory-center-delete {
+  border-color: #d77;
+  color: #f99;
+}
+.memory-center button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.memory-center-warning {
+  color: #f99;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 430px) {
+  .memory-center-counts {
+    gap: 4px;
+  }
+  .memory-center-counts span {
+    font-size: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-center * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

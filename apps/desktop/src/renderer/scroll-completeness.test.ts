@@ -71,10 +71,18 @@ describe("drawer navigation and content completeness UX", () => {
 
   it("clamps desktop size to the display work area and keeps a compact usable minimum", () => {
     expect(mainSource).toContain("screen.getPrimaryDisplay().workAreaSize");
-    expect(mainSource).toContain("const width = Math.min(451, workArea.width);");
-    expect(mainSource).toContain("const height = Math.min(978, workArea.height);");
-    expect(mainSource).toContain("const minWidth = Math.min(420, workArea.width);");
-    expect(mainSource).toContain("const minHeight = Math.min(620, workArea.height);");
+    expect(mainSource).toContain(
+      "const width = Math.min(451, workArea.width);",
+    );
+    expect(mainSource).toContain(
+      "const height = Math.min(978, workArea.height);",
+    );
+    expect(mainSource).toContain(
+      "const minWidth = Math.min(420, workArea.width);",
+    );
+    expect(mainSource).toContain(
+      "const minHeight = Math.min(620, workArea.height);",
+    );
     expect(mainSource).not.toContain("minHeight: 978");
   });
 
@@ -108,13 +116,17 @@ describe("drawer navigation and content completeness UX", () => {
     expect(styles).toContain(".update-progress-inline-meta");
   });
 
-  it("keeps all memory sections rendered without slicing facts or task steps", () => {
-    expect(renderer).toContain("memory?.state.active?.completedSteps?.map");
-    expect(renderer).toContain("memory?.state.active?.pendingSteps?.map");
-    expect(renderer).toContain("memory?.state.facts.map");
-    expect(renderer).not.toMatch(/memory\?\.state\.facts[^\n]*\.slice\(/);
+  it("keeps memory details accessible in the extracted Memory Center", async () => {
+    const center = readFileSync(
+      new URL("./memory-center.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(renderer).toContain("<MemoryCenter memory={memory}");
+    expect(center).toContain("memory.v2?.memories");
+    expect(center).toContain("setShowAll");
+    expect(center).toContain("task.pendingSteps.map");
+    expect(center).toContain("task.completedSteps.map");
   });
-
   it("keeps the unified shell at one fixed height while page content scrolls inside", () => {
     expect(styles).toMatch(
       /\.unified-drawer-card\s*\{[\s\S]*?height:\s*min\(90vh, calc\(100vh - 12px\)\);[\s\S]*?max-height:\s*min\(90vh, calc\(100vh - 12px\)\);/,
