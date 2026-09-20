@@ -1953,7 +1953,7 @@ function App(): React.ReactElement {
                   </div>
                 </>
               )}
-              {activeDrawer === "memory" && (<div className="drawer-content"><MemoryCenter memory={memory} workspace={status?.activeWorkspace} busy={memoryBusy} onOpen={() => void openMemoryFile()} onExport={() => void exportMemoryFile()} onClear={() => void clearMemory()} /></div>)}
+              {activeDrawer === "memory" && (<div className="drawer-content"><MemoryCenter key={status?.activeWorkspace} memory={memory} workspace={status?.activeWorkspace} busy={memoryBusy} onOpen={() => void openMemoryFile()} onExport={() => void exportMemoryFile()} onClear={() => void clearMemory()} /></div>)}
               {activeDrawer === "skills" && (
                 <SkillManager workspaceKey={status?.activeWorkspace} />
               )}

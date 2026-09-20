@@ -7,6 +7,9 @@ export interface DisplayMemory {
   category: string;
   updatedAt: string;
   source: "Memory v2" | "Legacy";
+  scope?: "workspace" | "task";
+  taskId?: string | null;
+  taskTitle?: string | null;
 }
 
 /** Keep source identity: identical text is not proof of a migration match. */

@@ -1,7 +1,7 @@
 # QNECTOR Memory Center — UX/UI Redesign Implementation Plan
 
 Date: 2026-09-20
-Status: PLAN ONLY — not implemented, not released
+Status: IMPLEMENTED IN SOURCE (P0–P3 automated scope); NOT INSTALLED OR RELEASED. Manual visual QA on the running window remains unverified.
 Scope: QNECTOR desktop Memory drawer and its read-only presentation/overview contract; preserve existing Memory v1/v2 stores, task IDs, runtime and persisted records.
 
 ## 0. Product goal
@@ -130,7 +130,7 @@ This mockup is illustrative only. Display real persisted text verbatim or safely
 
 ## 6. Out of scope / delivery boundaries
 
-- This document is a plan, not a UI implementation. No source edits beyond this plan, no restart, no release, no memory deletion.
+- Implementation record: extracted Memory Center UI, added read-only paged v2 inventory for workspace/task memories and tasks, reused paged legacy list, added exact full-workspace inventory totals, source/scope labels, incrementally displayed items, workspace-response guards and safer deletion confirmation. Source changes have not been installed or released; no memory deletion occurred.
 - Do not use generated claims to summarize persisted facts unless the feature clearly labels them as generated and links source; initial redesign shows stored text directly.
 - Missing `../devq.md` is a pre-implementation documentation blocker; locate it or establish approved replacement before substantial implementation.
 - Keep unrelated uncommitted Social Reader / Durable Runtime work untouched; when implementation is requested, stage only relevant changes and isolate any overlapping hunks.

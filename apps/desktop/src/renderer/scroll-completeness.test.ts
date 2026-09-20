@@ -121,8 +121,10 @@ describe("drawer navigation and content completeness UX", () => {
       new URL("./memory-center.tsx", import.meta.url),
       "utf8",
     );
-    expect(renderer).toContain("<MemoryCenter memory={memory}");
-    expect(center).toContain("memory.v2?.memories");
+    expect(renderer).toContain(
+      "<MemoryCenter key={status?.activeWorkspace} memory={memory}",
+    );
+    expect(center).toContain("memory?.v2?.memories");
     expect(center).toContain("setVisibleMemories");
     expect(center).toContain("task.pendingSteps.map");
     expect(center).toContain("task.completedSteps.map");

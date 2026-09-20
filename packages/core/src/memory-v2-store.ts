@@ -228,6 +228,92 @@ export class MemoryV2Store {
     );
   }
 
+  /** Read-only, bounded inventory; unlike snapshot counts, totals cover the full workspace. */
+  public listMemoryPage(
+    cursor = 0,
+    limit = 100,
+  ): {
+    items: Array<
+      MemoryFact & {
+        scope: "workspace" | "task";
+        taskId: string | null;
+        taskTitle: string | null;
+      }
+    >;
+    total: number;
+    nextCursor: number | null;
+  } {
+    const offset = Math.max(
+      0,
+      Math.floor(Number.isFinite(cursor) ? cursor : 0),
+    );
+    const size = clamp(limit, 1, 100);
+    const total = this.db
+      .prepare("SELECT COUNT(*) AS count FROM memories WHERE workspace_id=?")
+      .get(this.workspaceId) as { count: number };
+    const rows = this.db
+      .prepare(
+        `SELECT m.*, t.title AS task_title FROM memories m
+       LEFT JOIN tasks t ON t.id=m.task_id AND t.workspace_id=m.workspace_id
+       WHERE m.workspace_id=? ORDER BY m.updated_at DESC, m.id DESC LIMIT ? OFFSET ?`,
+      )
+      .all(this.workspaceId, size, offset) as unknown as Array<
+      MemoryRow & { task_id: string | null; task_title: string | null }
+    >;
+    const items = rows.map((row) => ({
+      id: row.id,
+      key: row.key,
+      category: row.category as MemoryCategory,
+      value: row.value,
+      tags: parseStringArray(row.tags_json),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      scope: row.task_id ? ("task" as const) : ("workspace" as const),
+      taskId: row.task_id ?? null,
+      taskTitle: row.task_title ?? null,
+    }));
+    return {
+      items,
+      total: total.count,
+      nextCursor:
+        offset + items.length < total.count ? offset + items.length : null,
+    };
+  }
+
+  public listTaskPage(
+    cursor = 0,
+    limit = 100,
+  ): {
+    items: MemoryTask[];
+    total: number;
+    nextCursor: number | null;
+  } {
+    const offset = Math.max(
+      0,
+      Math.floor(Number.isFinite(cursor) ? cursor : 0),
+    );
+    const size = clamp(limit, 1, 100);
+    const total = this.db
+      .prepare("SELECT COUNT(*) AS count FROM tasks WHERE workspace_id=?")
+      .get(this.workspaceId) as { count: number };
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM tasks WHERE workspace_id=?
+       ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'blocked' THEN 1 WHEN 'idle' THEN 2 ELSE 3 END,
+                COALESCE(last_event_at, updated_at) DESC, id DESC LIMIT ? OFFSET ?`,
+      )
+      .all(this.workspaceId, size, offset) as unknown as TaskRow[];
+    const items = rows.map((row) =>
+      taskFromRow(row, this.sessionCount(row.id), this.touchedPaths(row.id)),
+    );
+    return {
+      items,
+      total: total.count,
+      nextCursor:
+        offset + items.length < total.count ? offset + items.length : null,
+    };
+  }
+
   public resumeTask(query?: string): MemoryTaskResumeResult {
     const tasks = this.listTasks(100).filter(
       (task) => task.status !== "completed" && task.id !== this.defaultTaskId,

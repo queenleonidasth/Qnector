@@ -45,6 +45,7 @@ export const memoryDefinition: ToolDefinition = {
           "task_complete",
           "task_bind_session",
           "v2_snapshot",
+          "v2_inventory",
         ],
       },
       taskId: { type: "string" },
@@ -59,6 +60,7 @@ export const memoryDefinition: ToolDefinition = {
       importance: { type: "integer", minimum: 0, maximum: 100 },
       eventLimit: { type: "integer", minimum: 1, maximum: 200 },
       taskLimit: { type: "integer", minimum: 1, maximum: 100 },
+      inventoryType: { type: "string", enum: ["memories", "tasks"] },
       completedSteps: { type: "array", items: { type: "string" } },
       pendingSteps: { type: "array", items: { type: "string" } },
       criticalContext: { type: "string" },
@@ -277,6 +279,32 @@ export async function executeMemory(
       return {
         summary: `Bound session to Memory v2 task '${taskId}'`,
         data: { sessionId, taskId },
+      };
+    }
+
+    if (action === "v2_inventory") {
+      if (!context.memoryV2)
+        throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      const inventoryType = stringInput(object, "inventoryType", true)!;
+      if (inventoryType !== "memories" && inventoryType !== "tasks")
+        throw new Error(
+          "INVALID_INPUT: inventoryType must be memories or tasks",
+        );
+      const cursor = numberInput(object, "cursor", 0);
+      const limit = numberInput(object, "limit", 100);
+      const result =
+        inventoryType === "memories"
+          ? context.memoryV2.listMemoryPage(cursor, limit)
+          : context.memoryV2.listTaskPage(cursor, limit);
+      return {
+        summary: `Listed ${result.items.length} ${inventoryType} from local workspace`,
+        data: {
+          ...result,
+          inventoryType,
+          workspaceId: context.memoryV2.currentWorkspaceId,
+        },
+        truncated: result.nextCursor !== null,
+        nextCursor: result.nextCursor,
       };
     }
 

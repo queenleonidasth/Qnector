@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import type { MemoryV2Snapshot, MemoryFact } from "@qnector/shared";
+import type { MemoryV2Snapshot, MemoryFact, MemoryTask } from "@qnector/shared";
 import {
   filterMemories,
   pendingTasks,
@@ -11,7 +11,19 @@ type LegacyFact = Omit<
   Pick<MemoryFact, "id" | "key" | "value" | "category" | "updatedAt">,
   "category"
 > & { category: string };
+type V2MemoryRecord = MemoryFact & {
+  scope: "workspace" | "task";
+  taskId: string | null;
+  taskTitle: string | null;
+};
+interface InventoryPage<T> {
+  items: T[];
+  total: number;
+  nextCursor: number | null;
+  workspaceId: string;
+}
 export interface MemoryCenterData {
+  workspaceId?: string;
   available: boolean;
   updatedAt: string;
   warning?: string;
@@ -67,14 +79,104 @@ export function MemoryCenter({
   const [dangerOpen, setDangerOpen] = useState(false);
   const [confirmName, setConfirmName] = useState("");
   const [showLegacy, setShowLegacy] = useState(false);
+  const [v2Page, setV2Page] = useState<InventoryPage<V2MemoryRecord> | null>(
+    null,
+  );
+  const [legacyPage, setLegacyPage] =
+    useState<InventoryPage<LegacyFact> | null>(null);
+  const [taskPage, setTaskPage] = useState<InventoryPage<MemoryTask> | null>(
+    null,
+  );
+  const [loadingPage, setLoadingPage] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const v2Records = useMemo(() => {
+    const byId = new Map<string, MemoryFact | V2MemoryRecord>();
+    for (const item of v2Page?.items ?? []) byId.set(item.id, item);
+    for (const item of memory?.v2?.memories ?? [])
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    return Array.from(byId.values());
+  }, [memory, v2Page]);
+  const legacyRecords = useMemo(() => {
+    const byId = new Map<string, LegacyFact>();
+    for (const item of memory?.state.facts ?? []) byId.set(item.id, item);
+    for (const item of legacyPage?.items ?? []) byId.set(item.id, item);
+    return Array.from(byId.values());
+  }, [memory, legacyPage]);
   const records = useMemo(
-    () =>
-      presentMemories(memory?.v2?.memories ?? [], memory?.state.facts ?? []),
-    [memory],
+    () => presentMemories(v2Records, legacyRecords),
+    [v2Records, legacyRecords],
   );
   const filtered = filterMemories(records, query);
-  const tasks = memory?.v2?.tasks ?? [];
+  const tasks = useMemo(() => {
+    const byId = new Map<string, MemoryTask>();
+    for (const item of taskPage?.items ?? []) byId.set(item.id, item);
+    for (const item of memory?.v2?.tasks ?? [])
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    return Array.from(byId.values());
+  }, [memory, taskPage]);
   const openTasks = pendingTasks(tasks);
+  const requestPage = async <T,>(
+    input: Record<string, unknown>,
+  ): Promise<InventoryPage<T>> => {
+    const result = await window.qnector.callMemory(input);
+    if (!result.ok) throw new Error(result.error?.message ?? result.summary);
+    const wrapped = result.data as { data?: unknown } | undefined;
+    const raw = (wrapped?.data ?? wrapped) as (InventoryPage<T> & { facts?: T[] }) | undefined;
+    const items = Array.isArray(raw?.items) ? raw.items : raw?.facts;
+    if (!raw || !Array.isArray(items) || !Number.isFinite(raw.total))
+      throw new Error("Invalid memory inventory response");
+    return { ...raw, items };
+  };
+  const loadPage = async (
+    kind: "memories" | "tasks" | "legacy",
+  ): Promise<void> => {
+    if (loadingPage || !memory) return;
+    setLoadingPage(kind);
+    setPageError(null);
+    try {
+      if (kind === "legacy") {
+        const page = await requestPage<LegacyFact>({
+          action: "list",
+          cursor: legacyPage?.nextCursor ?? 0,
+          limit: 100,
+        });
+        if (memory.workspaceId && page.workspaceId !== memory.workspaceId)
+          return;
+        setLegacyPage((current) => ({
+          ...page,
+          items: [...(current?.items ?? []), ...page.items],
+        }));
+      } else if (kind === "memories") {
+        const page = await requestPage<V2MemoryRecord>({
+          action: "v2_inventory",
+          inventoryType: "memories",
+          cursor: v2Page?.nextCursor ?? 0,
+          limit: 100,
+        });
+        if (page.workspaceId !== memory.v2?.workspaceId) return;
+        setV2Page((current) => ({
+          ...page,
+          items: [...(current?.items ?? []), ...page.items],
+        }));
+      } else {
+        const page = await requestPage<MemoryTask>({
+          action: "v2_inventory",
+          inventoryType: "tasks",
+          cursor: taskPage?.nextCursor ?? 0,
+          limit: 100,
+        });
+        if (page.workspaceId !== memory.v2?.workspaceId) return;
+        setTaskPage((current) => ({
+          ...page,
+          items: [...(current?.items ?? []), ...page.items],
+        }));
+      }
+    } catch (reason) {
+      setPageError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setLoadingPage(null);
+    }
+  };
   const workspaceName =
     workspace
       ?.replace(/[\\/]+$/, "")
@@ -107,7 +209,7 @@ export function MemoryCenter({
           <div className="memory-center-counts" aria-label="ภาพรวมความจำ">
             <div>
               <strong>
-                {memory.v2?.memories.length ?? 0} + {memory.state.facts.length}
+                {v2Records.length} + {legacyRecords.length}
               </strong>
               <span>v2 + เดิม (อาจซ้ำ)</span>
             </div>
@@ -131,18 +233,50 @@ export function MemoryCenter({
                 placeholder="ค้นหากฎ ข้อมูล หรือการตัดสินใจ"
               />
             </label>
-            {memory.counts.facts > memory.state.facts.length && (
+            {memory.counts.facts > legacyRecords.length && (
               <p className="memory-center-note" role="status">
-                ข้อมูลรุ่นเดิมแสดง {memory.state.facts.length} จาก{" "}
-                {memory.counts.facts} รายการ — รายการส่วนที่เหลือยังไม่โหลด
+                ข้อมูลรุ่นเดิมแสดง {legacyRecords.length} จาก{" "}
+                {memory.counts.facts} รายการ
               </p>
             )}
-            {(memory.v2?.counts.memories ?? 0) >
-              (memory.v2?.memories.length ?? 0) && (
-              <p className="memory-center-note">
-                Memory v2 แสดงความจำระดับ Workspace {memory.v2?.memories.length}{" "}
-                รายการ; ฐานข้อมูลมี {memory.v2?.counts.memories}{" "}
-                รายการรวมความจำที่ผูกกับงาน ซึ่งไม่ได้รวมอยู่ในรายการนี้
+            {memory.counts.facts > legacyRecords.length &&
+              legacyPage?.nextCursor !== null && (
+                <button
+                  type="button"
+                  disabled={loadingPage !== null}
+                  onClick={() => void loadPage("legacy")}
+                >
+                  {loadingPage === "legacy"
+                    ? "กำลังโหลด…"
+                    : "โหลดความจำรุ่นเดิมเพิ่มจากเครื่อง"}
+                </button>
+              )}
+            {memory.v2 &&
+              (v2Page?.total ?? memory.v2.counts.memories) >
+                v2Records.length && (
+                <p className="memory-center-note" role="status">
+                  Memory v2 แสดง {v2Records.length} จาก{" "}
+                  {v2Page?.total ?? memory.v2.counts.memories}{" "}
+                  รายการรวมทั้งความจำที่ผูกกับงาน
+                </p>
+              )}
+            {memory.v2 &&
+              (v2Page === null
+                ? memory.v2.counts.memories > memory.v2.memories.length
+                : v2Page.nextCursor !== null) && (
+                <button
+                  type="button"
+                  disabled={loadingPage !== null}
+                  onClick={() => void loadPage("memories")}
+                >
+                  {loadingPage === "memories"
+                    ? "กำลังโหลด…"
+                    : "โหลดความจำ Memory v2 เพิ่มจากเครื่อง (รวมความจำรายงาน)"}
+                </button>
+              )}
+            {pageError && (
+              <p role="alert" className="memory-center-warning">
+                โหลดข้อมูลไม่สำเร็จ: {pageError}
               </p>
             )}
             {records.length === 0 ? (
@@ -176,9 +310,24 @@ export function MemoryCenter({
                         >
                           <summary>
                             <strong>{item.key}</strong>
-                            <span>{item.source}</span>
+                            <span>
+                              {item.source}
+                              {item.scope === "task"
+                                ? " · เฉพาะงาน"
+                                : item.source === "Memory v2"
+                                  ? " · Workspace"
+                                  : ""}
+                            </span>
                           </summary>
                           <p>{item.value}</p>
+                          {item.scope === "task" && (
+                            <p className="memory-center-note">
+                              งาน:{" "}
+                              {item.taskTitle ||
+                                item.taskId ||
+                                "ไม่ทราบชื่องาน"}
+                            </p>
+                          )}
                           <small>
                             บันทึก:{" "}
                             {item.updatedAt
@@ -280,6 +429,25 @@ export function MemoryCenter({
                 {showTasks ? "ย่อรายการงาน" : "ดูงานทั้งหมดที่โหลดมา"}
               </button>
             )}
+            {memory.v2 &&
+              (taskPage === null
+                ? memory.v2.tasks.length >= 100
+                : taskPage.nextCursor !== null) && (
+                <button
+                  type="button"
+                  disabled={loadingPage !== null}
+                  onClick={() => void loadPage("tasks")}
+                >
+                  {loadingPage === "tasks"
+                    ? "กำลังโหลด…"
+                    : "โหลดงานเพิ่มเติมจากเครื่อง"}
+                </button>
+              )}
+            {taskPage && (
+              <p className="memory-center-note">
+                โหลดงานแล้ว {tasks.length} จากทั้งหมด {taskPage.total} งาน
+              </p>
+            )}
             {memory.state.active?.currentTask && (
               <details
                 className="memory-center-section"
@@ -303,6 +471,14 @@ export function MemoryCenter({
               Checkpoint: {memory.counts.checkpoints} · Event ทั้งหมด:{" "}
               {memory.v2?.counts.events ?? "ไม่ทราบ"}
             </p>
+            {memory.v2 &&
+              (taskPage?.total ?? memory.v2.tasks.length) >
+                memory.v2.tasks.length && (
+                <p className="memory-center-note">
+                  การตรวจจับไฟล์ขัดแย้งจาก Snapshot ครอบคลุมเฉพาะ{" "}
+                  {memory.v2.tasks.length} งานแรก ไม่ใช่ทุกงานในฐานข้อมูล
+                </p>
+              )}
             {memory.v2?.conflicts.map((conflict) => (
               <p role="alert" key={conflict.id}>
                 ไฟล์ขัดแย้ง: {conflict.taskTitles.join(" / ")} — {conflict.path}
@@ -349,6 +525,10 @@ export function MemoryCenter({
           disabled={busy || !workspaceName || confirmName !== workspaceName}
           onClick={() => {
             onClear();
+            setV2Page(null);
+            setLegacyPage(null);
+            setTaskPage(null);
+            setVisibleMemories(12);
             setConfirmName("");
           }}
         >
