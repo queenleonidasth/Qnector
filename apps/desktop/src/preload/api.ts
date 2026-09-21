@@ -47,8 +47,13 @@ export interface QnectorApi {
   getActivity(): Promise<ActivityEntry[]>;
   durableJobs(): Promise<DurableJobsSnapshot>;
   cancelDurableJob(taskId: string): Promise<unknown>;
-  durableOutput(taskId: string, stream: "stdout" | "stderr"): Promise<{
-    text: string; complete: boolean; nextCursor: number;
+  durableOutput(
+    taskId: string,
+    stream: "stdout" | "stderr",
+  ): Promise<{
+    text: string;
+    complete: boolean;
+    nextCursor: number;
   }>;
   callMemory(input: Record<string, unknown>): Promise<ToolResult>;
   callTool(
@@ -60,7 +65,8 @@ export interface QnectorApi {
       | "git"
       | "memory"
       | "browser"
-      | "computer",
+      | "computer"
+      | "social",
     input: Record<string, unknown>,
   ): Promise<ToolResult>;
   exportActivity(
@@ -75,6 +81,8 @@ export interface QnectorApi {
   openPath(path: string): Promise<void>;
   openUrl(url: string): Promise<void>;
   getConfig(): Promise<QnectorConfig>;
+  toggleYouTubeSocial(enabled: boolean): Promise<QnectorConfig>;
+  toggleFacebookSocial(enabled: boolean): Promise<QnectorConfig>;
   getConnectionSetup(): Promise<ConnectionSetupStatus>;
   getUpdateState(): Promise<DesktopUpdateState>;
   checkForUpdates(): Promise<DesktopUpdateState>;

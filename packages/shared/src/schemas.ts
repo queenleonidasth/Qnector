@@ -45,6 +45,18 @@ export const configSchema = z.object({
     setupCompleted: z.boolean().optional(),
     theme: z.enum(["system", "light", "dark"]),
   }),
+  social: z
+    .object({
+      enabled: z.boolean().default(false),
+      platforms: z.array(z.enum(["youtube", "facebook"])).max(2),
+      agentReachPath: z.string().optional(),
+      youtubePath: z.string().optional(),
+      opencliPath: z.string().optional(),
+      nodePath: z.string().optional(),
+      authMode: z.literal("existing-chrome-session").optional(),
+      timeoutMs: z.number().int().min(1000).max(30000).optional(),
+    })
+    .optional(),
   memory: z
     .object({
       workspaceMirror: z.enum(["off", "memory-md"]).optional(),

@@ -43,6 +43,11 @@ import type {
 } from "@qnector/shared";
 import { ElectronPlatformServices } from "./platform-services.js";
 import {
+  configureLocalFacebook,
+  configureLocalYouTube,
+  findLocalNode,
+} from "./social-setup.js";
+import {
   createWindowsLoginItemSettings,
   LEGACY_WINDOWS_LOGIN_ITEM_NAME,
   windowsAppUserModelId,
@@ -82,6 +87,7 @@ type ConfigPatch = {
   shell?: Partial<QnectorConfig["shell"]>;
   ui?: Partial<QnectorConfig["ui"]>;
   memory?: Partial<NonNullable<QnectorConfig["memory"]>>;
+  social?: NonNullable<QnectorConfig["social"]>;
 };
 
 export async function bootstrap(): Promise<void> {
@@ -467,6 +473,32 @@ function registerIpc(): void {
   ipcMain.handle("config:update", (_event, patch: ConfigPatch) =>
     updateConfig(patch),
   );
+  ipcMain.handle("social:youtube-toggle", async (_event, enabled: boolean) => {
+    if (typeof enabled !== "boolean")
+      throw new Error("INVALID_INPUT: Expected a boolean.");
+    const current = (await requireRuntime()).getConfig();
+    const social = await configureLocalYouTube(
+      current.social,
+      process.env.LOCALAPPDATA,
+      findLocalNode(),
+      enabled,
+    );
+    // Only social changes: no transport disconnect or runtime restart.
+    return updateConfig({ social });
+  });
+  ipcMain.handle("social:facebook-toggle", async (_event, enabled: boolean) => {
+    if (typeof enabled !== "boolean")
+      throw new Error("INVALID_INPUT: Expected a boolean.");
+    const current = (await requireRuntime()).getConfig();
+    const social = await configureLocalFacebook(
+      current.social,
+      process.env.LOCALAPPDATA,
+      findLocalNode(),
+      enabled,
+    );
+    // No persistent config is changed unless doctor AND an authenticated search succeed.
+    return updateConfig({ social });
+  });
   ipcMain.handle("activity:list", () => runtime?.activity.list() ?? []);
   ipcMain.handle("durable:jobs", async () => {
     const current = await requireRuntime();
@@ -518,7 +550,8 @@ function registerIpc(): void {
         | "git"
         | "memory"
         | "browser"
-        | "computer",
+        | "computer"
+        | "social",
       input: Record<string, unknown>,
     ) =>
       requireRuntime().then((activeRuntime) =>
@@ -628,6 +661,7 @@ async function updateConfig(patch: ConfigPatch): Promise<QnectorConfig> {
     shell: { ...current.shell, ...(patch.shell ?? {}) },
     ui: { ...current.ui, ...(patch.ui ?? {}) },
     memory: { ...(current.memory ?? {}), ...(patch.memory ?? {}) },
+    social: patch.social ?? current.social,
   };
   const transportChanged =
     JSON.stringify(current.transport) !== JSON.stringify(next.transport);

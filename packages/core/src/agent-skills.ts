@@ -33,6 +33,7 @@ const KNOWN_TOOLS = new Set([
   "memory",
   "browser",
   "computer",
+  "social",
 ]);
 
 export interface AgentSkillRoot {

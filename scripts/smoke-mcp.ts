@@ -27,9 +27,29 @@ try {
   const listed = await call("tools/list", {});
   const tools =
     (listed.result as { tools?: Array<{ name: string }> }).tools ?? [];
+  const expectedTools = [
+    "system",
+    "workspace",
+    "files",
+    "process",
+    "git",
+    "memory",
+    "browser",
+    "computer",
+    "social",
+  ];
   assert(
-    tools.length === 8,
-    `expected 8 grouped tools, received ${tools.length}`,
+    tools.length === expectedTools.length &&
+      expectedTools.every((name) => tools.some((tool) => tool.name === name)),
+    `expected ${expectedTools.join(", ")}, received ${tools.map((tool) => tool.name).join(", ")}`,
+  );
+  const socialHealth = await call("tools/call", {
+    name: "social",
+    arguments: { action: "health" },
+  });
+  assert(
+    JSON.stringify(socialHealth.result).includes("disabled"),
+    "social.health must be disabled by default without Agent Reach",
   );
   const info = await call("tools/call", {
     name: "system",
@@ -87,7 +107,8 @@ try {
         workspace,
         checks: [
           "initialize",
-          "tools/list",
+          "tools/list (9 named tools)",
+          "social.health (disabled by default)",
           "system.info",
           "files.write/read",
           "memory.save_checkpoint/recall",

@@ -45,6 +45,17 @@ export interface MemoryConfig {
   maxPayloadBytes?: number;
 }
 
+export interface SocialConfig {
+  enabled: boolean;
+  platforms: Array<"youtube" | "facebook">;
+  agentReachPath?: string;
+  youtubePath?: string;
+  opencliPath?: string;
+  nodePath?: string;
+  authMode?: "existing-chrome-session";
+  timeoutMs?: number;
+}
+
 export interface QnectorConfig {
   version: 1;
   deviceId: string;
@@ -57,6 +68,7 @@ export interface QnectorConfig {
   shell: ShellConfig;
   ui: UiConfig;
   memory?: MemoryConfig;
+  social?: SocialConfig;
 }
 
 export interface ActivityEntry {
@@ -283,7 +295,8 @@ export interface ToolDefinition {
     | "git"
     | "memory"
     | "browser"
-    | "computer";
+    | "computer"
+    | "social";
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotation;

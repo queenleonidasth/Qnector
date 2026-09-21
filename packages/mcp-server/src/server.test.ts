@@ -509,7 +509,7 @@ describe("Qnector MCP runtime", () => {
         "Continue the saved Qnector task",
       );
       const modernTools = await client.listTools();
-      expect(modernTools.tools).toHaveLength(8);
+      expect(modernTools.tools).toHaveLength(9);
       expect(modernTools.tools.map((tool) => tool.name)).toContain("browser");
       expect(
         modernTools.tools
@@ -600,27 +600,42 @@ describe("Qnector MCP runtime", () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-payload-"));
     const port = await freePort();
     runtime = new QnectorRuntime({
-      config: {...defaultConfig(root), localPort: port},
+      config: { ...defaultConfig(root), localPort: port },
       configFile: path.join(root, "config.json"),
       logger: new ActivityLogger(path.join(root, "activity.jsonl")),
     });
     const invoked = vi.spyOn(runtime.registry, "call").mockResolvedValue({
-      ok: true, tool: "system", action: "status", summary: "Completed synthetic task",
-      data: {taskId: "task_once", payload: "x".repeat(400_000)},
-      meta: {durationMs: 1, truncated: false, nextCursor: 25},
+      ok: true,
+      tool: "system",
+      action: "status",
+      summary: "Completed synthetic task",
+      data: { taskId: "task_once", payload: "x".repeat(400_000) },
+      meta: { durationMs: 1, truncated: false, nextCursor: 25 },
     });
-    await runtime.start({port});
+    await runtime.start({ port });
     const output = await request(`http://127.0.0.1:${port}/mcp`, {
-      jsonrpc: "2.0", id: 94, method: "tools/call",
-      params: {name: "system", arguments: {action: "status"}},
+      jsonrpc: "2.0",
+      id: 94,
+      method: "tools/call",
+      params: { name: "system", arguments: { action: "status" } },
     });
-    const parsed = (output.body as {result?: {structuredContent?: {
-      ok: boolean; data?: {taskId?: string; payloadOmitted?: boolean};
-      meta: {truncated: boolean; nextCursor: number};
-    }}}).result?.structuredContent;
+    const parsed = (
+      output.body as {
+        result?: {
+          structuredContent?: {
+            ok: boolean;
+            data?: { taskId?: string; payloadOmitted?: boolean };
+            meta: { truncated: boolean; nextCursor: number };
+          };
+        };
+      }
+    ).result?.structuredContent;
     expect(invoked).toHaveBeenCalledTimes(1);
-    expect(parsed).toMatchObject({ok: true, data: {taskId: "task_once", payloadOmitted: true},
-      meta: {truncated: true, nextCursor: 25}});
+    expect(parsed).toMatchObject({
+      ok: true,
+      data: { taskId: "task_once", payloadOmitted: true },
+      meta: { truncated: true, nextCursor: 25 },
+    });
     expect(JSON.stringify(output.body).length).toBeLessThan(10_000);
   });
 

@@ -23,3 +23,5 @@ export * from "./pty-manager.js";
 export * from "./performance-monitor.js";
 export * from "./agent-skills.js";
 export * from "./resource-coordinator.js";
+export * from "./social/types.js";
+export * from "./social/service.js";

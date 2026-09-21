@@ -75,6 +75,11 @@ try {
   const listed=await rpc(2,'tools/list');
   if (!listed.result?.tools?.some(tool=>tool.name==='tasks'))
     throw new Error(`STDIO_TASKS_NOT_ADVERTISED ${JSON.stringify(listed)}`);
+  if (!listed.result?.tools?.some(tool=>tool.name==='social'))
+    throw new Error('PACKAGED_SOCIAL_TOOL_MISSING');
+  const socialHealth=await rpc(11,'tools/call',{name:'social',arguments:{action:'health'}});
+  if (!socialHealth.result?.structuredContent?.ok || socialHealth.result.structuredContent.data?.status!=='disabled')
+    throw new Error('PACKAGED_SOCIAL_DEFAULT_MUST_BE_OFF');
   const marker=path.join(root,'once.txt');
   const start=await rpc(3,'tools/call',{name:'tasks',arguments:{action:'start',idempotencyKey:'packaged-stdio-once',waitTimeoutMs:0,
     command:{kind:'direct',file:process.execPath,args:['-e',

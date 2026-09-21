@@ -16,7 +16,8 @@ const api: QnectorApi = {
   getActivity: () => ipcRenderer.invoke("activity:list"),
   durableJobs: () => ipcRenderer.invoke("durable:jobs"),
   cancelDurableJob: (taskId) => ipcRenderer.invoke("durable:cancel", taskId),
-  durableOutput: (taskId, stream) => ipcRenderer.invoke("durable:output", taskId, stream),
+  durableOutput: (taskId, stream) =>
+    ipcRenderer.invoke("durable:output", taskId, stream),
   callMemory: (input) => ipcRenderer.invoke("memory:call", input),
   callTool: (tool, input) => ipcRenderer.invoke("tool:call", tool, input),
   exportActivity: (format, options) =>
@@ -38,6 +39,10 @@ const api: QnectorApi = {
   openTerminal: (path) => ipcRenderer.invoke("system:open-terminal", path),
   openUrl: (url) => ipcRenderer.invoke("system:open-url", url),
   getConfig: () => ipcRenderer.invoke("config:get"),
+  toggleYouTubeSocial: (enabled) =>
+    ipcRenderer.invoke("social:youtube-toggle", enabled),
+  toggleFacebookSocial: (enabled) =>
+    ipcRenderer.invoke("social:facebook-toggle", enabled),
   getConnectionSetup: () => ipcRenderer.invoke("setup:inspect"),
   getUpdateState: () => ipcRenderer.invoke("updater:get-state"),
   checkForUpdates: () => ipcRenderer.invoke("updater:check"),
