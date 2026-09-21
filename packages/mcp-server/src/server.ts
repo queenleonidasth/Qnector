@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { handleHttpMcp } from "./http-mcp-host.js";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -55,7 +56,7 @@ import type {
 import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry } from "@qnector/tools";
 import { durableTaskSchema, executeDurableTask } from "./durable-task-tool.js";
-import { attachSseHeartbeat, boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
+import { boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
 import { TimelineLogger, timelineLogPath } from "./timeline-logger.js";
 import { runTimeoutProbe, type ProbeMode } from "./timeout-probe.js";
 import type { SkillTraceStore, ToolContext } from "@qnector/tools";
@@ -468,124 +469,14 @@ export class QnectorRuntime {
     );
   }
 
-  private async handleMcp(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
-    if (!trustedMcpOrigin(request)) {
-      await reply.code(403).send({
-        ok: false,
-        error: "MCP_ORIGIN_FORBIDDEN",
-        message: "The MCP Origin must match the request Host.",
-      });
-      return;
-    }
-    const traceId = randomUUID();
-    const timelineContext = this.timeline.start(traceId);
-    this.timeline.record(timelineContext, "request_received", {method: request.method});
-    const rpc = request.body && typeof request.body === "object" && !Array.isArray(request.body)
-      ? request.body as Record<string, unknown> : undefined;
-    this.timeline.record(timelineContext, "rpc_parsed", {
-      method: typeof rpc?.method === "string" ? rpc.method.slice(0, 80) : request.method,
-      ...(typeof rpc?.id === "number" || typeof rpc?.id === "string"
-        ? {rpcId: String(rpc.id).slice(0, 80)} : {}),
+  private async handleMcp(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    return handleHttpMcp(request, reply, {
+      timeline: this.timeline,
+      activity: this.activity,
+      enableTimeoutProbe: this.enableTimeoutProbe,
+      mcpNodeHandler: this.mcpNodeHandler,
+      schemaRevision: MCP_SCHEMA_REVISION,
     });
-    const startedAt = Date.now();
-    // Capture before finish: reply.raw.socket may be cleared on close.
-    const responseSocket = reply.raw.socket;
-    const initialSocketBytes = responseSocket?.bytesWritten ?? 0;
-    const socketByteDelta = () => Math.max(0, (responseSocket?.bytesWritten ?? initialSocketBytes) - initialSocketBytes);
-    let traceRecorded = false;
-    const recordTrace = (status: "success" | "error", summary: string) => {
-      if (traceRecorded) return;
-      traceRecorded = true;
-      const socketBytesDelta = socketByteDelta();
-      this.activity.recordBuffered({
-        tool: "mcp",
-        action: "exchange",
-        argsSummary: JSON.stringify({
-          traceId,
-          requestId: request.id,
-          method: request.method,
-          path: request.url.split("?", 1)[0],
-          statusCode: reply.raw.statusCode,
-          durationMs: Date.now() - startedAt,
-          socketBytesDelta,
-          aborted: reply.raw.destroyed && !reply.raw.writableFinished,
-        }),
-        status,
-        durationMs: Date.now() - startedAt,
-        summary,
-      });
-    };
-    reply.raw.once("close", () => {
-      this.timeline.record(timelineContext, "stream_closed", {
-        source: "res", finished: reply.raw.writableFinished,
-      });
-      if (!reply.raw.writableFinished)
-        this.timeline.record(timelineContext, "client_aborted", {source: "res"});
-      if (!reply.raw.writableFinished)
-        recordTrace(
-          "error",
-          "MCP exchange disconnected before response finished",
-        );
-    });
-    request.raw.once("aborted", () =>
-      this.timeline.record(timelineContext, "client_aborted", {source: "req"}));
-    reply.raw.once("finish", () => this.timeline.record(timelineContext,
-      "response_flushed", {statusCode: reply.raw.statusCode,
-        socketBytesDelta: socketByteDelta()}));
-    const originalWriteHead = reply.raw.writeHead;
-    let responseWritten = false;
-    const observedWriteHead = ((...args: Parameters<typeof originalWriteHead>) => {
-      if (!responseWritten) {
-        responseWritten = true;
-        this.timeline.record(timelineContext, "response_written", {
-          statusCode: typeof args[0] === "number" ? args[0] : reply.raw.statusCode,
-        });
-      }
-      return Reflect.apply(originalWriteHead, reply.raw, args) as typeof reply.raw;
-    }) as typeof reply.raw.writeHead;
-    reply.raw.writeHead = observedWriteHead;
-    const restoreWriteHead = () => {
-      if (reply.raw.writeHead === observedWriteHead) reply.raw.writeHead = originalWriteHead;
-    };
-    reply.raw.once("finish", restoreWriteHead);
-    reply.raw.once("close", restoreWriteHead);
-    reply.raw.socket?.setNoDelay(true);
-    reply.raw.setHeader("X-Qnector-Trace-Id", traceId);
-    reply.raw.setHeader("X-Qnector-Schema-Revision", MCP_SCHEMA_REVISION);
-    reply.raw.setHeader("X-Qnector-Capability", "live");
-    reply.hijack();
-    // Never emit SSE comments into JSON or stdio. The guard only writes when
-    // the MCP library has committed an actual event-stream response.
-    const call = rpc?.params && typeof rpc.params === "object" && !Array.isArray(rpc.params)
-      ? rpc.params as Record<string, unknown> : undefined;
-    const callArgs = call?.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments)
-      ? call.arguments as Record<string, unknown> : undefined;
-    const quietProbe = this.enableTimeoutProbe && rpc?.method === "tools/call" &&
-      call?.name === "system.timeout_probe" &&
-      (callArgs?.mode === "silent" || callArgs?.mode === "progress");
-    const stopHeartbeat = quietProbe ? () => undefined : attachSseHeartbeat(reply.raw, undefined, () =>
-      this.timeline.record(timelineContext, "keepalive_sent"));
-    try {
-      await this.timeline.run(timelineContext, () => this.mcpNodeHandler(
-        request.raw,
-        reply.raw,
-        request.method === "POST" ? request.body : undefined,
-      ));
-      recordTrace("success", "MCP exchange completed");
-    } catch (error) {
-      this.timeline.record(timelineContext, "error", {
-        source: "mcp_handler", errorType: error instanceof Error ? error.name : "unknown",
-      });
-      recordTrace(
-        "error",
-        `MCP exchange failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      stopHeartbeat();
-      throw error;
-    }
   }
 
   private async createMcpServer(
@@ -877,20 +768,6 @@ function toolResultText(result: Record<string, unknown>): string {
     return `${code}: ${message}${hint}\n${LIVE_RESULT_ANCHOR}`;
   }
   return `${summary}\n${LIVE_RESULT_ANCHOR}`;
-}
-
-function trustedMcpOrigin(request: FastifyRequest): boolean {
-  const origin = request.headers.origin;
-  if (!origin) return true;
-  if (Array.isArray(origin) || !request.headers.host) return false;
-  try {
-    const parsed = new URL(origin);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-      return false;
-    return parsed.host.toLowerCase() === request.headers.host.toLowerCase();
-  } catch {
-    return false;
-  }
 }
 
 function inputSchemaFor(

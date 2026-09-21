@@ -366,8 +366,12 @@ export async function executeProcess(
         ...snapshot,
       }));
       return {
-        summary: `Listed ${tasks.length} durable Qnector task(s)`,
-        data: { tasks, taskProtocol: "qnector-process-v1" },
+        summary: `Listed ${tasks.length} session-scoped Qnector task(s)`,
+        data: {
+          tasks,
+          taskProtocol: "qnector-process-v1",
+          taskLifetime: "session",
+        },
       };
     }
     if (action === "task_get") {
@@ -376,8 +380,13 @@ export async function executeProcess(
         stringInput(object, "processId", true)!;
       const snapshot = context.processManager.snapshot(taskId);
       return {
-        summary: `Read durable task ${taskId}`,
-        data: { taskId, ...snapshot, taskProtocol: "qnector-process-v1" },
+        summary: `Read session-scoped task ${taskId}`,
+        data: {
+          taskId,
+          ...snapshot,
+          taskProtocol: "qnector-process-v1",
+          taskLifetime: "session",
+        },
       };
     }
     if (action === "wait_for_exit") {
@@ -528,7 +537,7 @@ export async function executeProcess(
       });
       return action === "task_start"
         ? {
-            summary: `Started durable task for ${command}`,
+            summary: `Started session-scoped task for ${command}`,
             data: {
               taskId: snapshot.id,
               ...snapshot,
