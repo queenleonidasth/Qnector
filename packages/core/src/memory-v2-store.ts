@@ -697,6 +697,18 @@ export class MemoryV2Store {
     const events = eventRows.map(eventFromRow);
     const memories = this.listMemories(taskId, options.memoryLimit ?? 100);
     const conflicts = detectConflicts(tasks);
+    // A linked session provides a topic, never the actual ChatGPT messages.
+    const lastSessionRow = this.db
+      .prepare(
+        `SELECT ts.task_id, ts.last_seen_at, t.title, t.current_task
+         FROM task_sessions ts
+         JOIN tasks t ON t.id=ts.task_id AND t.workspace_id=ts.workspace_id
+         WHERE ts.workspace_id=?
+         ORDER BY ts.last_seen_at DESC, ts.rowid DESC LIMIT 1`,
+      )
+      .get(this.workspaceId) as
+      | { task_id: string; last_seen_at: string; title: string; current_task: string }
+      | undefined;
     const updatedAt =
       [
         ...tasks.map((task) => task.updatedAt),
@@ -713,6 +725,14 @@ export class MemoryV2Store {
       revision: this.revision,
       tasks,
       events,
+      lastSession: lastSessionRow
+        ? {
+            taskId: lastSessionRow.task_id,
+            title: lastSessionRow.title,
+            currentTask: lastSessionRow.current_task,
+            linkedAt: lastSessionRow.last_seen_at,
+          }
+        : null,
       memories,
       conflicts,
       counts: {

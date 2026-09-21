@@ -9,6 +9,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { AgentSkillService } from "../../core/src/agent-skills.js";
 import { ActivityLogger } from "../../core/src/activity-log.js";
+import { ProcessManager } from "../../core/src/process-manager.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { Phase0Server } from "./phase0.js";
 import { QnectorRuntime } from "./server.js";
@@ -22,6 +23,22 @@ describe("Qnector MCP runtime", () => {
     if (root) await rm(root, { recursive: true, force: true });
     runtime = undefined;
     root = undefined;
+  });
+
+  it("composes injected services once and preserves their identity through tool context", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-composition-"));
+    const manager = new ProcessManager("direct");
+    const logger = new ActivityLogger(path.join(root, "activity.jsonl"));
+    runtime = new QnectorRuntime({config: defaultConfig(root), processManager: manager, logger,
+      configFile: path.join(root, "config.json")});
+    expect(runtime.processManager).toBe(manager);
+    expect(runtime.activity).toBe(logger);
+    expect(runtime.context().processManager).toBe(manager);
+    expect(runtime.context().activity).toBe(logger);
+    const next = {...runtime.getConfig(), machineName: "Updated"};
+    await runtime.setConfig(next);
+    expect(runtime.context().getConfig().machineName).toBe("Updated");
+    expect(runtime.memoryV2).toBeDefined();
   });
 
   it("serves legacy stateless and modern 2026-07-28 MCP traffic", async () => {
@@ -66,6 +83,7 @@ describe("Qnector MCP runtime", () => {
       category: "rule",
     });
     await runtime.start({ port });
+    const skillStatusSpy = vi.spyOn(runtime.agentSkills, "status");
     expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
 
     const initialized = await request(`http://127.0.0.1:${port}/mcp`, {
@@ -107,6 +125,8 @@ describe("Qnector MCP runtime", () => {
       initialized.body as { result?: { instructions?: string } }
     ).result?.instructions;
     expect(instructions).toContain("QNECTOR SESSION BOOTSTRAP");
+    expect(instructions).toContain("Skills: manual opt-in only");
+    expect(skillStatusSpy).not.toHaveBeenCalled();
     expect(instructions).toContain("CURRENT CAPABILITY RULE");
     expect(instructions).toContain(
       "current tool list outranks conversation history",
@@ -591,9 +611,8 @@ describe("Qnector MCP runtime", () => {
           entry.action === "write" &&
           entry.status === "success",
       );
-    expect(unroutedWrite?.skillRoutingWarning).toMatchObject({
-      code: "SKILL_ROUTING_MISSING",
-    });
+    expect(unroutedWrite?.skillTrace).toBeUndefined();
+    expect(unroutedWrite).not.toHaveProperty("skillRoutingWarning");
   });
 
   it("bounds oversized tool output in the actual HTTP MCP response without replaying the operation", async () => {

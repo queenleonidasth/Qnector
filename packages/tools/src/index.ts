@@ -57,9 +57,8 @@ export class ToolRegistry {
   ): Promise<ToolResult> {
     const memoryTaskId = memoryTaskIdFromInput(input) ?? context.memoryTaskId;
     const skillRouteId = skillRouteIdFromInput(input);
-    // Skill routing is explicit only: never insert hidden tool calls in a
-    // stateless MCP request. Existing task/session/route handles still inherit
-    // the activated Skill trace without another route operation.
+    // Direct tools are the default. Only explicit skill_get / skills_route calls
+    // activate Skills; existing task/session/route handles preserve their trace.
     const inheritedTrace =
       skillTraceForScope(
         context.skillTraceStore,
@@ -69,7 +68,7 @@ export class ToolRegistry {
       ) ?? context.skillTrace;
     const skillTrace =
       inheritedTrace ??
-      (isSkillsRouteRequest(name, input) ? { skills: [] } : undefined);
+      (isSkillActivationRequest(name, input) ? { skills: [] } : undefined);
     const scopedContext =
       memoryTaskId || skillTrace
         ? {
@@ -125,13 +124,15 @@ function scopedStringFromInput(
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-function isSkillsRouteRequest(name: string, input: unknown): boolean {
+function isSkillActivationRequest(name: string, input: unknown): boolean {
   return (
     name === "system" &&
     !!input &&
     typeof input === "object" &&
     !Array.isArray(input) &&
-    (input as { action?: unknown }).action === "skills_route"
+    ["skills_route", "skill_get"].includes(
+      (input as { action?: string }).action ?? "",
+    )
   );
 }
 

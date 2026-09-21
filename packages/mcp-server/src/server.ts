@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { handleHttpMcp } from "./http-mcp-host.js";
+import { createRuntimeServices } from "./runtime-services.js";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -9,7 +11,8 @@ import Fastify, {
 } from "fastify";
 import cors from "@fastify/cors";
 import { toNodeHandler } from "@modelcontextprotocol/node";
-import { serveStdio, type ServeStdioOptions, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
+import type { ServeStdioOptions, StdioServerHandle } from "@modelcontextprotocol/server/stdio";
+import { startStdioMcpHost } from "./stdio-mcp-host.js";
 import {
   McpServer,
   createMcpHandler,
@@ -19,7 +22,6 @@ import {
 import {
   ActivityLogger,
   QNECTOR_VERSION,
-  activityLogPath,
   loadConfig,
   saveConfig,
   ProcessManager,
@@ -54,8 +56,9 @@ import type {
 } from "@qnector/shared";
 import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry } from "@qnector/tools";
-import { durableTaskSchema, executeDurableTask } from "./durable-task-tool.js";
-import { attachSseHeartbeat, boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
+import { durableTaskSchema } from "./durable-task-tool.js";
+import { ExecutionFacade } from "./execution-facade.js";
+import { boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
 import { TimelineLogger, timelineLogPath } from "./timeline-logger.js";
 import { runTimeoutProbe, type ProbeMode } from "./timeout-probe.js";
 import type { SkillTraceStore, ToolContext } from "@qnector/tools";
@@ -111,6 +114,7 @@ export class QnectorRuntime {
   private readonly timeline: TimelineLogger;
   private readonly enableTimeoutProbe: boolean;
   private readonly durableDaemonRoot?: string;
+  private readonly executionFacade?: ExecutionFacade;
   public readonly app: FastifyInstance;
   public readonly registry = new ToolRegistry();
   public readonly processManager: ProcessManager;
@@ -173,97 +177,36 @@ export class QnectorRuntime {
     this.configFile = options.configFile;
     this.timeline = new TimelineLogger(options.timelineLogFile ?? (() => timelineLogPath(this.configFile)));
     this.enableTimeoutProbe = options.enableTimeoutProbe ?? process.env.QNECTOR_TIMEOUT_PROBE === "1";
-    this.processManager =
-      options.processManager ?? new ProcessManager(this.config.shell.windows);
-    this.codeIntelligence =
-      options.codeIntelligence ?? new TypeScriptCodeIntelligence();
-    this.fileSearch = options.fileSearch ?? new WindowsFileSearchService();
-    this.uiAutomation =
-      options.uiAutomation ??
-      new WindowsUiAutomationService({
-        powershellPath: this.config.shell.powershellPath,
-      });
-    this.fileWatch = options.fileWatch ?? new FileWatchService();
-    this.browserRuntime = options.browserRuntime ?? new ManagedBrowserRuntime();
-    this.genericLsp = options.genericLsp ?? new GenericLspService();
-    this.semanticSearch =
-      options.semanticSearch ?? new LocalSemanticSearchService();
-    this.nativeProcess =
-      options.nativeProcess ??
-      new NativeProcessService(this.config.shell.powershellPath);
-    this.releaseManager = options.releaseManager ?? new ReleaseManager();
-    this.documentIntelligence =
-      options.documentIntelligence ?? new DocumentIntelligenceService();
-    this.resourceCoordinator =
-      options.resourceCoordinator ?? new ResourceCoordinator();
-    this.workflowManager =
-      options.workflowManager ??
-      new WorkflowManager(this.processManager, this.fileWatch, {
-        resourceCoordinator: this.resourceCoordinator,
-        executeTool: async (tool, input, workflowContext) => {
-          const scopedConfig = {
-            ...this.config,
-            activeWorkspace: workflowContext.workspace,
-          };
-          const scopedContext: ToolContext = {
-            ...this.context(),
-            workspace: new WorkspaceState(scopedConfig),
-            abortSignal: workflowContext.signal,
-            resourceCoordinator: this.resourceCoordinator,
-            resourceOwnerToken: workflowContext.resourceOwnerToken,
-            getConfig: () => scopedConfig,
-            setConfig: async () => {
-              throw new Error(
-                "WORKFLOW_WORKSPACE_PINNED: tool steps cannot change the active workspace for a running workflow",
-              );
-            },
-          };
-          return this.registry.call(tool, scopedContext, {
-            ...input,
-            ...(workflowContext.memoryTaskId
-              ? { memoryTaskId: workflowContext.memoryTaskId }
-              : {}),
-          });
-        },
-      });
-    this.ptyManager =
-      options.ptyManager ?? new PtyManager(this.config.shell.windows);
-    this.agentSkills =
-      options.agentSkills ??
-      new AgentSkillService({
-        roots: defaultAgentSkillRoots(),
-        workspaceRoot: () => this.config.activeWorkspace,
-      });
-    this.activity =
-      options.logger ??
-      new ActivityLogger(
-        activityLogPath(),
-        500,
-        10_000_000,
-        options.nonBlockingActivityWrites ?? false,
-      );
-    this.workspace = new WorkspaceState(this.config);
-    this.memory =
-      options.memory ??
-      new MemoryStore(this.config.activeWorkspace, {
-        ...(this.configFile
-          ? {
-              rootDirectory: path.join(path.dirname(this.configFile), "memory"),
-            }
-          : {}),
-        workspaceMirror: this.config.memory?.workspaceMirror ?? "off",
-        maxCheckpoints: this.config.memory?.maxCheckpoints,
-        maxPayloadBytes: this.config.memory?.maxPayloadBytes,
-      });
-    this.memoryV2 = new MemoryV2Store(this.config.activeWorkspace, {
-      ...(this.configFile
-        ? { file: path.join(path.dirname(this.configFile), "memory-v2.sqlite") }
-        : {}),
+    const services = createRuntimeServices({
+      options,
+      configFile: this.configFile,
+      getConfig: () => this.config,
+      getContext: () => this.context(),
+      registry: this.registry,
     });
-    this.platform =
-      options.platform ??
-      options.platformServices ??
-      new NodePlatformServices(this.config.shell.powershellPath);
+    this.processManager = services.processManager;
+    this.codeIntelligence = services.codeIntelligence;
+    this.fileSearch = services.fileSearch;
+    this.uiAutomation = services.uiAutomation;
+    this.fileWatch = services.fileWatch;
+    this.browserRuntime = services.browserRuntime;
+    this.genericLsp = services.genericLsp;
+    this.semanticSearch = services.semanticSearch;
+    this.nativeProcess = services.nativeProcess;
+    this.releaseManager = services.releaseManager;
+    this.documentIntelligence = services.documentIntelligence;
+    this.resourceCoordinator = services.resourceCoordinator;
+    this.workflowManager = services.workflowManager;
+    this.ptyManager = services.ptyManager;
+    this.agentSkills = services.agentSkills;
+    this.activity = services.activity;
+    this.workspace = services.workspace;
+    this.memory = services.memory;
+    this.memoryV2 = services.memoryV2;
+    this.platform = services.platform;
+    this.executionFacade = this.durableDaemonRoot
+      ? new ExecutionFacade(this.durableDaemonRoot, this.processManager)
+      : undefined;
     this.app = options.app ?? Fastify({ logger: false, bodyLimit: 2_000_000 });
     this.mcpHandler = createMcpHandler((requestContext) =>
       this.createMcpServer(requestContext),
@@ -380,14 +323,7 @@ export class QnectorRuntime {
       await this.ensureAutomaticMemoryCheckpoint();
       await this.migrateMemoryV2();
     }
-    const handle = serveStdio(() => this.createMcpServer(), {
-      ...options,
-      onerror: (error) => {
-        options.onerror?.(error);
-        // Do not print diagnostics to stdout: it is the MCP wire.
-        if (!options.onerror) console.error("Qnector stdio transport:", error);
-      },
-    });
+    const handle = startStdioMcpHost(() => this.createMcpServer(), options);
     this.stdioHandle = handle;
     this.state = "connected";
     return handle;
@@ -468,124 +404,14 @@ export class QnectorRuntime {
     );
   }
 
-  private async handleMcp(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> {
-    if (!trustedMcpOrigin(request)) {
-      await reply.code(403).send({
-        ok: false,
-        error: "MCP_ORIGIN_FORBIDDEN",
-        message: "The MCP Origin must match the request Host.",
-      });
-      return;
-    }
-    const traceId = randomUUID();
-    const timelineContext = this.timeline.start(traceId);
-    this.timeline.record(timelineContext, "request_received", {method: request.method});
-    const rpc = request.body && typeof request.body === "object" && !Array.isArray(request.body)
-      ? request.body as Record<string, unknown> : undefined;
-    this.timeline.record(timelineContext, "rpc_parsed", {
-      method: typeof rpc?.method === "string" ? rpc.method.slice(0, 80) : request.method,
-      ...(typeof rpc?.id === "number" || typeof rpc?.id === "string"
-        ? {rpcId: String(rpc.id).slice(0, 80)} : {}),
+  private async handleMcp(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+    return handleHttpMcp(request, reply, {
+      timeline: this.timeline,
+      activity: this.activity,
+      enableTimeoutProbe: this.enableTimeoutProbe,
+      mcpNodeHandler: this.mcpNodeHandler,
+      schemaRevision: MCP_SCHEMA_REVISION,
     });
-    const startedAt = Date.now();
-    // Capture before finish: reply.raw.socket may be cleared on close.
-    const responseSocket = reply.raw.socket;
-    const initialSocketBytes = responseSocket?.bytesWritten ?? 0;
-    const socketByteDelta = () => Math.max(0, (responseSocket?.bytesWritten ?? initialSocketBytes) - initialSocketBytes);
-    let traceRecorded = false;
-    const recordTrace = (status: "success" | "error", summary: string) => {
-      if (traceRecorded) return;
-      traceRecorded = true;
-      const socketBytesDelta = socketByteDelta();
-      this.activity.recordBuffered({
-        tool: "mcp",
-        action: "exchange",
-        argsSummary: JSON.stringify({
-          traceId,
-          requestId: request.id,
-          method: request.method,
-          path: request.url.split("?", 1)[0],
-          statusCode: reply.raw.statusCode,
-          durationMs: Date.now() - startedAt,
-          socketBytesDelta,
-          aborted: reply.raw.destroyed && !reply.raw.writableFinished,
-        }),
-        status,
-        durationMs: Date.now() - startedAt,
-        summary,
-      });
-    };
-    reply.raw.once("close", () => {
-      this.timeline.record(timelineContext, "stream_closed", {
-        source: "res", finished: reply.raw.writableFinished,
-      });
-      if (!reply.raw.writableFinished)
-        this.timeline.record(timelineContext, "client_aborted", {source: "res"});
-      if (!reply.raw.writableFinished)
-        recordTrace(
-          "error",
-          "MCP exchange disconnected before response finished",
-        );
-    });
-    request.raw.once("aborted", () =>
-      this.timeline.record(timelineContext, "client_aborted", {source: "req"}));
-    reply.raw.once("finish", () => this.timeline.record(timelineContext,
-      "response_flushed", {statusCode: reply.raw.statusCode,
-        socketBytesDelta: socketByteDelta()}));
-    const originalWriteHead = reply.raw.writeHead;
-    let responseWritten = false;
-    const observedWriteHead = ((...args: Parameters<typeof originalWriteHead>) => {
-      if (!responseWritten) {
-        responseWritten = true;
-        this.timeline.record(timelineContext, "response_written", {
-          statusCode: typeof args[0] === "number" ? args[0] : reply.raw.statusCode,
-        });
-      }
-      return Reflect.apply(originalWriteHead, reply.raw, args) as typeof reply.raw;
-    }) as typeof reply.raw.writeHead;
-    reply.raw.writeHead = observedWriteHead;
-    const restoreWriteHead = () => {
-      if (reply.raw.writeHead === observedWriteHead) reply.raw.writeHead = originalWriteHead;
-    };
-    reply.raw.once("finish", restoreWriteHead);
-    reply.raw.once("close", restoreWriteHead);
-    reply.raw.socket?.setNoDelay(true);
-    reply.raw.setHeader("X-Qnector-Trace-Id", traceId);
-    reply.raw.setHeader("X-Qnector-Schema-Revision", MCP_SCHEMA_REVISION);
-    reply.raw.setHeader("X-Qnector-Capability", "live");
-    reply.hijack();
-    // Never emit SSE comments into JSON or stdio. The guard only writes when
-    // the MCP library has committed an actual event-stream response.
-    const call = rpc?.params && typeof rpc.params === "object" && !Array.isArray(rpc.params)
-      ? rpc.params as Record<string, unknown> : undefined;
-    const callArgs = call?.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments)
-      ? call.arguments as Record<string, unknown> : undefined;
-    const quietProbe = this.enableTimeoutProbe && rpc?.method === "tools/call" &&
-      call?.name === "system.timeout_probe" &&
-      (callArgs?.mode === "silent" || callArgs?.mode === "progress");
-    const stopHeartbeat = quietProbe ? () => undefined : attachSseHeartbeat(reply.raw, undefined, () =>
-      this.timeline.record(timelineContext, "keepalive_sent"));
-    try {
-      await this.timeline.run(timelineContext, () => this.mcpNodeHandler(
-        request.raw,
-        reply.raw,
-        request.method === "POST" ? request.body : undefined,
-      ));
-      recordTrace("success", "MCP exchange completed");
-    } catch (error) {
-      this.timeline.record(timelineContext, "error", {
-        source: "mcp_handler", errorType: error instanceof Error ? error.name : "unknown",
-      });
-      recordTrace(
-        "error",
-        `MCP exchange failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      stopHeartbeat();
-      throw error;
-    }
   }
 
   private async createMcpServer(
@@ -612,7 +438,7 @@ export class QnectorRuntime {
             "qnector/schemaRevision": MCP_SCHEMA_REVISION,
             "qnector/availability": "live-when-listed",
             "qnector/recoveryAction": "system.status",
-            "qnector/skillsRouting": "required-for-substantive-work",
+            "qnector/skillsRouting": "manual-opt-in",
           },
         },
         async (input, extra) => {
@@ -698,12 +524,12 @@ export class QnectorRuntime {
     if (this.durableDaemonRoot) {
       server.registerTool("tasks", {
         title: "Qnector durable tasks (experimental Windows)",
-        description: "Use an already-running independent daemon. start requires a caller-stable idempotencyKey. A lost MCP connection stops waiting, not work. Use taskId with wait, result or output; cancel is explicit. Development preview, not Job Object or production ready.",
+        description: "Use an already-running independent daemon. start requires a caller-stable idempotencyKey. A lost MCP connection stops waiting, not work. Use taskId with wait, result or output; cancel is explicit. overview and lookup combine daemon and session read models, preserving different lifetimes. Development preview; validate native containment and packaging before production.",
         inputSchema: fromJsonSchema(durableTaskSchema),
         annotations: {destructiveHint: true, openWorldHint: false},
-        _meta: {"qnector/durablePreview": true, "qnector/schemaRevision": "durable-tasks-preview-v1"},
+        _meta: {"qnector/durablePreview": true, "qnector/schemaRevision": "durable-tasks-preview-v2"},
       }, async (input) => {
-        const result = await executeDurableTask(this.durableDaemonRoot!,
+        const result = await this.executionFacade!.execute(
           this.config.activeWorkspace, input as Record<string, unknown>,
           requestContext?.requestInfo?.signal);
         return {
@@ -787,12 +613,11 @@ export class QnectorRuntime {
         factLimit: 12,
         changeLimit: 3,
       });
-      const skillCount = (await this.agentSkills.status()).activeCount;
+      // Skills are opt-in: do not scan skill roots during every MCP handshake.
       return buildSessionBootstrapInstructions(
         memory,
         this.activity.list().slice(-8),
         this.memoryV2.snapshot({ eventLimit: 8, taskLimit: 8 }),
-        skillCount,
       );
     } catch (error) {
       return buildSessionBootstrapError(
@@ -880,20 +705,6 @@ function toolResultText(result: Record<string, unknown>): string {
   return `${summary}\n${LIVE_RESULT_ANCHOR}`;
 }
 
-function trustedMcpOrigin(request: FastifyRequest): boolean {
-  const origin = request.headers.origin;
-  if (!origin) return true;
-  if (Array.isArray(origin) || !request.headers.host) return false;
-  try {
-    const parsed = new URL(origin);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
-      return false;
-    return parsed.host.toLowerCase() === request.headers.host.toLowerCase();
-  } catch {
-    return false;
-  }
-}
-
 function inputSchemaFor(
   definition: ToolDefinition,
 ): ReturnType<typeof fromJsonSchema> {
@@ -902,21 +713,6 @@ function inputSchemaFor(
   const schema = fromJsonSchema(definition.inputSchema);
   mcpInputSchemaCache.set(definition.name, schema);
   return schema;
-}
-function defaultAgentSkillRoots() {
-  const runtimeResources = (
-    process as NodeJS.Process & { resourcesPath?: string }
-  ).resourcesPath;
-  const appData = process.env.APPDATA;
-  return [
-    ...(runtimeResources
-      ? [{ path: path.join(runtimeResources, "skills"), source: "bundled" }]
-      : []),
-    // Project skills are resolved dynamically from config.activeWorkspace.
-    ...(appData
-      ? [{ path: path.join(appData, "Qnector", "skills"), source: "user" }]
-      : []),
-  ];
 }
 
 export async function createRuntime(

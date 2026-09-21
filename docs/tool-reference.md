@@ -108,9 +108,9 @@ Graph steps may declare `resourcePaths` to prevent concurrent mutations of overl
 
 ## Agent Skills
 
-Qnector implements a local Agent Skills runtime using the open `SKILL.md` folder convention. `system.skills_list` exposes bounded metadata, `skills_match` ranks relevant skills without a model API, and `skill_get` loads full instructions only when a skill is activated. Skill roots include packaged Qnector skills, the source checkout `skills` directory, `%APPDATA%\\Qnector\\skills`, and `<workspace>\\.qnector\\skills`. Session bootstrap advertises only the bounded skill catalog and instructs the client to activate a matching skill on demand, preserving progressive disclosure.
+Qnector implements a local Agent Skills runtime using the open `SKILL.md` folder convention. `system.skills_list` exposes bounded metadata, `skills_match` ranks relevant skills without a model API, and `skill_get` loads full instructions only when a skill is activated. Skill roots include packaged Qnector skills, the source checkout `skills` directory, `%APPDATA%\\Qnector\\skills`, and `<workspace>\\.qnector\\skills`. Session bootstrap avoids scanning Skills, defaults to direct tools, and advertises manual opt-in. Skills are activated only at explicit user request: skill_get for a named Skill, or skills_route if the user asks Qnector to select Skills.
 
-Bundled skills cover project QC, document and spreadsheet workflows, archive/7-Zip workflows, skill authoring, UI/UX design, design systems, UI/UX auditing, loading/motion design, and UX writing. UI work should activate the relevant design skill before material interface changes and should use real browser/computer visual verification when available. Skill files are instructions and metadata only; Qnector does not automatically execute scripts merely because a skill was discovered.
+Bundled skills cover project QC, document and spreadsheet workflows, archive/7-Zip workflows, skill authoring, UI/UX design, design systems, UI/UX auditing, loading/motion design, and UX writing. UI work may activate a relevant design skill when the user requests it and should use real browser/computer visual verification when available. Skill files are instructions and metadata only; Qnector does not automatically execute scripts merely because a skill was discovered.
 
 ## Memory
 

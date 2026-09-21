@@ -149,7 +149,7 @@ describe("Qnector grouped tools", () => {
   it("shares the Agent Skill runtime guard without changing unsupported-action errors", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skill-guard-"));
     const source = await readFile(
-      new URL("./system-tool.ts", import.meta.url),
+      new URL("./system-skills-adapter.ts", import.meta.url),
       "utf8",
     );
     expect(source.match(/if \(!context\.agentSkills\)/g)).toHaveLength(1);
@@ -163,7 +163,7 @@ describe("Qnector grouped tools", () => {
     }
   });
 
-  it("does not implicitly route a file edit or add hidden tool calls", async () => {
+  it("runs direct edits without routing, warnings or hidden tool calls", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-auto-skill-"));
     const context = makeContext(defaultConfig(root));
     const directory = path.join(root, "skills", "typescript-best-practices");
@@ -197,7 +197,95 @@ describe("Qnector grouped tools", () => {
         entry.status === "success",
     );
     expect(write?.skillTrace).toBeUndefined();
-    expect(write?.skillRoutingWarning?.code).toBe("SKILL_ROUTING_MISSING");
+    expect(write).not.toHaveProperty("skillRoutingWarning");
+    expect(entries.every((entry) => !("skillRoutingWarning" in entry))).toBe(
+      true,
+    );
+  });
+
+  it("activates a named Skill only on skill_get and isolates unrelated tasks", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-manual-skill-"));
+    const context = makeContext(defaultConfig(root));
+    const directory = path.join(root, "skills", "manual-qa");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, "SKILL.md"),
+      "---\nname: manual-qa\ndescription: Manual quality checks.\nallowed-tools: [files]\n---\nCheck files.\n",
+    );
+    context.agentSkills = new AgentSkillService({
+      roots: [{ path: path.join(root, "skills"), source: "test" }],
+    });
+    context.skillTraceStore = {
+      default: { skills: [] },
+      byTaskId: new Map(),
+      byRouteId: new Map(),
+    };
+    const registry = new ToolRegistry();
+    const direct = await registry.call("files", context, {
+      action: "write",
+      path: "before.txt",
+      content: "direct",
+      memoryTaskId: "manual-task",
+    });
+    expect(direct.ok).toBe(true);
+    const loaded = await registry.call("system", context, {
+      action: "skill_get",
+      name: "manual-qa",
+      memoryTaskId: "manual-task",
+    });
+    expect(loaded.ok).toBe(true);
+    const routeId = (loaded.data as { data: { routeId?: string } }).data
+      .routeId;
+    expect(routeId).toMatch(/^[a-f0-9-]{36}$/);
+    const active = await registry.call("files", context, {
+      action: "write",
+      path: "after.txt",
+      content: "manual",
+      memoryTaskId: "manual-task",
+    });
+    expect(active.ok).toBe(true);
+    const unrelated = await registry.call("files", context, {
+      action: "write",
+      path: "other.txt",
+      content: "direct",
+      memoryTaskId: "other-task",
+    });
+    expect(unrelated.ok).toBe(true);
+    const routeOnly = await registry.call("files", context, {
+      action: "write",
+      path: "routed.txt",
+      content: "explicit route",
+      skillRouteId: routeId,
+    });
+    expect(routeOnly.ok).toBe(true);
+    const completed = context.activity
+      .list()
+      .filter((entry) => entry.status === "success");
+    expect(
+      completed.find((entry) => entry.action === "skills_route"),
+    ).toBeUndefined();
+    const activation = completed.find((entry) => entry.action === "skill_get");
+    expect(activation?.skillTrace).toMatchObject({
+      skills: ["manual-qa"],
+      evidence: "activated",
+    });
+    const edits = completed.filter(
+      (entry) => entry.tool === "files" && entry.action === "write",
+    );
+    expect(edits[0]?.skillTrace).toBeUndefined();
+    expect(edits[1]?.skillTrace).toMatchObject({
+      routeId: activation?.skillTrace?.routeId,
+      skills: ["manual-qa"],
+      evidence: "in_context",
+    });
+    expect(edits[2]?.skillTrace).toBeUndefined();
+    expect(edits[3]?.skillTrace).toMatchObject({
+      routeId,
+      skills: ["manual-qa"],
+    });
+    expect(edits.every((entry) => !("skillRoutingWarning" in entry))).toBe(
+      true,
+    );
   });
 
   it("keeps default route responses compact while retaining full diagnostics on demand", async () => {

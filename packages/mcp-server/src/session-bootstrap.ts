@@ -28,10 +28,14 @@ export function buildSessionBootstrapInstructions(
   if (skillCount > 0) {
     lines.push(
       "",
-      `Agent Skills: ${skillCount} available. EXPLICIT ROUTING ONLY: call system.skills_route once for substantive tasks; add an English intent/technology hint for non-English queries. Reuse routeId until the task changes.`,
-      "Follow selected skills. Pass routeId as skillRouteId for stateless calls (or use memoryTaskId). details=true diagnoses routing; skill_get loads full instructions on demand.",
+      `Agent Skills: ${skillCount} available. MANUAL / OPT-IN ONLY: use direct tools by default; no auto-routing. Activate only if the user requests one.`,
+      "Named Skill: system.skill_get. Select Skills only on user request: system.skills_route. Pass skillRouteId or memoryTaskId only to related calls.",
       "SKILL DISCOVERY: only at user request, use system.skills_search_remote / system.skill_install_remote; never install silently.",
-      "COMPLETION DISCLOSURE: report Skills used: <activated names|none>; only actually used skills.",
+      "COMPLETION DISCLOSURE: mention Skill names only if explicitly activated and actually used.",
+    );
+  } else {
+    lines.push(
+      "Skills: manual opt-in only; use direct tools unless the user requests a Skill.",
     );
   }
 

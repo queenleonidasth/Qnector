@@ -121,13 +121,18 @@ describe("drawer navigation and content completeness UX", () => {
       new URL("./memory-center.tsx", import.meta.url),
       "utf8",
     );
-    expect(renderer).toContain(
-      "<MemoryCenter key={status?.activeWorkspace} memory={memory}",
+    expect(renderer).toMatch(
+      /<MemoryCenter\s+key=\{status\?\.activeWorkspace\}\s+memory=\{memory\}/,
     );
     expect(center).toContain("memory?.v2?.memories");
     expect(center).toContain("setVisibleMemories");
-    expect(center).toContain("task.pendingSteps.map");
-    expect(center).toContain("task.completedSteps.map");
+    expect(center).toContain("currentTask.pendingSteps.slice(1).map");
+    expect(center).toContain("currentTask.completedSteps.map");
+    expect(center).toContain('id="memory-last-session"');
+    expect(center).toContain('id="memory-current-task"');
+    expect(center).toContain('id="memory-activity-log"');
+    expect(center).toContain("summary>Saved context");
+    expect(center).toContain("summary>Data tools");
   });
   it("keeps the unified shell at one fixed height while page content scrolls inside", () => {
     expect(styles).toMatch(

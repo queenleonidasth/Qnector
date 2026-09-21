@@ -280,12 +280,12 @@ const ActivityPanel = React.memo(function ActivityPanel({
                         SKILL {item.skillTrace.skills.length}
                       </span>
                     )}
-                    {item.skillRoutingWarning && (
+                    {!item.skillTrace?.skills.length && (
                       <span
-                        className="activity-routing-missing-badge"
-                        title={item.skillRoutingWarning.message}
+                        className="activity-direct-badge"
+                        title="Direct tool call; no Skill activated"
                       >
-                        ROUTE UNVERIFIED
+                        DIRECT TOOL
                       </span>
                     )}
                     {item.status === "running" ? (
@@ -392,17 +392,8 @@ const ActivityPanel = React.memo(function ActivityPanel({
                   <div>
                     Skills:{" "}
                     {selectedActivity.skillTrace?.skills.join(", ") ||
-                      "No correlated Skill evidence"}
+                      "None (direct tool)"}
                   </div>
-                </div>
-              </div>
-            )}
-            {selectedActivity.skillRoutingWarning && (
-              <div className="activity-detail-section activity-routing-warning">
-                <span className="activity-detail-label">SKILL ROUTING</span>
-                <div className="activity-detail-summary">
-                  <strong>ROUTE UNVERIFIED</strong> ·{" "}
-                  {selectedActivity.skillRoutingWarning.message}
                 </div>
               </div>
             )}
@@ -523,6 +514,8 @@ function App(): React.ReactElement {
   const activeDrawerRef = useRef<DrawerName | null>(null);
   activeDrawerRef.current = activeDrawer;
   const memoryRefreshTimerRef = useRef<number | null>(null);
+  const memoryRefreshInFlightRef = useRef(false);
+  const memoryRefreshPendingRef = useRef(false);
   const memoryRequestSeqRef = useRef(0);
   const memoryWorkspaceRef = useRef<string | undefined>(undefined);
   memoryWorkspaceRef.current = status?.activeWorkspace;
@@ -731,25 +724,46 @@ function App(): React.ReactElement {
   };
 
   const refreshMemory = async (): Promise<void> => {
+    if (memoryRefreshInFlightRef.current) {
+      memoryRefreshPendingRef.current = true;
+      return;
+    }
+    memoryRefreshInFlightRef.current = true;
     const requestSeq = ++memoryRequestSeqRef.current;
     const requestedWorkspace = memoryWorkspaceRef.current;
     try {
       const result = await window.qnector.callMemory({
         action: "recall",
         checkpointLimit: 10,
-        factLimit: 100,
-        taskLimit: 100,
+        factLimit: 30,
+        taskLimit: 12,
         eventLimit: 12,
         changeLimit: 20,
       });
       if (result.ok) {
         const wrapped = result.data as { data?: unknown } | undefined;
-        const next = (wrapped?.data ?? wrapped) as MemoryRecallView & { workspacePath?: string };
-        if (requestSeq !== memoryRequestSeqRef.current || requestedWorkspace !== memoryWorkspaceRef.current || (requestedWorkspace && next.workspacePath && next.workspacePath.toLocaleLowerCase() !== requestedWorkspace.toLocaleLowerCase())) return;
+        const next = (wrapped?.data ?? wrapped) as MemoryRecallView & {
+          workspacePath?: string;
+        };
+        if (
+          requestSeq !== memoryRequestSeqRef.current ||
+          requestedWorkspace !== memoryWorkspaceRef.current ||
+          (requestedWorkspace &&
+            next.workspacePath &&
+            next.workspacePath.toLocaleLowerCase() !==
+              requestedWorkspace.toLocaleLowerCase())
+        )
+          return;
         setMemory(next);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      memoryRefreshInFlightRef.current = false;
+      if (memoryRefreshPendingRef.current) {
+        memoryRefreshPendingRef.current = false;
+        if (activeDrawerRef.current === "memory") void refreshMemory();
+      }
     }
   };
 
@@ -794,12 +808,12 @@ function App(): React.ReactElement {
     });
     const offMemory = window.qnector.onMemory(() => {
       if (activeDrawerRef.current !== "memory") return;
-      if (memoryRefreshTimerRef.current !== null)
-        window.clearTimeout(memoryRefreshTimerRef.current);
+      // Coalesce bursts into at most one refresh every 500 ms, without starvation.
+      if (memoryRefreshTimerRef.current !== null) return;
       memoryRefreshTimerRef.current = window.setTimeout(() => {
         memoryRefreshTimerRef.current = null;
         void refreshMemory();
-      }, 120);
+      }, 500);
     });
     const offUpdate = window.qnector.onUpdate((next) => setUpdateState(next));
 
@@ -809,6 +823,8 @@ function App(): React.ReactElement {
       offStatus();
       offMemory();
       offUpdate();
+      memoryRefreshPendingRef.current = false;
+      memoryRequestSeqRef.current += 1;
       if (memoryRefreshTimerRef.current !== null)
         window.clearTimeout(memoryRefreshTimerRef.current);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -933,7 +949,13 @@ function App(): React.ReactElement {
   };
 
   const clearMemory = async (): Promise<void> => {
-    if (!status?.activeWorkspace || !window.confirm(`ลบความจำทั้งหมดของ Workspace ${status.activeWorkspace} ทั้ง Memory รุ่นเดิมและ v2 รวมงานและประวัติที่บันทึกไว้? การกระทำนี้ย้อนกลับไม่ได้`)) return;
+    if (
+      !status?.activeWorkspace ||
+      !window.confirm(
+        `ลบความจำทั้งหมดของ Workspace ${status.activeWorkspace} ทั้ง Memory รุ่นเดิมและ v2 รวมงานและประวัติที่บันทึกไว้? การกระทำนี้ย้อนกลับไม่ได้`,
+      )
+    )
+      return;
     setMemoryBusy(true);
     try {
       const result = await window.qnector.callMemory({
@@ -1954,7 +1976,19 @@ function App(): React.ReactElement {
                   </div>
                 </>
               )}
-              {activeDrawer === "memory" && (<div className="drawer-content"><MemoryCenter key={status?.activeWorkspace} memory={memory} workspace={status?.activeWorkspace} busy={memoryBusy} onOpen={() => void openMemoryFile()} onExport={() => void exportMemoryFile()} onClear={() => void clearMemory()} /></div>)}
+              {activeDrawer === "memory" && (
+                <div className="drawer-content">
+                  <MemoryCenter
+                    key={status?.activeWorkspace}
+                    memory={memory}
+                    workspace={status?.activeWorkspace}
+                    busy={memoryBusy}
+                    onOpen={() => void openMemoryFile()}
+                    onExport={() => void exportMemoryFile()}
+                    onClear={() => void clearMemory()}
+                  />
+                </div>
+              )}
               {activeDrawer === "skills" && (
                 <SkillManager workspaceKey={status?.activeWorkspace} />
               )}

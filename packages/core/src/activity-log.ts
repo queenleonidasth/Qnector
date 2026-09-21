@@ -154,12 +154,6 @@ export class ActivityLogger {
             skillTrace: sanitizeValue(input.skillTrace)
               .value as ActivityEntry["skillTrace"],
           }),
-      ...(input.skillRoutingWarning === undefined
-        ? {}
-        : {
-            skillRoutingWarning: sanitizeValue(input.skillRoutingWarning)
-              .value as ActivityEntry["skillRoutingWarning"],
-          }),
     };
   }
 

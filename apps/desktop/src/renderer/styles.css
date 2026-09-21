@@ -951,23 +951,18 @@ html.qnector-window-paused *::after {
   font-weight: 700;
 }
 
-.activity-routing-missing-badge {
+.activity-direct-badge {
   display: inline-flex;
   align-items: center;
   min-height: 16px;
   padding: 1px 5px;
-  border: 1px solid rgba(237, 150, 92, 0.38);
+  border: 1px solid rgba(156, 163, 175, 0.26);
   border-radius: 999px;
-  background: rgba(237, 150, 92, 0.1);
-  color: #f0b27a;
+  background: rgba(156, 163, 175, 0.06);
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
-}
-
-.activity-routing-warning {
-  border-color: rgba(237, 150, 92, 0.24);
-  background: rgba(237, 150, 92, 0.06);
 }
 
 .activity-open-glyph {

@@ -21,7 +21,6 @@ import type {
 } from "@qnector/core";
 import type {
   ActivitySkillTrace,
-  ActivitySkillRoutingWarning,
   QnectorConfig,
   ToolError,
   ToolMeta,
@@ -89,7 +88,8 @@ function activitySkillTrace(
   const trace = context.skillTrace;
   if (!trace?.routeId || !trace.query || !trace.activatedAt) return undefined;
 
-  const activatingRoute = tool === "system" && action === "skills_route";
+  const activatingRoute =
+    tool === "system" && (action === "skills_route" || action === "skill_get");
   const skills = trace.skills
     .filter(
       (skill) =>
@@ -110,84 +110,6 @@ function activitySkillTrace(
       ? { routingDecisions: trace.routingDecisions }
       : {}),
   };
-}
-
-export function missingSkillRoutingWarning(
-  tool: string,
-  action: string,
-  input: unknown,
-  trace?: SkillTraceState,
-): ActivitySkillRoutingWarning | undefined {
-  if (!isSubstantiveMutation(tool, action, input)) return undefined;
-  // A successful route is not missing merely because no selected skill applies
-  // to this tool. Skill applicability is shown separately by activitySkillTrace.
-  if (trace?.routeId && trace.activatedAt) return undefined;
-  return {
-    code: "SKILL_ROUTING_MISSING",
-    message: `No applicable Skill route evidence was attached to ${tool}.${action}. This does not prove routing was skipped: stateless MCP calls must pass skillRouteId or memoryTaskId to correlate their route. Reuse the activated routeId; do not reroute automatically.`,
-  };
-}
-
-function isSubstantiveMutation(
-  tool: string,
-  action: string,
-  input: unknown,
-): boolean {
-  const object = isRecord(input) ? input : {};
-  if (tool === "files")
-    return [
-      "document_replace_text",
-      "write",
-      "append",
-      "replace",
-      "multi_edit",
-      "apply_patch",
-      "mkdir",
-      "move",
-      "copy",
-      "delete",
-    ].includes(action);
-  if (tool === "git") {
-    if (["status", "diff", "log", "show", "rev_parse"].includes(action))
-      return false;
-    if (action === "branch")
-      return object.create === true || object.delete === true;
-    return true;
-  }
-  if (tool === "process")
-    return [
-      "run",
-      "start",
-      "stop",
-      "kill_tree",
-      "pty_start",
-      "pty_write",
-      "pty_close",
-      "task_start",
-      "task_cancel",
-      "workflow_save",
-      "workflow_start",
-      "workflow_cancel",
-      "workflow_resume",
-    ].includes(action);
-  if (tool === "browser")
-    return [
-      "launch",
-      "navigate",
-      "fill",
-      "type",
-      "select",
-      "check",
-      "upload_file",
-      "press",
-      "click",
-    ].includes(action);
-  if (tool === "computer")
-    return ["click", "double_click", "type", "press", "set_value"].includes(
-      action,
-    );
-  if (tool === "workspace") return action === "set";
-  return false;
 }
 
 export function argsSummary(input: unknown): string {
@@ -365,14 +287,8 @@ export async function runWithActivity<T>(
   const workflowCorrelation = workflowInputId
     ? { workflowRunId: workflowInputId }
     : {};
-  const skillRoutingWarning = missingSkillRoutingWarning(
-    tool,
-    action,
-    input,
-    context.skillTrace,
-  );
   const runningSkillTrace =
-    action === "skills_route"
+    tool === "system" && (action === "skills_route" || action === "skill_get")
       ? undefined
       : activitySkillTrace(context, tool, action);
   const runningEntry = {
@@ -383,7 +299,6 @@ export async function runWithActivity<T>(
     argsSummary: argsSummary(input),
     status: "running" as const,
     ...(runningSkillTrace ? { skillTrace: runningSkillTrace } : {}),
-    ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
   };
   if (context.activity.nonBlockingWrites)
     context.activity.recordBuffered(runningEntry);
@@ -427,7 +342,6 @@ export async function runWithActivity<T>(
       outputSize: JSON.stringify(result).length,
       summary,
       ...(completedSkillTrace ? { skillTrace: completedSkillTrace } : {}),
-      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
     };
     if (context.activity.nonBlockingWrites)
       context.activity.recordBuffered(successEntry);
@@ -460,7 +374,7 @@ export async function runWithActivity<T>(
     );
     const parsed = errorFromUnknown(error);
     const failedSkillTrace =
-      action === "skills_route"
+      tool === "system" && (action === "skills_route" || action === "skill_get")
         ? undefined
         : activitySkillTrace(context, tool, action);
     const errorEntry = {
@@ -473,7 +387,6 @@ export async function runWithActivity<T>(
       error: parsed,
       durationMs: Date.now() - startedAt,
       ...(failedSkillTrace ? { skillTrace: failedSkillTrace } : {}),
-      ...(skillRoutingWarning ? { skillRoutingWarning } : {}),
     };
     if (context.activity.nonBlockingWrites)
       context.activity.recordBuffered(errorEntry);
