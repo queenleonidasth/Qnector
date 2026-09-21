@@ -191,7 +191,15 @@ export async function executeSystem(
     action,
     activityInput(action, object, input),
     async () => {
-      if (["info", "status", "build_info", "performance", "release_status"].includes(action)) {
+      if (
+        [
+          "info",
+          "status",
+          "build_info",
+          "performance",
+          "release_status",
+        ].includes(action)
+      ) {
         return executeSystemDiagnostics(context, action);
       }
       if (action === "processes" || action === "find_process") {
@@ -364,7 +372,11 @@ export async function executeSystem(
           },
         };
       }
-      if (action === "mcp_servers" || action === "mcp_tools" || action === "mcp_call") {
+      if (
+        action === "mcp_servers" ||
+        action === "mcp_tools" ||
+        action === "mcp_call"
+      ) {
         return executeSystemMcp(action, object);
       }
       if (action === "doctor") {
@@ -636,7 +648,18 @@ export async function executeSystem(
           data,
         };
       }
-      if (["open_path", "open_url", "clipboard_read", "clipboard_write", "toast", "screen_capture", "window_list", "window_focus"].includes(action)) {
+      if (
+        [
+          "open_path",
+          "open_url",
+          "clipboard_read",
+          "clipboard_write",
+          "toast",
+          "screen_capture",
+          "window_list",
+          "window_focus",
+        ].includes(action)
+      ) {
         return executeSystemDesktop(context, action, object);
       }
       throw new Error(`INVALID_ACTION: Unknown system action '${action}'`);

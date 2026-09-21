@@ -190,16 +190,27 @@ describe("P4 HTTP and stdio share one durable execution backend", () => {
     expect(accepted?.ok).toBe(true);
     const taskId = String(accepted?.data?.taskId);
     expect(taskId).toMatch(/^task_/);
-    const httpOverview = (await http(port, "tools/call", task("overview"))).result?.structuredContent;
-    const stdioOverview = (await stdio.request("tools/call", task("overview"))).result?.structuredContent;
+    const httpOverview = (await http(port, "tools/call", task("overview")))
+      .result?.structuredContent;
+    const stdioOverview = (await stdio.request("tools/call", task("overview")))
+      .result?.structuredContent;
     expect(httpOverview?.ok).toBe(true);
-    expect(httpOverview?.data).toMatchObject({durableCount: 1, sessionCount: 0});
-    expect(stdioOverview?.data).toMatchObject({durableCount: 1, sessionCount: 0});
+    expect(httpOverview?.data).toMatchObject({
+      durableCount: 1,
+      sessionCount: 0,
+    });
+    expect(stdioOverview?.data).toMatchObject({
+      durableCount: 1,
+      sessionCount: 0,
+    });
     expect(JSON.stringify(stdioOverview?.data)).toContain(taskId);
-    expect((await stdio.request("tools/call", task("lookup", {taskId}))).result?.structuredContent?.data)
-      .toMatchObject({taskId, kind: "durable", taskLifetime: "persistent"});
-    const reused = (await stdio.request("tools/call", request)).result?.structuredContent;
-    expect(reused?.data).toMatchObject({taskId, reused: true});
+    expect(
+      (await stdio.request("tools/call", task("lookup", { taskId }))).result
+        ?.structuredContent?.data,
+    ).toMatchObject({ taskId, kind: "durable", taskLifetime: "persistent" });
+    const reused = (await stdio.request("tools/call", request)).result
+      ?.structuredContent;
+    expect(reused?.data).toMatchObject({ taskId, reused: true });
     // Close stdio while the job is still active. Its broken transport is only
     // a subscriber; the HTTP frontend must recover the original task unchanged.
     stdio.close();
