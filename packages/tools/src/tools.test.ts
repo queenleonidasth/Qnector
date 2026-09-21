@@ -148,7 +148,7 @@ describe("Qnector grouped tools", () => {
   it("shares the Agent Skill runtime guard without changing unsupported-action errors", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skill-guard-"));
     const source = await readFile(
-      new URL("./system-tool.ts", import.meta.url),
+      new URL("./system-skills-adapter.ts", import.meta.url),
       "utf8",
     );
     expect(source.match(/if \(!context\.agentSkills\)/g)).toHaveLength(1);
