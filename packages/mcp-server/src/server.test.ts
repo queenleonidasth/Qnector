@@ -66,6 +66,7 @@ describe("Qnector MCP runtime", () => {
       category: "rule",
     });
     await runtime.start({ port });
+    const skillStatusSpy = vi.spyOn(runtime.agentSkills, "status");
     expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
 
     const initialized = await request(`http://127.0.0.1:${port}/mcp`, {
@@ -107,6 +108,8 @@ describe("Qnector MCP runtime", () => {
       initialized.body as { result?: { instructions?: string } }
     ).result?.instructions;
     expect(instructions).toContain("QNECTOR SESSION BOOTSTRAP");
+    expect(instructions).toContain("Skills: manual opt-in only");
+    expect(skillStatusSpy).not.toHaveBeenCalled();
     expect(instructions).toContain("CURRENT CAPABILITY RULE");
     expect(instructions).toContain(
       "current tool list outranks conversation history",
@@ -591,9 +594,8 @@ describe("Qnector MCP runtime", () => {
           entry.action === "write" &&
           entry.status === "success",
       );
-    expect(unroutedWrite?.skillRoutingWarning).toMatchObject({
-      code: "SKILL_ROUTING_MISSING",
-    });
+    expect(unroutedWrite?.skillTrace).toBeUndefined();
+    expect(unroutedWrite).not.toHaveProperty("skillRoutingWarning");
   });
 
   it("bounds oversized tool output in the actual HTTP MCP response without replaying the operation", async () => {

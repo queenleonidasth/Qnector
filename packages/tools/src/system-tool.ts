@@ -36,7 +36,7 @@ const COMPACT_SKILL_INSTRUCTION_CHARS = 1_200;
 export const systemDefinition: ToolDefinition = {
   name: "system",
   description:
-    "Inspect the local computer and Qnector bridge. Use separate Qnector tool calls for independent operations; do not batch multiple tool actions into one call. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. For substantive work, use skills_route with the complete task description to automatically select and activate the most relevant local Agent Skills in one call; for non-English tasks append a short English intent/technology hint to the query; use skills_match/skill_get only when manually inspecting routing. When the user asks to discover or install new Agent Skills, use skills_search_remote and skill_install_remote for the public skills.sh catalog; never install a remote skill without user intent. For configured external MCP servers, use mcp_servers to inspect available upstreams, mcp_tools to discover/filter their tool schemas, and mcp_call to invoke one without exposing configured secret values. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
+    "Inspect the local computer and Qnector bridge. Use separate Qnector tool calls for independent operations; do not batch multiple tool actions into one call. Prefer context_snapshot as the one-call, compact first-use state discovery action; pass details=true only when expanded process/window context is needed. Direct tools are the default: do not automatically search, match, route, or activate Agent Skills. Only when the user explicitly requests a named Skill, call skill_get; use skills_route only when the user explicitly asks you to select Skills for a task. Use skills_match only for requested discovery. When the user asks to discover or install new Agent Skills, use skills_search_remote and skill_install_remote for the public skills.sh catalog; never install a remote skill without user intent. For configured external MCP servers, use mcp_servers to inspect available upstreams, mcp_tools to discover/filter their tool schemas, and mcp_call to invoke one without exposing configured secret values. Other actions locate executables, inspect environment variables, open a path/URL, read or write the clipboard, show a notification, capture the current display/window as an image, or list/focus windows. Work is headless by default: open_path, open_url, toast, and window_focus are presentation-only actions and require presentToUser=true. Use screen_capture for headless visual inspection. No model API is used.",
   inputSchema: {
     type: "object",
     properties: {
@@ -579,9 +579,40 @@ export async function executeSystem(
           stringInput(object, "name", true)!,
           { includeDisabled: true },
         );
+        // An explicit skill_get activates a named, enabled Skill without matching.
+        if (skill.enabled && context.skillTrace) {
+          const routeId = randomUUID();
+          context.skillTrace.routeId = routeId;
+          context.skillTrace.query = `skill_get:${skill.name}`;
+          context.skillTrace.activatedAt = new Date().toISOString();
+          context.skillTrace.skills = [
+            {
+              name: skill.name,
+              ...(skill.allowedTools?.length
+                ? { allowedTools: [...skill.allowedTools] }
+                : {}),
+            },
+          ];
+          context.skillTrace.routingDecisions = undefined;
+          if (context.skillTraceStore) {
+            context.skillTraceStore.byRouteId ??= new Map();
+            context.skillTraceStore.byRouteId.set(routeId, context.skillTrace);
+            while (context.skillTraceStore.byRouteId.size > 100) {
+              const oldest = context.skillTraceStore.byRouteId.keys().next()
+                .value as string | undefined;
+              if (!oldest) break;
+              context.skillTraceStore.byRouteId.delete(oldest);
+            }
+          }
+        }
         return {
           summary: `Loaded Agent Skill ${skill.name}`,
-          data: skill,
+          data: {
+            ...skill,
+            ...(skill.enabled && context.skillTrace?.routeId
+              ? { routeId: context.skillTrace.routeId }
+              : {}),
+          },
         };
       }
       if (action === "skill_create" || action === "skill_update") {

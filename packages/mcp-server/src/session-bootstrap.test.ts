@@ -63,6 +63,7 @@ describe("session memory bootstrap", () => {
       },
     ]);
     expect(result).toContain("QNECTOR SESSION BOOTSTRAP");
+    expect(result).toContain("Skills: manual opt-in only");
     expect(result).toContain("CURRENT CAPABILITY RULE");
     expect(result).toContain("short default");
     expect(result).toContain("'/long '");
@@ -152,7 +153,7 @@ describe("session memory bootstrap", () => {
     expect(dense).toContain("rule-0");
   });
 
-  it("requires explicit skill routing and completion disclosure when skills exist", () => {
+  it("defaults to direct tools and offers Skills only on user request", () => {
     const memory: MemoryRecall = {
       available: false,
       workspaceId: "skill-routing",
@@ -183,13 +184,18 @@ describe("session memory bootstrap", () => {
         enabled: true,
       },
     ]);
-    expect(result).toContain("EXPLICIT ROUTING ONLY");
+    expect(result).toContain("MANUAL / OPT-IN ONLY");
+    expect(result).toContain("use direct tools by default");
+    expect(result).toContain("if the user requests one");
     expect(result).toContain("system.skills_route");
+    expect(result).toContain("system.skill_get");
     expect(result).toContain("skillRouteId");
     expect(result).toContain("system.skills_search_remote");
     expect(result).toContain("system.skill_install_remote");
-    expect(result).toContain("English intent/technology hint");
-    expect(result).toContain("Skills used:");
+    expect(result).not.toContain("EXPLICIT ROUTING ONLY");
+    expect(result).toContain(
+      "mention Skill names only if explicitly activated",
+    );
     expect(result).toContain("Agent Skills: 1 available");
     expect(result).not.toContain("typescript-best-practices");
   });

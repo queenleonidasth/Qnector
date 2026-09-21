@@ -612,7 +612,7 @@ export class QnectorRuntime {
             "qnector/schemaRevision": MCP_SCHEMA_REVISION,
             "qnector/availability": "live-when-listed",
             "qnector/recoveryAction": "system.status",
-            "qnector/skillsRouting": "required-for-substantive-work",
+            "qnector/skillsRouting": "manual-opt-in",
           },
         },
         async (input, extra) => {
@@ -787,12 +787,11 @@ export class QnectorRuntime {
         factLimit: 12,
         changeLimit: 3,
       });
-      const skillCount = (await this.agentSkills.status()).activeCount;
+      // Skills are opt-in: do not scan skill roots during every MCP handshake.
       return buildSessionBootstrapInstructions(
         memory,
         this.activity.list().slice(-8),
         this.memoryV2.snapshot({ eventLimit: 8, taskLimit: 8 }),
-        skillCount,
       );
     } catch (error) {
       return buildSessionBootstrapError(

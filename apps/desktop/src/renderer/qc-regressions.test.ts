@@ -71,12 +71,13 @@ describe("2026-09-11 QC regression guards", () => {
     expect(rootPackage.scripts?.test).toBe("vitest run --maxWorkers=2");
   });
 
-  it("surfaces missing Agent Skill routing in Live Activity", () => {
-    expect(renderer).toContain("skillRoutingWarning");
-    expect(renderer).toContain("ROUTE UNVERIFIED");
-    expect(renderer).not.toContain("ROUTING MISSING");
-    expect(renderer).toContain("SKILL ROUTING");
-    expect(styles).toContain(".activity-routing-missing-badge");
+  it("shows direct tool calls without misleading routing warnings", () => {
+    expect(renderer).toContain("DIRECT TOOL");
+    expect(renderer).toContain("None (direct tool)");
+    expect(renderer).not.toContain("skillRoutingWarning");
+    expect(renderer).not.toContain("ROUTE UNVERIFIED");
+    expect(styles).toContain(".activity-direct-badge");
+    expect(styles).not.toContain(".activity-routing-warning");
   });
 
   it("isolates runtime diagnostics from the App shell without losing the refresh control", () => {

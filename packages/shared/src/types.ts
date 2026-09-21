@@ -74,12 +74,6 @@ export interface ActivityEntry {
   summary?: string;
   error?: ToolError;
   skillTrace?: ActivitySkillTrace;
-  skillRoutingWarning?: ActivitySkillRoutingWarning;
-}
-
-export interface ActivitySkillRoutingWarning {
-  code: "SKILL_ROUTING_MISSING";
-  message: string;
 }
 
 export interface ActivitySkillRoutingDecision {
@@ -192,7 +186,12 @@ export interface MemoryV2Snapshot {
   tasks: MemoryTask[];
   events: MemoryV2Event[];
   /** Latest explicit session-to-task binding; not a chat transcript. */
-  lastSession?: { taskId: string; title: string; currentTask: string; linkedAt: string } | null;
+  lastSession?: {
+    taskId: string;
+    title: string;
+    currentTask: string;
+    linkedAt: string;
+  } | null;
   memories: MemoryFact[];
   conflicts: MemoryV2Conflict[];
   counts: {
