@@ -83,6 +83,11 @@ describe("opt-in durable MCP task facade", () => {
     expect(accepted?.ok).toBe(true);
     const taskId = String(accepted?.data?.taskId);
     expect(taskId).toMatch(/^task_/);
+    const overview = await call(port, "overview");
+    expect(overview).toMatchObject({ok: true, data: {durableCount: 1, sessionCount: 0}});
+    expect(JSON.stringify(overview)).toContain(taskId);
+    expect((await call(port, "lookup", {taskId}))?.data)
+      .toMatchObject({taskId, kind: "durable", taskLifetime: "persistent"});
     const foreignWorkspace = path.join(workspace, "another-workspace");
     for (const action of ["get", "wait", "output", "result", "inspect", "cancel"]) {
       const denied = await executeDurableTask(daemonRoot, foreignWorkspace,

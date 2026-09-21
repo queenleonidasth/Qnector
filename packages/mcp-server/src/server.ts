@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { handleHttpMcp } from "./http-mcp-host.js";
+import { createRuntimeServices } from "./runtime-services.js";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -10,7 +11,8 @@ import Fastify, {
 } from "fastify";
 import cors from "@fastify/cors";
 import { toNodeHandler } from "@modelcontextprotocol/node";
-import { serveStdio, type ServeStdioOptions, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
+import type { ServeStdioOptions, StdioServerHandle } from "@modelcontextprotocol/server/stdio";
+import { startStdioMcpHost } from "./stdio-mcp-host.js";
 import {
   McpServer,
   createMcpHandler,
@@ -20,7 +22,6 @@ import {
 import {
   ActivityLogger,
   QNECTOR_VERSION,
-  activityLogPath,
   loadConfig,
   saveConfig,
   ProcessManager,
@@ -55,7 +56,8 @@ import type {
 } from "@qnector/shared";
 import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry } from "@qnector/tools";
-import { durableTaskSchema, executeDurableTask } from "./durable-task-tool.js";
+import { durableTaskSchema } from "./durable-task-tool.js";
+import { ExecutionFacade } from "./execution-facade.js";
 import { boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
 import { TimelineLogger, timelineLogPath } from "./timeline-logger.js";
 import { runTimeoutProbe, type ProbeMode } from "./timeout-probe.js";
@@ -112,6 +114,7 @@ export class QnectorRuntime {
   private readonly timeline: TimelineLogger;
   private readonly enableTimeoutProbe: boolean;
   private readonly durableDaemonRoot?: string;
+  private readonly executionFacade?: ExecutionFacade;
   public readonly app: FastifyInstance;
   public readonly registry = new ToolRegistry();
   public readonly processManager: ProcessManager;
@@ -174,97 +177,36 @@ export class QnectorRuntime {
     this.configFile = options.configFile;
     this.timeline = new TimelineLogger(options.timelineLogFile ?? (() => timelineLogPath(this.configFile)));
     this.enableTimeoutProbe = options.enableTimeoutProbe ?? process.env.QNECTOR_TIMEOUT_PROBE === "1";
-    this.processManager =
-      options.processManager ?? new ProcessManager(this.config.shell.windows);
-    this.codeIntelligence =
-      options.codeIntelligence ?? new TypeScriptCodeIntelligence();
-    this.fileSearch = options.fileSearch ?? new WindowsFileSearchService();
-    this.uiAutomation =
-      options.uiAutomation ??
-      new WindowsUiAutomationService({
-        powershellPath: this.config.shell.powershellPath,
-      });
-    this.fileWatch = options.fileWatch ?? new FileWatchService();
-    this.browserRuntime = options.browserRuntime ?? new ManagedBrowserRuntime();
-    this.genericLsp = options.genericLsp ?? new GenericLspService();
-    this.semanticSearch =
-      options.semanticSearch ?? new LocalSemanticSearchService();
-    this.nativeProcess =
-      options.nativeProcess ??
-      new NativeProcessService(this.config.shell.powershellPath);
-    this.releaseManager = options.releaseManager ?? new ReleaseManager();
-    this.documentIntelligence =
-      options.documentIntelligence ?? new DocumentIntelligenceService();
-    this.resourceCoordinator =
-      options.resourceCoordinator ?? new ResourceCoordinator();
-    this.workflowManager =
-      options.workflowManager ??
-      new WorkflowManager(this.processManager, this.fileWatch, {
-        resourceCoordinator: this.resourceCoordinator,
-        executeTool: async (tool, input, workflowContext) => {
-          const scopedConfig = {
-            ...this.config,
-            activeWorkspace: workflowContext.workspace,
-          };
-          const scopedContext: ToolContext = {
-            ...this.context(),
-            workspace: new WorkspaceState(scopedConfig),
-            abortSignal: workflowContext.signal,
-            resourceCoordinator: this.resourceCoordinator,
-            resourceOwnerToken: workflowContext.resourceOwnerToken,
-            getConfig: () => scopedConfig,
-            setConfig: async () => {
-              throw new Error(
-                "WORKFLOW_WORKSPACE_PINNED: tool steps cannot change the active workspace for a running workflow",
-              );
-            },
-          };
-          return this.registry.call(tool, scopedContext, {
-            ...input,
-            ...(workflowContext.memoryTaskId
-              ? { memoryTaskId: workflowContext.memoryTaskId }
-              : {}),
-          });
-        },
-      });
-    this.ptyManager =
-      options.ptyManager ?? new PtyManager(this.config.shell.windows);
-    this.agentSkills =
-      options.agentSkills ??
-      new AgentSkillService({
-        roots: defaultAgentSkillRoots(),
-        workspaceRoot: () => this.config.activeWorkspace,
-      });
-    this.activity =
-      options.logger ??
-      new ActivityLogger(
-        activityLogPath(),
-        500,
-        10_000_000,
-        options.nonBlockingActivityWrites ?? false,
-      );
-    this.workspace = new WorkspaceState(this.config);
-    this.memory =
-      options.memory ??
-      new MemoryStore(this.config.activeWorkspace, {
-        ...(this.configFile
-          ? {
-              rootDirectory: path.join(path.dirname(this.configFile), "memory"),
-            }
-          : {}),
-        workspaceMirror: this.config.memory?.workspaceMirror ?? "off",
-        maxCheckpoints: this.config.memory?.maxCheckpoints,
-        maxPayloadBytes: this.config.memory?.maxPayloadBytes,
-      });
-    this.memoryV2 = new MemoryV2Store(this.config.activeWorkspace, {
-      ...(this.configFile
-        ? { file: path.join(path.dirname(this.configFile), "memory-v2.sqlite") }
-        : {}),
+    const services = createRuntimeServices({
+      options,
+      configFile: this.configFile,
+      getConfig: () => this.config,
+      getContext: () => this.context(),
+      registry: this.registry,
     });
-    this.platform =
-      options.platform ??
-      options.platformServices ??
-      new NodePlatformServices(this.config.shell.powershellPath);
+    this.processManager = services.processManager;
+    this.codeIntelligence = services.codeIntelligence;
+    this.fileSearch = services.fileSearch;
+    this.uiAutomation = services.uiAutomation;
+    this.fileWatch = services.fileWatch;
+    this.browserRuntime = services.browserRuntime;
+    this.genericLsp = services.genericLsp;
+    this.semanticSearch = services.semanticSearch;
+    this.nativeProcess = services.nativeProcess;
+    this.releaseManager = services.releaseManager;
+    this.documentIntelligence = services.documentIntelligence;
+    this.resourceCoordinator = services.resourceCoordinator;
+    this.workflowManager = services.workflowManager;
+    this.ptyManager = services.ptyManager;
+    this.agentSkills = services.agentSkills;
+    this.activity = services.activity;
+    this.workspace = services.workspace;
+    this.memory = services.memory;
+    this.memoryV2 = services.memoryV2;
+    this.platform = services.platform;
+    this.executionFacade = this.durableDaemonRoot
+      ? new ExecutionFacade(this.durableDaemonRoot, this.processManager)
+      : undefined;
     this.app = options.app ?? Fastify({ logger: false, bodyLimit: 2_000_000 });
     this.mcpHandler = createMcpHandler((requestContext) =>
       this.createMcpServer(requestContext),
@@ -381,14 +323,7 @@ export class QnectorRuntime {
       await this.ensureAutomaticMemoryCheckpoint();
       await this.migrateMemoryV2();
     }
-    const handle = serveStdio(() => this.createMcpServer(), {
-      ...options,
-      onerror: (error) => {
-        options.onerror?.(error);
-        // Do not print diagnostics to stdout: it is the MCP wire.
-        if (!options.onerror) console.error("Qnector stdio transport:", error);
-      },
-    });
+    const handle = startStdioMcpHost(() => this.createMcpServer(), options);
     this.stdioHandle = handle;
     this.state = "connected";
     return handle;
@@ -589,12 +524,12 @@ export class QnectorRuntime {
     if (this.durableDaemonRoot) {
       server.registerTool("tasks", {
         title: "Qnector durable tasks (experimental Windows)",
-        description: "Use an already-running independent daemon. start requires a caller-stable idempotencyKey. A lost MCP connection stops waiting, not work. Use taskId with wait, result or output; cancel is explicit. Development preview, not Job Object or production ready.",
+        description: "Use an already-running independent daemon. start requires a caller-stable idempotencyKey. A lost MCP connection stops waiting, not work. Use taskId with wait, result or output; cancel is explicit. overview and lookup combine daemon and session read models, preserving different lifetimes. Development preview; validate native containment and packaging before production.",
         inputSchema: fromJsonSchema(durableTaskSchema),
         annotations: {destructiveHint: true, openWorldHint: false},
-        _meta: {"qnector/durablePreview": true, "qnector/schemaRevision": "durable-tasks-preview-v1"},
+        _meta: {"qnector/durablePreview": true, "qnector/schemaRevision": "durable-tasks-preview-v2"},
       }, async (input) => {
-        const result = await executeDurableTask(this.durableDaemonRoot!,
+        const result = await this.executionFacade!.execute(
           this.config.activeWorkspace, input as Record<string, unknown>,
           requestContext?.requestInfo?.signal);
         return {
@@ -778,21 +713,6 @@ function inputSchemaFor(
   const schema = fromJsonSchema(definition.inputSchema);
   mcpInputSchemaCache.set(definition.name, schema);
   return schema;
-}
-function defaultAgentSkillRoots() {
-  const runtimeResources = (
-    process as NodeJS.Process & { resourcesPath?: string }
-  ).resourcesPath;
-  const appData = process.env.APPDATA;
-  return [
-    ...(runtimeResources
-      ? [{ path: path.join(runtimeResources, "skills"), source: "bundled" }]
-      : []),
-    // Project skills are resolved dynamically from config.activeWorkspace.
-    ...(appData
-      ? [{ path: path.join(appData, "Qnector", "skills"), source: "user" }]
-      : []),
-  ];
 }
 
 export async function createRuntime(

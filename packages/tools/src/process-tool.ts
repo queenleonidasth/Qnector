@@ -498,6 +498,7 @@ export async function executeProcess(
                 taskId: processId,
                 ...snapshot,
                 taskProtocol: "qnector-process-v1",
+                taskLifetime: "session",
               }
             : snapshot,
       };
@@ -542,6 +543,7 @@ export async function executeProcess(
               taskId: snapshot.id,
               ...snapshot,
               taskProtocol: "qnector-process-v1",
+              taskLifetime: "session",
             },
           }
         : { summary: `Started ${command}`, data: snapshot };

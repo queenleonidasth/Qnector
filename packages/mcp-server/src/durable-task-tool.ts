@@ -6,7 +6,7 @@ export const durableTaskSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    action: {type: "string", enum: ["start", "get", "list", "wait", "output", "result", "cancel", "inspect", "doctor"]},
+    action: {type: "string", enum: ["start", "get", "list", "wait", "output", "result", "cancel", "inspect", "doctor", "overview", "lookup"]},
     taskId: {type: "string", description: "Durable task ID returned by start."},
     idempotencyKey: {type: "string", description: "Caller-generated stable key: reuse for a retry after lost response."},
     command: {

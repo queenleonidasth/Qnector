@@ -20,4 +20,4 @@
 3. Finish P3 unified task read model and execution facade, preserving daemon sole ownership, idempotency, no replay on unknown, cancellation and workspace isolation. Decide explicit opt-in migration of legacy process calls only after characterization tests.
 4. Record baseline vs revised p50/p95 latency, CPU/RAM, payload and cold start; execute packaged live acceptance and installer rollback. No production release until gates pass.
 
-Status: partial implementation only; not merged, installed or released. This document does not claim completion of P2/P3 or a fix for ChatGPT-side timeouts.
+Status update: P2 structural refactor and P3 unified task read facade were subsequently implemented in this integrated worktree. See `architecture-refactor-p2-p3-delivery-2026-09-21.md` for current implementation, regression results, measured latency and remaining production release blockers. Not merged into dirty main checkout, installed or released; no claim of a fix for ChatGPT-side timeouts.

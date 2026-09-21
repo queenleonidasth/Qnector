@@ -9,6 +9,7 @@ import {
 } from "@modelcontextprotocol/client";
 import { AgentSkillService } from "../../core/src/agent-skills.js";
 import { ActivityLogger } from "../../core/src/activity-log.js";
+import { ProcessManager } from "../../core/src/process-manager.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { Phase0Server } from "./phase0.js";
 import { QnectorRuntime } from "./server.js";
@@ -22,6 +23,22 @@ describe("Qnector MCP runtime", () => {
     if (root) await rm(root, { recursive: true, force: true });
     runtime = undefined;
     root = undefined;
+  });
+
+  it("composes injected services once and preserves their identity through tool context", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-composition-"));
+    const manager = new ProcessManager("direct");
+    const logger = new ActivityLogger(path.join(root, "activity.jsonl"));
+    runtime = new QnectorRuntime({config: defaultConfig(root), processManager: manager, logger,
+      configFile: path.join(root, "config.json")});
+    expect(runtime.processManager).toBe(manager);
+    expect(runtime.activity).toBe(logger);
+    expect(runtime.context().processManager).toBe(manager);
+    expect(runtime.context().activity).toBe(logger);
+    const next = {...runtime.getConfig(), machineName: "Updated"};
+    await runtime.setConfig(next);
+    expect(runtime.context().getConfig().machineName).toBe("Updated");
+    expect(runtime.memoryV2).toBeDefined();
   });
 
   it("serves legacy stateless and modern 2026-07-28 MCP traffic", async () => {
