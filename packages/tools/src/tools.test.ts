@@ -86,10 +86,10 @@ describe("Qnector grouped tools", () => {
     expect(value(minimal).managedProcesses).toEqual([]);
     expect(value(minimal).recentActivity).toEqual([]);
     expect(value(minimal).capabilities).toEqual(value(coding).capabilities);
-    expect(registry.list()).toHaveLength(9);
+    expect(registry.list()).toHaveLength(8);
   });
 
-  it("advertises nine grouped tools and supports file mutations", async () => {
+  it("advertises eight grouped tools and supports file mutations", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-tools-"));
     const config = defaultConfig(root);
     const context = makeContext(config);
@@ -103,8 +103,13 @@ describe("Qnector grouped tools", () => {
       "memory",
       "browser",
       "computer",
-      "social",
     ]);
+    // Legacy configurations must not re-enable the removed reader.
+    config.social = { enabled: true, platforms: ["facebook", "youtube"] };
+    expect(registry.list().some((tool) => tool.name === "social")).toBe(false);
+    expect(
+      await registry.call("social", context, { action: "health" }),
+    ).toMatchObject({ ok: false, error: { code: "UNKNOWN_TOOL" } });
     const write = await registry.call("files", context, {
       action: "write",
       path: "hello.txt",

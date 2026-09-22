@@ -152,25 +152,8 @@ describe("P4 HTTP and stdio share one durable execution backend", () => {
     expect(
       stdioTools?.find((tool) => tool.name === "tasks")?.inputSchema,
     ).toEqual(httpTools?.find((tool) => tool.name === "tasks")?.inputSchema);
-    expect(stdioTools?.some((tool) => tool.name === "social")).toBe(true);
-    const socialCall = { name: "social", arguments: { action: "health" } };
-    const socialHttp = (await http(port, "tools/call", socialCall)).result
-      ?.structuredContent;
-    const socialStdio = (await stdio.request("tools/call", socialCall)).result
-      ?.structuredContent;
-    expect(socialHttp?.ok).toBe(true);
-    expect(socialStdio?.data).toMatchObject({
-      status: "disabled",
-      operation: "health",
-    });
-    expect(
-      (
-        await http(port, "tools/call", {
-          name: "social",
-          arguments: { action: "search", platform: "facebook", query: "test" },
-        })
-      ).result?.structuredContent,
-    ).toMatchObject({ ok: false, error: { code: "CHANNEL_DISABLED" } });
+    expect(httpTools?.some((tool) => tool.name === "social")).toBe(false);
+    expect(stdioTools?.some((tool) => tool.name === "social")).toBe(false);
     const marker = path.join(root, "effect.txt");
     const request = task("start", {
       idempotencyKey: "shared-across-transports",

@@ -36,20 +36,15 @@ try {
     "memory",
     "browser",
     "computer",
-    "social",
   ];
   assert(
     tools.length === expectedTools.length &&
       expectedTools.every((name) => tools.some((tool) => tool.name === name)),
     `expected ${expectedTools.join(", ")}, received ${tools.map((tool) => tool.name).join(", ")}`,
   );
-  const socialHealth = await call("tools/call", {
-    name: "social",
-    arguments: { action: "health" },
-  });
   assert(
-    JSON.stringify(socialHealth.result).includes("disabled"),
-    "social.health must be disabled by default without Agent Reach",
+    !tools.some((tool) => tool.name === "social"),
+    "removed social tool still advertised",
   );
   const info = await call("tools/call", {
     name: "system",
@@ -107,8 +102,7 @@ try {
         workspace,
         checks: [
           "initialize",
-          "tools/list (9 named tools)",
-          "social.health (disabled by default)",
+          "tools/list (8 named tools, no social)",
           "system.info",
           "files.write/read",
           "memory.save_checkpoint/recall",

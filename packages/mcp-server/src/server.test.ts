@@ -29,13 +29,17 @@ describe("Qnector MCP runtime", () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-composition-"));
     const manager = new ProcessManager("direct");
     const logger = new ActivityLogger(path.join(root, "activity.jsonl"));
-    runtime = new QnectorRuntime({config: defaultConfig(root), processManager: manager, logger,
-      configFile: path.join(root, "config.json")});
+    runtime = new QnectorRuntime({
+      config: defaultConfig(root),
+      processManager: manager,
+      logger,
+      configFile: path.join(root, "config.json"),
+    });
     expect(runtime.processManager).toBe(manager);
     expect(runtime.activity).toBe(logger);
     expect(runtime.context().processManager).toBe(manager);
     expect(runtime.context().activity).toBe(logger);
-    const next = {...runtime.getConfig(), machineName: "Updated"};
+    const next = { ...runtime.getConfig(), machineName: "Updated" };
     await runtime.setConfig(next);
     expect(runtime.context().getConfig().machineName).toBe("Updated");
     expect(runtime.memoryV2).toBeDefined();
@@ -529,7 +533,7 @@ describe("Qnector MCP runtime", () => {
         "Continue the saved Qnector task",
       );
       const modernTools = await client.listTools();
-      expect(modernTools.tools).toHaveLength(9);
+      expect(modernTools.tools).toHaveLength(8);
       expect(modernTools.tools.map((tool) => tool.name)).toContain("browser");
       expect(
         modernTools.tools

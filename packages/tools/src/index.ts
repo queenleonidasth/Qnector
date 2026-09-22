@@ -12,7 +12,6 @@ import { executeGit, gitDefinition } from "./git-tool.js";
 import { executeMemory, memoryDefinition } from "./memory-tool.js";
 import { browserDefinition, executeBrowser } from "./browser-tool.js";
 import { computerDefinition, executeComputer } from "./computer-tool.js";
-import { socialDefinition, executeSocial } from "./social-tool.js";
 
 export const toolDefinitions: ToolDefinition[] = [
   systemDefinition,
@@ -23,7 +22,6 @@ export const toolDefinitions: ToolDefinition[] = [
   memoryDefinition,
   browserDefinition,
   computerDefinition,
-  socialDefinition,
 ];
 
 export class ToolRegistry {
@@ -39,7 +37,6 @@ export class ToolRegistry {
     ["memory", executeMemory],
     ["browser", executeBrowser],
     ["computer", executeComputer],
-    ["social", executeSocial],
   ]);
 
   public list(): ToolDefinition[] {
@@ -194,5 +191,3 @@ function withTaskIdSchema(
     },
   };
 }
-
-export * from "./social-tool.js";

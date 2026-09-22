@@ -67,7 +67,6 @@ export function defaultConfig(workspace = process.cwd()): QnectorConfig {
       setupCompleted: false,
       theme: "system",
     },
-    social: { enabled: false, platforms: [] },
     memory: {
       workspaceMirror: "off",
       maxCheckpoints: 10,

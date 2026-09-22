@@ -76,7 +76,7 @@ describe("opt-in durable MCP task facade", () => {
     runtimes.push(runtime);
     await runtime.start({ port });
     const listed = await rpc(port, "tools/list");
-    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(9);
+    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(8);
     expect(listed.result?.tools?.map((tool) => tool.name)).not.toContain(
       "tasks",
     );
@@ -132,10 +132,16 @@ describe("opt-in durable MCP task facade", () => {
     const taskId = String(accepted?.data?.taskId);
     expect(taskId).toMatch(/^task_/);
     const overview = await call(port, "overview");
-    expect(overview).toMatchObject({ok: true, data: {durableCount: 1, sessionCount: 0}});
+    expect(overview).toMatchObject({
+      ok: true,
+      data: { durableCount: 1, sessionCount: 0 },
+    });
     expect(JSON.stringify(overview)).toContain(taskId);
-    expect((await call(port, "lookup", {taskId}))?.data)
-      .toMatchObject({taskId, kind: "durable", taskLifetime: "persistent"});
+    expect((await call(port, "lookup", { taskId }))?.data).toMatchObject({
+      taskId,
+      kind: "durable",
+      taskLifetime: "persistent",
+    });
     const foreignWorkspace = path.join(workspace, "another-workspace");
     for (const action of [
       "get",

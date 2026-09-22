@@ -24,7 +24,6 @@ import {
 } from "./activity-feed.js";
 import { useModalFocusTrap } from "./modal-accessibility.js";
 import { SkillManager } from "./skill-manager.js";
-import { SocialConnections } from "./social-connections.js";
 import {
   RuntimeDiagnostics,
   formatTime,
@@ -2002,10 +2001,6 @@ function App(): React.ReactElement {
               {activeDrawer === "settings" && (
                 <>
                   <div className="drawer-content">
-                    <SocialConnections
-                      config={config}
-                      onConfigChange={setConfig}
-                    />
                     <button
                       className="setup-launch-card"
                       type="button"

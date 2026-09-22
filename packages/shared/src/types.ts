@@ -45,6 +45,8 @@ export interface MemoryConfig {
   maxPayloadBytes?: number;
 }
 
+/** Legacy v0.4.45 configuration kept solely to preserve saved user settings.
+ * No runtime, UI, MCP tool, or Skill consumes it in the next release. */
 export interface SocialConfig {
   enabled: boolean;
   platforms: Array<"youtube" | "facebook">;
@@ -296,8 +298,7 @@ export interface ToolDefinition {
     | "git"
     | "memory"
     | "browser"
-    | "computer"
-    | "social";
+    | "computer";
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotation;

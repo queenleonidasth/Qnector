@@ -105,6 +105,10 @@ foreach ($relative in $requiredPackagedResources) {
   if (-not (Test-Path -LiteralPath $candidate)) { throw "Packaged resource is missing: $candidate" }
 }
 
+# Retired Agent Reach must never be bundled as an Agent Skill.
+$retiredSkill = Join-Path $resourceRoot "skills\social-reader"
+if (Test-Path -LiteralPath $retiredSkill) { throw "Retired social-reader Skill is packaged: $retiredSkill" }
+
 # Execute the actual packaged Electron binary in Node mode, not the developer's
 # node.exe, so an Electron/Node/SQLite or extraResources mismatch blocks release.
 $packagedExecutable = Join-Path $releaseDir "win-unpacked\Qnector.exe"
