@@ -522,6 +522,79 @@ describe("AgentSkillService", () => {
     ).toBe(true);
   });
 
+  it("normalizes remote frontmatter names to the canonical skills.sh skill id", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-skills-remote-name-"));
+    const userRoot = path.join(root, "skills");
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/api/search?")) {
+        return new Response(
+          JSON.stringify({
+            skills: [
+              {
+                id: "sfkislev/flue/photoshop",
+                skillId: "photoshop",
+                name: "photoshop",
+                source: "sfkislev/flue",
+                installs: 2072,
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/download/sfkislev/flue/photoshop")) {
+        return new Response(
+          JSON.stringify({
+            files: [
+              {
+                path: "SKILL.md",
+                contents: [
+                  "---",
+                  "name: Photoshop",
+                  "description: Control Adobe Photoshop through Flue.",
+                  "---",
+                  "# Photoshop",
+                  "Use the local bridge.",
+                  "",
+                ].join("\n"),
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    };
+    const service = new AgentSkillService({
+      roots: [{ path: userRoot, source: "user" }],
+      registryBaseUrl: "https://skills.example.test",
+      fetchImpl,
+    });
+
+    const [remote] = await service.searchRemote({ query: "photoshop" });
+    expect(remote).toMatchObject({
+      id: "sfkislev/flue/photoshop",
+      skillId: "photoshop",
+      installable: true,
+      installed: false,
+    });
+
+    const installed = await service.installRemote(remote!.id, "user");
+    expect(installed.name).toBe("photoshop");
+    expect(installed.origin).toMatchObject({
+      id: "sfkislev/flue/photoshop",
+      source: "sfkislev/flue",
+      skillId: "photoshop",
+    });
+    expect(
+      await readFile(path.join(userRoot, "photoshop", "SKILL.md"), "utf8"),
+    ).toContain("\nname: photoshop\n");
+    expect(
+      (await service.searchRemote({ query: "photoshop" }))[0]?.installed,
+    ).toBe(true);
+  });
+
   it("rejects unsafe paths from remote skill snapshots", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-skills-unsafe-"));
     const service = new AgentSkillService({

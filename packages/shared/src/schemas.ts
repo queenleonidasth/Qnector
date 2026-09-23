@@ -43,6 +43,7 @@ export const configSchema = z.object({
     globalShortcut: z.string().min(1).optional(),
     globalShortcutEnabled: z.boolean().optional(),
     setupCompleted: z.boolean().optional(),
+    animationsEnabled: z.boolean().optional(),
     theme: z.enum(["system", "light", "dark"]),
   }),
   // Inert legacy v0.4.45 settings: preserve on load/save, never enable a reader.

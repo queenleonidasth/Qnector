@@ -31,4 +31,21 @@ describe("desktop animation visibility", () => {
     expect(css).toContain("html.qnector-window-paused *,");
     expect(css).toContain("animation-play-state: paused !important;");
   });
+
+  it("lets the user disable interface motion including the Matrix canvas", async () => {
+    const renderer = await read("./renderer.tsx");
+    const css = await read("./styles.css");
+    const matrix = await read("./gold-matrix-rain.tsx");
+    expect(renderer).toContain("Interface Animations");
+    expect(renderer).toContain("config?.ui.animationsEnabled ?? true");
+    expect(renderer).toContain(
+      'root.dataset.motion = animationsEnabled ? "on" : "off"',
+    );
+    expect(renderer).toContain("motionEnabled={animationsEnabled}");
+    expect(css).toContain('html[data-motion="off"] *,');
+    expect(css).toContain("animation: none !important;");
+    expect(css).toContain("transition: none !important;");
+    expect(matrix).toContain("motionEnabled = true");
+    expect(matrix).toContain("motionQuery.matches || !motionEnabled");
+  });
 });

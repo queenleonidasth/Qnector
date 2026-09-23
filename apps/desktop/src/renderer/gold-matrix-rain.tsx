@@ -49,6 +49,7 @@ interface GoldMatrixRainProps {
   isConnected?: boolean;
   disconnectProgress?: number;
   frozen?: boolean;
+  motionEnabled?: boolean;
   opacity?: number;
 }
 
@@ -67,6 +68,7 @@ export function GoldMatrixRain({
   isConnected = true,
   disconnectProgress = 0,
   frozen = false,
+  motionEnabled = true,
   opacity = ROYAL_SOVEREIGN.opacity,
 }: GoldMatrixRainProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -92,7 +94,7 @@ export function GoldMatrixRain({
     if (!ctx) return;
 
     const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let reducedMotion = motionQuery.matches;
+    let reducedMotion = motionQuery.matches || !motionEnabled;
     // Electron disables Page Visibility updates when background throttling is off.
     // The main process reports real show/hide/minimize/restore state instead.
     let windowVisible = false;
@@ -293,7 +295,7 @@ export function GoldMatrixRain({
     };
 
     const refreshMotionState = (): void => {
-      reducedMotion = motionQuery.matches;
+      reducedMotion = motionQuery.matches || !motionEnabled;
       stopAnimation();
       if (!windowVisible) return;
       if (
@@ -378,7 +380,7 @@ export function GoldMatrixRain({
       unsubscribeVisibility();
       motionQuery.removeEventListener("change", refreshMotionState);
     };
-  }, []);
+  }, [motionEnabled]);
 
   useEffect(() => {
     disconnectProgressRef.current =

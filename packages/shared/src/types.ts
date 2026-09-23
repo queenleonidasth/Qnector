@@ -36,6 +36,7 @@ export interface UiConfig {
   globalShortcut?: string;
   globalShortcutEnabled?: boolean;
   setupCompleted?: boolean;
+  animationsEnabled?: boolean;
   theme: "system" | "light" | "dark";
 }
 

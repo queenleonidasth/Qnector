@@ -107,6 +107,15 @@ html.qnector-window-paused *::after {
   animation-play-state: paused !important;
 }
 
+/* User preference: disable all non-essential interface motion immediately. */
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 4px;

@@ -316,7 +316,7 @@ export function SkillManager({
       );
       setRemoteResults((current) =>
         current.map((entry) =>
-          entry.name.toLowerCase() === installed.name.toLowerCase()
+          entry.skillId.toLowerCase() === installed.name.toLowerCase()
             ? { ...entry, installed: true }
             : entry,
         ),

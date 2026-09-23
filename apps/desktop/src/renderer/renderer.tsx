@@ -545,6 +545,7 @@ function App(): React.ReactElement {
   const [updateUxPhase, setUpdateUxPhase] = useState<UpdateUxPhase>("idle");
   const setupDialogRef = useRef<HTMLElement | null>(null);
   const drawerDialogRef = useRef<HTMLDivElement | null>(null);
+  const animationsEnabled = config?.ui.animationsEnabled ?? true;
 
   // Pausing CSS preserves animation progress when Qnector is hidden or minimized.
   useEffect(() => {
@@ -569,6 +570,14 @@ function App(): React.ReactElement {
       root.classList.remove("qnector-window-paused");
     };
   }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.motion = animationsEnabled ? "on" : "off";
+    return () => {
+      delete root.dataset.motion;
+    };
+  }, [animationsEnabled]);
 
   // Live Activity owns its own subscription/render state to avoid rerendering App.
 
@@ -603,6 +612,10 @@ function App(): React.ReactElement {
     if (!activeDrawer || isClosingDrawer) return;
     clearDrawerSwitchTimer();
     setDrawerTransition(null);
+    if (!animationsEnabled) {
+      finishDrawerClose();
+      return;
+    }
     setIsClosingDrawer(true);
     if (drawerCloseFallbackRef.current !== null) {
       window.clearTimeout(drawerCloseFallbackRef.current);
@@ -635,6 +648,13 @@ function App(): React.ReactElement {
     if (isClosingDrawer || drawerTransition || activeDrawer === drawer) return;
     if (!activeDrawer) {
       refreshDrawerData(drawer);
+      setActiveDrawer(drawer);
+      return;
+    }
+    if (!animationsEnabled) {
+      clearDrawerSwitchTimer();
+      refreshDrawerData(drawer);
+      setDrawerTransition(null);
       setActiveDrawer(drawer);
       return;
     }
@@ -1171,7 +1191,11 @@ function App(): React.ReactElement {
   };
 
   const toggleSetting = async (
-    key: "minimizeToTray" | "startAtLogin" | "globalShortcutEnabled",
+    key:
+      | "minimizeToTray"
+      | "startAtLogin"
+      | "globalShortcutEnabled"
+      | "animationsEnabled",
     value: boolean,
   ): Promise<void> => {
     if (!config) return;
@@ -1349,6 +1373,7 @@ function App(): React.ReactElement {
             isConnected={isConnected}
             disconnectProgress={matrixDisconnectProgress}
             frozen={matrixFrozenAfterDisconnect}
+            motionEnabled={animationsEnabled}
           />
           <div className="orb-stage">
             <svg
@@ -2213,6 +2238,39 @@ function App(): React.ReactElement {
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    {/* Interface Animations */}
+                    <div className="setting-toggle-card">
+                      <label className="drawer-toggle">
+                        <input
+                          type="checkbox"
+                          checked={config?.ui.animationsEnabled ?? true}
+                          onChange={(e) =>
+                            void toggleSetting(
+                              "animationsEnabled",
+                              e.target.checked,
+                            )
+                          }
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
+                          }}
+                        >
+                          <span>Interface Animations</span>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Motion, transitions and Matrix effects
+                          </span>
+                        </div>
+                      </label>
                     </div>
 
                     {/* Global Hotkey Card */}

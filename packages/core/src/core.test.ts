@@ -45,6 +45,7 @@ describe("Qnector config first-run migration", () => {
     expect(config.transport.mode).toBe("openai-tunnel");
     expect(config.transport.openaiProfile).toBe("qnector");
     expect(config.ui.setupCompleted).toBe(false);
+    expect(config.ui.animationsEnabled).toBe(true);
   });
 
   it("treats pre-wizard config files as already configured", async () => {
@@ -53,11 +54,13 @@ describe("Qnector config first-run migration", () => {
       const file = path.join(root, "config.json");
       const legacy = defaultConfig(root);
       delete legacy.ui.setupCompleted;
+      delete legacy.ui.animationsEnabled;
       legacy.transport.mode = "local-only";
       await writeFile(file, JSON.stringify(legacy), "utf8");
       const loaded = await loadConfig({ file, persist: false });
       expect(loaded.transport.mode).toBe("local-only");
       expect(loaded.ui.setupCompleted).toBe(true);
+      expect(loaded.ui.animationsEnabled).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

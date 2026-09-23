@@ -180,8 +180,14 @@ export class AgentSkillService {
       throw new Error(
         "SKILLS_REGISTRY_ERROR: skills.sh returned an invalid search payload",
       );
-    const installed = new Set(
-      (await this.discover(true)).map((skill) => skill.name.toLowerCase()),
+    const discovered = await this.discover(true);
+    const installedNames = new Set(
+      discovered.map((skill) => skill.name.toLowerCase()),
+    );
+    const installedRemoteIds = new Set(
+      discovered.flatMap((skill) =>
+        skill.origin?.id ? [skill.origin.id.toLowerCase()] : [],
+      ),
     );
     return payload.skills
       .map((entry) => parseRemoteSearchEntry(entry, this.registryBaseUrl()))
@@ -189,7 +195,9 @@ export class AgentSkillService {
       .slice(0, limit)
       .map((entry) => ({
         ...entry,
-        installed: installed.has(entry.name.toLowerCase()),
+        installed:
+          installedRemoteIds.has(entry.id.toLowerCase()) ||
+          installedNames.has(entry.skillId.toLowerCase()),
       }));
   }
 
@@ -220,8 +228,18 @@ export class AgentSkillService {
         "SKILL_IMPORT_INVALID: skills.sh snapshot does not contain SKILL.md",
       );
     const parsed = parseSkill(skillFile.contents, `${remoteId}:SKILL.md`);
-    const name = parsed.frontmatter.name!.trim();
+    const upstreamName = parsed.frontmatter.name!.trim();
+    const name = parsedId.skillId;
     validateSkillName(name);
+    const normalizedSkillContents =
+      upstreamName === name
+        ? skillFile.contents
+        : replaceSkillFrontmatterName(skillFile.contents, name);
+    const normalizedSnapshot = snapshot.map((file) =>
+      file === skillFile
+        ? { ...file, contents: normalizedSkillContents }
+        : file,
+    );
     const destination = path.join(root.path, name);
     if (await isDirectory(destination))
       throw new Error(`SKILL_EXISTS: ${name}`);
@@ -236,7 +254,7 @@ export class AgentSkillService {
     // does not recompute and compare it for a full snapshot. Keep that value for
     // provenance and also compute a Qnector-owned content digest over the exact
     // files we write so the installed snapshot can be identified deterministically.
-    const contentHash = hashRemoteSnapshot(snapshot);
+    const contentHash = hashRemoteSnapshot(normalizedSnapshot);
 
     const staging = path.join(root.path, `.qnector-install-${randomUUID()}`);
     const origin: AgentSkillOrigin = {
@@ -251,7 +269,7 @@ export class AgentSkillService {
     };
     try {
       await mkdir(staging, { recursive: true });
-      for (const file of snapshot) {
+      for (const file of normalizedSnapshot) {
         const target = path.resolve(staging, ...file.path.split("/"));
         if (!isWithin(staging, target))
           throw new Error(
@@ -953,6 +971,33 @@ function validateSkillName(name: string): void {
     throw new Error(
       "INVALID_INPUT: skill name must use lowercase letters, numbers and single hyphens",
     );
+}
+
+function replaceSkillFrontmatterName(
+  content: string,
+  canonicalName: string,
+): string {
+  validateSkillName(canonicalName);
+  const newline = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = content.split(/\r?\n/);
+  if (lines[0]?.trim() !== "---")
+    throw new Error("SKILL_IMPORT_INVALID: missing YAML frontmatter");
+
+  const end = lines.findIndex(
+    (line, index) => index > 0 && line.trim() === "---",
+  );
+  if (end < 0)
+    throw new Error("SKILL_IMPORT_INVALID: unterminated YAML frontmatter");
+
+  const nameIndex = lines.findIndex(
+    (line, index) => index > 0 && index < end && /^\s*name\s*:/.test(line),
+  );
+  if (nameIndex < 0)
+    throw new Error("SKILL_IMPORT_INVALID: frontmatter name is required");
+
+  const indentation = lines[nameIndex]!.match(/^\s*/)?.[0] ?? "";
+  lines[nameIndex] = `${indentation}name: ${canonicalName}`;
+  return lines.join(newline);
 }
 
 function isWritableSource(source: string): boolean {

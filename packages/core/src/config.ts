@@ -65,6 +65,7 @@ export function defaultConfig(workspace = process.cwd()): QnectorConfig {
       globalShortcut: "CommandOrControl+Shift+Q",
       globalShortcutEnabled: true,
       setupCompleted: false,
+      animationsEnabled: true,
       theme: "system",
     },
     memory: {
@@ -149,6 +150,7 @@ function parseStoredConfig(raw: string): QnectorConfig {
     ui: {
       ...loaded.ui,
       setupCompleted: loaded.ui.setupCompleted ?? true,
+      animationsEnabled: loaded.ui.animationsEnabled ?? true,
     },
   };
 }
