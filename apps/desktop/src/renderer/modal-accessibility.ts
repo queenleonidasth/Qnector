@@ -27,6 +27,7 @@ export function useModalFocusTrap(
   dialogRef: RefObject<HTMLElement | null>,
   onClose: () => void,
   closeOnEscape = true,
+  initialFocusRef?: RefObject<HTMLElement | null>,
 ): void {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -37,7 +38,9 @@ export function useModalFocusTrap(
     if (!dialog) return;
 
     const previouslyFocused =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const backdrop = dialog.parentElement;
     const hiddenSiblings: HiddenSiblingState[] = [];
 
@@ -55,15 +58,28 @@ export function useModalFocusTrap(
       }
     }
 
-    const focusFirst = (): void => {
-      const focusables = getFocusableElements(dialog);
-      (focusables[0] ?? dialog).focus({ preventScroll: true });
-    };
-    const focusFrame = window.requestAnimationFrame(focusFirst);
+    const initialFocus = initialFocusRef?.current;
+    const canFocusInitial =
+      initialFocus &&
+      dialog.contains(initialFocus) &&
+      !initialFocus.hasAttribute("disabled") &&
+      initialFocus.getAttribute("aria-hidden") !== "true";
+    let focusFrame: number | null = null;
+    if (canFocusInitial) {
+      initialFocus.focus({ preventScroll: true });
+    } else {
+      const focusFirst = (): void => {
+        const focusables = getFocusableElements(dialog);
+        (focusables[0] ?? dialog).focus({ preventScroll: true });
+      };
+      focusFrame = window.requestAnimationFrame(focusFirst);
+    }
 
     const onKeyDown = (event: KeyboardEvent): void => {
       const modalDialogs = Array.from(
-        document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]'),
+        document.querySelectorAll<HTMLElement>(
+          '[role="dialog"][aria-modal="true"]',
+        ),
       );
       const topmostDialog = modalDialogs.at(-1);
       if (topmostDialog && topmostDialog !== dialog) return;
@@ -102,11 +118,12 @@ export function useModalFocusTrap(
 
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      window.cancelAnimationFrame(focusFrame);
+      if (focusFrame !== null) window.cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", onKeyDown, true);
       for (const state of hiddenSiblings) {
         state.element.inert = state.inert;
-        if (state.ariaHidden === null) state.element.removeAttribute("aria-hidden");
+        if (state.ariaHidden === null)
+          state.element.removeAttribute("aria-hidden");
         else state.element.setAttribute("aria-hidden", state.ariaHidden);
       }
       if (previouslyFocused?.isConnected) {
@@ -115,11 +132,13 @@ export function useModalFocusTrap(
         );
       }
     };
-  }, [active, closeOnEscape, dialogRef]);
+  }, [active, closeOnEscape, dialogRef, initialFocusRef]);
 }
 
 function getFocusableElements(root: HTMLElement): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter(
     (element) =>
       !element.hasAttribute("disabled") &&
       element.getAttribute("aria-hidden") !== "true" &&

@@ -122,6 +122,7 @@ export function SkillManager({
   const duplicateDialogRef = useRef<HTMLElement | null>(null);
   const importDialogRef = useRef<HTMLElement | null>(null);
   const discoverDialogRef = useRef<HTMLElement | null>(null);
+  const discoverSearchRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = async (): Promise<void> => {
     setBusy(true);
@@ -158,8 +159,12 @@ export function SkillManager({
   useModalFocusTrap(Boolean(pendingImport), importDialogRef, () =>
     setPendingImport(undefined),
   );
-  useModalFocusTrap(discoverOpen, discoverDialogRef, () =>
-    setDiscoverOpen(false),
+  useModalFocusTrap(
+    discoverOpen,
+    discoverDialogRef,
+    () => setDiscoverOpen(false),
+    true,
+    discoverSearchRef,
   );
 
   const skills = useMemo(() => {
@@ -686,7 +691,7 @@ export function SkillManager({
               <label className="skill-field">
                 <span>Search skills.sh</span>
                 <input
-                  autoFocus
+                  ref={discoverSearchRef}
                   value={discoverQuery}
                   onChange={(event) => setDiscoverQuery(event.target.value)}
                   placeholder="e.g. debugging, UI design, agent eval"

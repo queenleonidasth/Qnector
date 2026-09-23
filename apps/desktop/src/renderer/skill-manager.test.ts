@@ -90,6 +90,22 @@ describe("desktop Skill Manager", () => {
     expect(css).toMatch(/\.skills-scroll \{[\s\S]*?overflow-y:\s*auto;/);
   });
 
+  it("focuses the skills.sh search field when discovery opens", async () => {
+    const source = await readFile(skillUrl, "utf8");
+    const modal = await readFile(
+      new URL("./modal-accessibility.ts", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain(
+      "const discoverSearchRef = useRef<HTMLInputElement | null>(null)",
+    );
+    expect(source).toContain("discoverSearchRef,");
+    expect(source).toContain("ref={discoverSearchRef}");
+    expect(source).not.toContain("autoFocus");
+    expect(modal).toContain("initialFocusRef?: RefObject<HTMLElement | null>");
+    expect(modal).toContain("const initialFocus = initialFocusRef?.current");
+    expect(modal).toContain("initialFocus.focus({ preventScroll: true })");
+  });
   it("keeps skills.sh result rows in normal flow at narrow widths", async () => {
     const css = await readFile(cssUrl, "utf8");
     expect(css).toMatch(/\.skills-discover-row \{[\s\S]*?flex:\s*0 0 auto;/);
