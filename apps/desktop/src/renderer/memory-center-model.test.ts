@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   currentSavedTask,
   filterMemories,
+  latestSavedActivityTask,
   latestLinkedSessionTask,
   pendingTasks,
   presentMemories,
@@ -84,28 +85,77 @@ describe("Memory Center data fidelity", () => {
         task("c", "blocked"),
       ]).map((item) => item.id),
     ).toEqual(["c"]);
-    expect(currentSavedTask([task("a", "completed"), task("b", "idle")])).toBeUndefined();
+    expect(
+      currentSavedTask([task("a", "completed"), task("b", "idle")]),
+    ).toBeUndefined();
   });
   it("labels a topic as a saved session only if a task was explicitly linked", () => {
-    expect(latestLinkedSessionTask([task("unlinked", "active")])).toBeUndefined();
-    const older = { ...task("older", "idle"), sessionCount: 1, updatedAt: "2026-09-19T00:00:00Z" };
-    const latest = { ...task("latest", "completed"), sessionCount: 1, lastEventAt: "2026-09-20T00:00:00Z" };
-    expect(latestLinkedSessionTask([older, task("unlinked", "active"), latest])?.id).toBe("latest");
+    expect(
+      latestLinkedSessionTask([task("unlinked", "active")]),
+    ).toBeUndefined();
+    const older = {
+      ...task("older", "idle"),
+      sessionCount: 1,
+      updatedAt: "2026-09-19T00:00:00Z",
+    };
+    const latest = {
+      ...task("latest", "completed"),
+      sessionCount: 1,
+      lastEventAt: "2026-09-20T00:00:00Z",
+    };
+    expect(
+      latestLinkedSessionTask([older, task("unlinked", "active"), latest])?.id,
+    ).toBe("latest");
+  });
+  it("uses the newest saved activity including the general workspace task", () => {
+    const staleNamed = {
+      ...task("Package QNECTOR workspace plugin", "active"),
+      lastEventAt: "2026-09-22T10:32:33Z",
+    };
+    const freshGeneral = {
+      ...task("General workspace activity", "idle"),
+      lastEventAt: "2026-09-23T07:01:20Z",
+    };
+    expect(latestSavedActivityTask([staleNamed, freshGeneral])?.title).toBe(
+      "General workspace activity",
+    );
   });
   it("shows a blocked task only when no in-progress task exists", () => {
-    const blocked = { ...task("blocked", "blocked"), updatedAt: "2026-09-20T02:00:00Z" };
-    const active = { ...task("active", "active"), updatedAt: "2026-09-20T01:00:00Z" };
+    const blocked = {
+      ...task("blocked", "blocked"),
+      updatedAt: "2026-09-20T02:00:00Z",
+    };
+    const active = {
+      ...task("active", "active"),
+      updatedAt: "2026-09-20T01:00:00Z",
+    };
     expect(currentSavedTask([blocked, active])?.id).toBe("active");
-    expect(currentSavedTask([blocked, task("done", "completed")])?.id).toBe("blocked");
+    expect(currentSavedTask([blocked, task("done", "completed")])?.id).toBe(
+      "blocked",
+    );
   });
   it("keeps saved log provenance, error status and most-recent-first order", () => {
     const entries = recentSavedLog(
-      [event("old", "2026-09-20T01:00:00Z"), { ...event("failed", "2026-09-20T03:00:00Z"), status: "error" }],
+      [
+        event("old", "2026-09-20T01:00:00Z"),
+        { ...event("failed", "2026-09-20T03:00:00Z"), status: "error" },
+      ],
       [{ timestamp: "2026-09-20T02:00:00Z", summary: "Legacy edit" }],
     );
-    expect(entries.map((entry) => entry.summary)).toEqual(["Checked failed", "Legacy edit", "Checked old"]);
+    expect(entries.map((entry) => entry.summary)).toEqual([
+      "Checked failed",
+      "Legacy edit",
+      "Checked old",
+    ]);
     expect(entries[0]?.status).toBe("error");
     expect(entries[1]?.source).toBe("Legacy");
-    expect(recentSavedLog(Array.from({ length: 20 }, (_, i) => event(String(i), `2026-09-20T00:${String(i).padStart(2, "0")}:00Z`)), [])).toHaveLength(12);
+    expect(
+      recentSavedLog(
+        Array.from({ length: 20 }, (_, i) =>
+          event(String(i), `2026-09-20T00:${String(i).padStart(2, "0")}:00Z`),
+        ),
+        [],
+      ),
+    ).toHaveLength(12);
   });
 });

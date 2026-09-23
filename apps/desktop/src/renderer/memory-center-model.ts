@@ -54,10 +54,20 @@ export function latestLinkedSessionTask(
   return [...tasks]
     .filter((task) => task.sessionCount > 0)
     .sort((a, b) =>
-      (b.lastEventAt ?? b.updatedAt).localeCompare(a.lastEventAt ?? a.updatedAt),
+      (b.lastEventAt ?? b.updatedAt).localeCompare(
+        a.lastEventAt ?? a.updatedAt,
+      ),
     )[0];
 }
 
+/** Latest persisted Qnector task activity, including the general workspace bucket. */
+export function latestSavedActivityTask(
+  tasks: readonly MemoryTask[],
+): MemoryTask | undefined {
+  return [...tasks].sort((a, b) =>
+    (b.lastEventAt ?? b.updatedAt).localeCompare(a.lastEventAt ?? a.updatedAt),
+  )[0];
+}
 /** Never display idle/completed historical tasks as current work. */
 export function currentSavedTask(
   tasks: readonly MemoryTask[],
