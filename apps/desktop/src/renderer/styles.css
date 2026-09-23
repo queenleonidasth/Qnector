@@ -1436,14 +1436,14 @@ html[data-motion="off"] *::after {
   flex-direction: column;
   gap: 12px;
   max-height: 82%;
-  backface-visibility: hidden;
-  will-change: transform;
-  transform: translate3d(0, 0, 0);
-  animation: drawerSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: drawerSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 .drawer-card.closing {
   pointer-events: none;
+  backface-visibility: hidden;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
   animation: drawerSlideDown 0.26s cubic-bezier(0.32, 0, 0.67, 0) both;
 }
 
@@ -3862,6 +3862,10 @@ html[data-motion="off"] *::after {
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
+}
+
+.drawer-page-left,
+.drawer-page-right {
   will-change: transform, opacity;
 }
 

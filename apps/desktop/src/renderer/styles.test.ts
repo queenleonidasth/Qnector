@@ -184,3 +184,27 @@ describe("drawer animation smoothness", () => {
     );
   });
 });
+
+describe("drawer text sharpness", () => {
+  it("releases compositor promotion after drawer and page animations settle", async () => {
+    const css = await styles();
+
+    const drawerBlock = css.match(/\.drawer-card \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(drawerBlock).not.toContain("will-change: transform");
+    expect(drawerBlock).not.toContain("backface-visibility: hidden");
+    expect(drawerBlock).not.toContain("transform: translate3d(0, 0, 0)");
+    expect(drawerBlock).toContain(
+      "animation: drawerSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) backwards;",
+    );
+
+    const pageBlock = css.match(/\.drawer-page \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(pageBlock).not.toContain("will-change");
+
+    expect(css).toMatch(
+      /\.drawer-card\.closing \{[\s\S]*?will-change:\s*transform;[\s\S]*?transform:\s*translate3d\(0, 0, 0\);/,
+    );
+    expect(css).toMatch(
+      /\.drawer-page-left,\s*\.drawer-page-right \{[\s\S]*?will-change:\s*transform, opacity;/,
+    );
+  });
+});
