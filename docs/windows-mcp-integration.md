@@ -56,7 +56,14 @@ windows-mcp install --transport streamable-http --host 127.0.0.1 --port 8000
 
 The task is named `windows-mcp-server`. Keep the executable/source environment that created the task available, because its generated wrapper points at that Python installation. Verify the task after login instead of treating config presence as proof that the server is alive.
 
-For a quiet local profile, the generated `~/.windows-mcp/start-server.cmd` can set these environment variables before starting the server:
+For a quiet local profile, keep the generated `~/.windows-mcp/start-server.cmd` non-interactive and redirect its output to log files. To avoid a visible Command Prompt window at logon, launch that wrapper through a hidden `wscript.exe` task action, for example `~/.windows-mcp/start-server-hidden.vbs`:
+
+```vbscript
+Set sh = CreateObject("WScript.Shell")
+sh.Run Chr(34) & "C:\Users\QUEEN\.windows-mcp\start-server.cmd" & Chr(34), 0, False
+```
+
+Register the `windows-mcp-server` Scheduled Task action as `wscript.exe "<path>\start-server-hidden.vbs"`. The wrapper can set these environment variables before starting the server:
 
 ```cmd
 set "ANONYMIZED_TELEMETRY=false"
