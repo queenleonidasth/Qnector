@@ -29,6 +29,7 @@ import {
   formatTime,
   type RuntimeDashboardView,
 } from "./runtime-diagnostics.js";
+import { inspectWindowsMcp } from "./windows-mcp-status.js";
 import "./royal-effects.css";
 import { GoldMatrixRain } from "./gold-matrix-rain.js";
 
@@ -708,7 +709,7 @@ function App(): React.ReactElement {
     if (!force && Date.now() - runtimeLastRefreshRef.current < 15_000) return;
     setRuntimeBusy(true);
     try {
-      const [doctor, release, snapshot, workflows, performance] =
+      const [doctor, release, snapshot, workflows, performance, windowsMcp] =
         await Promise.all([
           window.qnector.callTool("system", { action: "doctor" }),
           window.qnector.callTool("system", { action: "release_status" }),
@@ -718,6 +719,7 @@ function App(): React.ReactElement {
             maxResults: 10,
           }),
           window.qnector.callTool("system", { action: "performance" }),
+          inspectWindowsMcp(window.qnector.callTool),
         ]);
       const unwrap = <T,>(result: ToolResult): T | undefined => {
         if (!result.ok) return undefined;
@@ -733,6 +735,7 @@ function App(): React.ReactElement {
         release: unwrap<RuntimeDashboardView["release"]>(release),
         snapshot: unwrap<RuntimeDashboardView["snapshot"]>(snapshot),
         workflowRuns: workflowData?.runs ?? [],
+        windowsMcp,
       });
       runtimeLastRefreshRef.current = Date.now();
     } catch (reason) {

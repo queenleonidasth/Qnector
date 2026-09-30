@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ProcessSnapshot } from "../preload/api.js";
 import type { DurableJobsSnapshot } from "../main/durable-jobs.js";
+import type { WindowsMcpRuntimeStatus } from "./windows-mcp-status.js";
 
 export interface RuntimeDashboardView {
   performance?: {
@@ -57,6 +58,7 @@ export interface RuntimeDashboardView {
     state: string;
     updatedAt: string;
   }>;
+  windowsMcp?: WindowsMcpRuntimeStatus;
 }
 
 export function RuntimeDiagnostics({
@@ -150,6 +152,27 @@ export function RuntimeDiagnostics({
             <span className="runtime-summary-label">Workflows</span>
             <strong>{runtimeDashboard.workflowRuns.length}</strong>
             <small>recent runs</small>
+          </div>
+          <div className="runtime-summary-card">
+            <span className="runtime-summary-label">Windows-MCP</span>
+            <strong>
+              {runtimeDashboard.windowsMcp?.state === "connected"
+                ? "Connected"
+                : runtimeDashboard.windowsMcp?.state === "disabled"
+                  ? "Disabled"
+                  : runtimeDashboard.windowsMcp?.state === "not-configured"
+                    ? "Not configured"
+                    : runtimeDashboard.windowsMcp?.state === "error"
+                      ? "Needs attention"
+                      : runtimeBusy
+                        ? "Checking…"
+                        : "Unknown"}
+            </strong>
+            <small>
+              {runtimeDashboard.windowsMcp?.toolCount !== undefined
+                ? `${runtimeDashboard.windowsMcp.toolCount} upstream tools`
+                : "external computer-use upstream"}
+            </small>
           </div>
           <div className="runtime-summary-card">
             <span className="runtime-summary-label">Startup</span>
@@ -249,6 +272,38 @@ export function RuntimeDiagnostics({
               {runtimeDashboard.release?.recommendation ??
                 "Refresh to compare the running executable, newest package, and source state."}
             </p>
+          </div>
+        </details>
+
+        <details className="runtime-section" open>
+          <summary>
+            <span>Windows-MCP</span>
+            <span
+              className={`item-bead ${runtimeDashboard.windowsMcp?.state === "connected" ? "success" : runtimeDashboard.windowsMcp?.state === "error" ? "error" : "running"}`}
+            />
+          </summary>
+          <div className="runtime-section-body">
+            <strong className="runtime-release-status">
+              {runtimeDashboard.windowsMcp?.state ??
+                (runtimeBusy ? "checking…" : "unknown")}
+            </strong>
+            <p>
+              {runtimeDashboard.windowsMcp?.detail ??
+                "Refresh to probe the configured Windows-MCP upstream."}
+            </p>
+            {runtimeDashboard.windowsMcp?.endpoint && (
+              <p className="activity-detail-code">
+                {runtimeDashboard.windowsMcp.endpoint}
+              </p>
+            )}
+            {runtimeDashboard.windowsMcp?.state === "connected" && (
+              <p>
+                DisplayInventory:{" "}
+                {runtimeDashboard.windowsMcp.displayInventoryAvailable
+                  ? "available"
+                  : "not advertised"}
+              </p>
+            )}
           </div>
         </details>
 
