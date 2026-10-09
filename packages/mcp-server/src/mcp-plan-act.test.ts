@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ActivityLogger } from "../../core/src/activity-log.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { QnectorRuntime } from "./server.js";
+import { PLAN_VIEW_URI } from "./plan-view.js";
 
 let runtime: QnectorRuntime | undefined;
 let root: string | undefined;
@@ -54,20 +55,37 @@ describe("Plan/Act live MCP integration", () => {
     });
     await runtime.start({port});
     const tools = (await rpc(port,"tools/list")).result?.tools ?? [];
-    expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["mode","mode_approve","inspect"]));
+    expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["mode","mode_approve","inspect","plan_panel"]));
+    expect(tools.find((tool) => tool.name === "plan_panel")?._meta).toMatchObject({
+      ui: { resourceUri: PLAN_VIEW_URI }, "openai/outputTemplate": PLAN_VIEW_URI,
+      "openai/widgetAccessible": true,
+    });
+    // A dedicated panel tool prevents a new iframe after every mode change.
+    for (const name of ["mode", "mode_approve"]) {
+      expect(tools.find((tool) => tool.name === name)?._meta).not.toHaveProperty("ui");
+    }
+    expect(tools.find((tool) => tool.name === "plan_panel")?.annotations)
+      .toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(tools.find((tool) => tool.name === "inspect")?.annotations)
       .toMatchObject({readOnlyHint:true,destructiveHint:false});
     const resources = (await rpc(port,"resources/list")).result?.resources ?? [];
-    expect(resources.map((entry) => entry.uri)).toContain("ui://qnector/plan-act.html");
-    const view = (await rpc(port,"resources/read",{uri:"ui://qnector/plan-act.html"})).result?.contents ?? [];
+    expect(resources.map((entry) => entry.uri)).toContain(PLAN_VIEW_URI);
+    const view = (await rpc(port,"resources/read",{uri:PLAN_VIEW_URI})).result?.contents ?? [];
     expect(String(view[0]?.text)).toContain("Qnector");
     expect(String(view[0]?.text)).toContain("mode_approve");
+    expect(String(view[0]?.text)).toContain("Task Controller");
+    expect(String(view[0]?.text)).toContain("aria-selected");
+    expect(String(view[0]?.text)).toContain("api.callTool");
 
     const task = "task_test_plan_act";
     await writeFile(path.join(root,"existing.txt"),"readable");
     const modeStatus = await call(port,"inspect",{target:"mode",request:{action:"get"},memoryTaskId:task});
     expect(modeStatus?.ok).toBe(true);
     expect(modeStatus?.data?.data?.mode).toBe("act");
+    const initialPanel = await call(port, "plan_panel", { memoryTaskId: task });
+    expect(initialPanel?.ok).toBe(true);
+    expect(initialPanel?.data?.data?.mode).toBe("act");
+    expect(initialPanel?.data?.data?.scopeId).toBe("task:" + task);
     const disallowedDraft = await call(port,"inspect",{target:"mode",request:{action:"begin"},memoryTaskId:task});
     expect(disallowedDraft?.error?.code).toBe("READ_ONLY_TOOL_DENIED");
     const start = await call(port,"mode",{
@@ -76,6 +94,9 @@ describe("Plan/Act live MCP integration", () => {
     });
     expect(start?.ok).toBe(true);
     expect(start?.data?.data?.mode).toBe("plan");
+    const pendingPanel = await call(port, "plan_panel", { memoryTaskId: task });
+    expect(pendingPanel?.data?.data?.mode).toBe("plan");
+    expect((pendingPanel?.data?.data?.plan as { revision?: number })?.revision).toBe(1);
     expect(await readFile(path.join(root,"existing.txt"),"utf8")).toBe("readable");
 
     const inspectRead = await call(port,"inspect",{
@@ -98,6 +119,9 @@ describe("Plan/Act live MCP integration", () => {
     const accepted = await call(port,"mode_approve",{expectedRevision:1,memoryTaskId:task});
     expect(accepted?.ok).toBe(true);
     expect(accepted?.data?.data?.mode).toBe("act");
+    const approvedPanel = await call(port, "plan_panel", { memoryTaskId: task });
+    expect(approvedPanel?.data?.data?.mode).toBe("act");
+    expect((approvedPanel?.data?.data?.plan as { approvedRevision?: number })?.approvedRevision).toBe(1);
 
     const written = await call(port,"files",{
       action:"write",path:"approved.txt",content:"allowed",memoryTaskId:task,

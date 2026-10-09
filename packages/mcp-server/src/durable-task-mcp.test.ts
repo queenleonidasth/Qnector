@@ -76,7 +76,8 @@ describe("opt-in durable MCP task facade", () => {
     runtimes.push(runtime);
     await runtime.start({ port });
     const listed = await rpc(port, "tools/list");
-    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(11);
+    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(12);
+    expect(listed.result?.tools?.map((tool) => tool.name)).toContain("plan_panel");
     expect(listed.result?.tools?.map((tool) => tool.name)).not.toContain(
       "tasks",
     );

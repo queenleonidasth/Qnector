@@ -7,7 +7,7 @@ Plan / Act is an optional task-scoped **behavioral MCP dispatch guard**, not a W
 1. In ChatGPT, enable Qnector and ask: "Use Qnector to start a task and plan this project before editing it."
 2. ChatGPT calls memory.task_start and captures its taskId.
 3. Pass that ID as memoryTaskId to **every** Qnector call for this task, including calls through inspect, mode, process, files, git, browser, and tasks.
-4. Use mode.begin with title, summary and one or more numbered step descriptions. This saves revision 1 and **enters Plan Mode**.
+4. Use mode.begin with title, summary and one or more numbered step descriptions. This saves revision 1 and **enters Plan Mode**. Call `plan_panel` with the same `memoryTaskId` to display the interactive controller in ChatGPT.
 5. Use inspect (read-only tool) or read-only actions on original tools to inspect code. In Plan Mode, execution and mutation requests are denied by ToolRegistry.
 6. Use mode.get to review the revision. mode.update changes the plan, increases its revision and invalidates prior approval.
 7. Only **after the user explicitly approves the displayed plan**, call mode_approve with the exact expectedRevision and the same memoryTaskId.
@@ -18,9 +18,9 @@ Do not issue mode_approve simply because a plan exists. The user must accept the
 
 ## ChatGPT panel
 
-Qnector exposes an MCP Apps resource at ui://qnector/plan-act.html. Compatible hosts display the mode, revision, checklist and controls to approve, return to planning or continue execution in chat. The panel calls MCP via the host-provided window.openai tool bridge. It does not automate ChatGPT's browser, read cookies or acquire ChatGPT credentials.
+Qnector exposes a versioned MCP Apps resource at `ui://qnector/plan-act-v2.html` through a dedicated read-only `plan_panel` tool. The tool declares both standard `_meta.ui.resourceUri` and ChatGPT `_meta["openai/outputTemplate"]`. Compatible hosts can render the live mode tabs, revision, checklist and execution controls. These controls make actual MCP calls using `window.openai.callTool` (including revision-checked approval), not simulated UI state. It does not automate ChatGPT's browser, read cookies or acquire credentials.
 
-Qnector cannot insert native controls into the ChatGPT composer. Without MCP Apps UI support, plain MCP tools still work.
+Qnector cannot insert native controls into the ChatGPT composer. Without MCP Apps UI support, plain MCP tools still work. The controller appears **within the chat response after calling `plan_panel`**, not as a permanent ChatGPT composer toolbar. After installing a new Qnector version, go to ChatGPT Settings → Apps / Plugins → Qnector → Refresh tools, review/enable the new `mode`, `mode_approve`, `inspect` and `plan_panel` actions, and start a new chat. Workspace admins may need to review and publish the refreshed app tool list; ChatGPT does not automatically refresh a frozen approved app snapshot.
 
 The inspect tool is advertised with readOnlyHint=true and strictly allows read-only requests, including mode.get. Example tool input:
 

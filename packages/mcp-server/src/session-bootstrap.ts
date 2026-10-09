@@ -9,7 +9,7 @@ const MAX_BOOTSTRAP_BYTES = 3_000;
 
 function finishBootstrap(lines: string[]): string {
   const current = lines.join("\n");
-  const reminder = "\nPLAN/ACT: memory.task_start; mode.begin saves read-only plan; explicit approval via mode_approve(expectedRevision) enables Act. Reuse memoryTaskId.";
+  const reminder = "\nPLAN/ACT: memory.task_start; mode.begin saves read-only plan; plan_panel(memoryTaskId) opens the live ChatGPT controller; explicit approval via mode_approve(expectedRevision) enables Act. Reuse memoryTaskId.";
   return capUtf8(Buffer.byteLength(current + reminder, "utf8") <= MAX_BOOTSTRAP_BYTES
     ? current + reminder : current, MAX_BOOTSTRAP_BYTES);
 }

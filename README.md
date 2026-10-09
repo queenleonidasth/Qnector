@@ -126,7 +126,7 @@ Get-FileHash .\Qnector-*-win-x64-setup.exe -Algorithm SHA256
 5. Wait for **OpenAI Tunnel is connected**, then open ChatGPT Connector
    Settings from the success page.
 6. Create or verify the Qnector connector while the desktop app is running and
-   confirm that ChatGPT discovers all eight grouped tools.
+   confirm that ChatGPT discovers nine grouped tools plus `inspect`, `mode_approve` and `plan_panel`.
 7. In Qnector, select **Workspace → Choose Folder**, then enable Qnector in a
    new ChatGPT conversation.
 
@@ -149,7 +149,7 @@ and show the Git diff.
 
 ## Plan / Act Mode on ChatGPT
 
-Use Qnector with task-scoped planning: start a task with `memory.task_start`, save a read-only plan with `mode.begin`, and switch to Act Mode with `mode_approve` only after approving the current revision. Use the read-only `inspect` MCP tool for low-friction code inspection. Compatible ChatGPT hosts also show a Plan / Act panel. See [Plan / Act guide](docs/plan-act.md) for steps and limitations.
+Use Qnector with task-scoped planning: start a task with `memory.task_start`, save a read-only plan with `mode.begin`, and switch to Act Mode with `mode_approve` only after approving the current revision. Use `inspect` for read-only inspection and call **`plan_panel` with the same `memoryTaskId`** to show the interactive Plan / Act Task Controller in a compatible ChatGPT conversation. After installing Qnector updates, refresh and enable the new custom app actions in ChatGPT settings, then start a new chat. See [Plan / Act guide](docs/plan-act.md) for limits.
 
 ## Everyday use
 

@@ -59,7 +59,7 @@ import { localMcpUrl } from "@qnector/shared";
 import { ToolRegistry, checkPlanActGuard, isPureReadAction } from "@qnector/tools";
 import { durableTaskSchema } from "./durable-task-tool.js";
 import { ExecutionFacade } from "./execution-facade.js";
-import { PLAN_VIEW_HTML } from "./plan-view.js";
+import { PLAN_VIEW_HTML, PLAN_VIEW_URI } from "./plan-view.js";
 import { boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
 import { TimelineLogger, timelineLogPath } from "./timeline-logger.js";
 import { runTimeoutProbe, type ProbeMode } from "./timeout-probe.js";
@@ -75,7 +75,7 @@ const mcpInputSchemaCache = new Map<
   ReturnType<typeof fromJsonSchema>
 >();
 
-const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4-plan-act-v1`;
+const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4-plan-act-v2-ui`;
 const LONG_CONTEXT_TOOL_ANCHOR =
   "QNECTOR IS CALLABLE NOW. If unsure, probe system.status (action=status) before declaring Qnector unavailable.";
 const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
@@ -450,7 +450,7 @@ export class QnectorRuntime {
             "qnector/availability": "live-when-listed",
             "qnector/recoveryAction": "system.status",
             "qnector/skillsRouting": "manual-opt-in",
-            ...(definition.name === "mode" ? { ui: { resourceUri: "ui://qnector/plan-act.html" }, "openai/widgetAccessible": true } : {}),
+            // Only plan_panel owns the UI template, preventing duplicate widget renders.
           },
         },
         async (input, extra) => {
@@ -544,6 +544,45 @@ export class QnectorRuntime {
       };
     });
 
+    // A dedicated read-only launcher lets ChatGPT render a live task controller
+    // without triggering a mixed-permission Plan/Act tool just to show its UI.
+    server.registerTool("plan_panel", {
+      title: "Open Qnector Plan / Act Task Controller",
+      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nShow the interactive Qnector Task Controller in this ChatGPT conversation. Start or resume a Qnector Memory task, then pass its memoryTaskId so the panel shows the right plan. This tool only reads task mode and does not approve or execute any actions.`,
+      inputSchema: fromJsonSchema({
+        type: "object", additionalProperties: false,
+        properties: {
+          memoryTaskId: { type: "string", description: "Task ID from memory.task_start or memory.task_resume." },
+        },
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      _meta: {
+        ui: { resourceUri: PLAN_VIEW_URI },
+        "openai/outputTemplate": PLAN_VIEW_URI,
+        "openai/widgetAccessible": true,
+        "qnector/schemaRevision": MCP_SCHEMA_REVISION,
+      },
+    }, async (input, extra) => {
+      const args = input as { memoryTaskId?: string };
+      const result = await this.registry.call(
+        "mode",
+        this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
+          modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)),
+        { action: "get", ...(args.memoryTaskId ? { memoryTaskId: args.memoryTaskId } : {}) },
+      );
+      const bounded = boundMcpToolResult(result);
+      const { attachments, ...jsonResult } = bounded;
+      const output = { ...jsonResult, tool: "plan_panel", action: "show" };
+      return {
+        content: [{ type: "text" as const, text: toolResultText(output) },
+          ...(attachments ?? []).map((a) => ({
+            type: "image" as const, data: a.dataBase64, mimeType: a.mimeType,
+          }))],
+        structuredContent: output as Record<string, unknown>,
+        isError: !result.ok,
+      };
+    });
+
     // A separately annotated approval tool allows the host to request consent
     // without prompting for every read-only mode.get call.
     server.registerTool("mode_approve", {
@@ -558,11 +597,7 @@ export class QnectorRuntime {
         required: ["expectedRevision"],
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-      _meta: {
-        ui: { resourceUri: "ui://qnector/plan-act.html" },
-        "openai/widgetAccessible": true,
-        "qnector/schemaRevision": MCP_SCHEMA_REVISION,
-      },
+      _meta: { "qnector/schemaRevision": MCP_SCHEMA_REVISION },
     }, async (input, extra) => {
       const result = await this.registry.call(
         "mode",
@@ -581,7 +616,7 @@ export class QnectorRuntime {
     });
 
     // Inline, self-contained UI. Hosts without MCP Apps support still use the tools.
-    server.registerResource("qnector-plan-act-view", "ui://qnector/plan-act.html", {
+    server.registerResource("qnector-plan-act-view-v2", PLAN_VIEW_URI, {
       title: "Qnector Plan / Act Controller",
       description: "Inspect plans, approve a revision, and control task execution mode.",
       mimeType: "text/html;profile=mcp-app",
@@ -592,7 +627,8 @@ export class QnectorRuntime {
         text: PLAN_VIEW_HTML,
         _meta: {
           ui: { prefersBorder: true },
-          "openai/widgetDescription": "Plan/Act mode, approved revision and task checklist.",
+          "openai/widgetDescription": "Live Qnector Task Controller: Plan/Act mode and task checklist.",
+          "openai/ui": { availableDisplayModes: ["inline"] },
         },
       }],
     }));

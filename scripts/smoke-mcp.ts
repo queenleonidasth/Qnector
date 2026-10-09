@@ -36,6 +36,10 @@ try {
     "memory",
     "browser",
     "computer",
+    "mode",
+    "inspect",
+    "plan_panel",
+    "mode_approve",
   ];
   assert(
     tools.length === expectedTools.length &&
@@ -102,7 +106,7 @@ try {
         workspace,
         checks: [
           "initialize",
-          "tools/list (8 named tools, no social)",
+          "tools/list (12 named tools, no social)",
           "system.info",
           "files.write/read",
           "memory.save_checkpoint/recall",

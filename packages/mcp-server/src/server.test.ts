@@ -533,7 +533,8 @@ describe("Qnector MCP runtime", () => {
         "Continue the saved Qnector task",
       );
       const modernTools = await client.listTools();
-      expect(modernTools.tools).toHaveLength(11);
+      expect(modernTools.tools).toHaveLength(12);
+      expect(modernTools.tools.map((tool) => tool.name)).toContain("plan_panel");
       expect(modernTools.tools.map((tool) => tool.name)).toContain("browser");
       expect(
         modernTools.tools
