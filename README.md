@@ -71,9 +71,9 @@ user who launches Qnector.
   set.
 - Persist reusable multi-step workflows and inspect their run state.
 
-Qnector exposes these capabilities through eight grouped MCP tools:
-`system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, and
-`computer`.
+Qnector exposes these capabilities through nine grouped MCP tools:
+`system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`,
+`computer`, and `mode`.
 
 ## Install on Windows
 
@@ -146,6 +146,10 @@ Then test a write workflow:
 Use Qnector to create qnector-test.txt in the active workspace, read it back,
 and show the Git diff.
 ```
+
+## Plan / Act Mode on ChatGPT
+
+Use Qnector with task-scoped planning: start a task with `memory.task_start`, save a read-only plan with `mode.begin`, and switch to Act Mode with `mode_approve` only after approving the current revision. Use the read-only `inspect` MCP tool for low-friction code inspection. Compatible ChatGPT hosts also show a Plan / Act panel. See [Plan / Act guide](docs/plan-act.md) for steps and limitations.
 
 ## Everyday use
 

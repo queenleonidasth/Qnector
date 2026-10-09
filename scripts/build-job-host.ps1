@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$dotnet = Join-Path $env:ProgramFiles "dotnet\dotnet.exe"
+$dotnet = if ($env:QNECTOR_DOTNET -and (Test-Path -LiteralPath $env:QNECTOR_DOTNET)) { $env:QNECTOR_DOTNET } else { Join-Path $env:ProgramFiles "dotnet\dotnet.exe" }
 if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = (Get-Command dotnet -ErrorAction Stop).Source }
 $project = Join-Path $projectRoot "packages\execution\job-host\Qnector.JobHost.csproj"
 $output = Join-Path $projectRoot "packages\execution\job-host\dist"

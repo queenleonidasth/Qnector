@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { handleHttpMcp } from "./http-mcp-host.js";
 import { createRuntimeServices } from "./runtime-services.js";
 import { execFile } from "node:child_process";
@@ -28,6 +28,7 @@ import {
   WorkspaceState,
   MemoryStore,
   MemoryV2Store,
+  PlanActStore,
   NodePlatformServices,
   TypeScriptCodeIntelligence,
   WindowsFileSearchService,
@@ -55,9 +56,10 @@ import type {
   ToolDefinition,
 } from "@qnector/shared";
 import { localMcpUrl } from "@qnector/shared";
-import { ToolRegistry } from "@qnector/tools";
+import { ToolRegistry, checkPlanActGuard, isPureReadAction } from "@qnector/tools";
 import { durableTaskSchema } from "./durable-task-tool.js";
 import { ExecutionFacade } from "./execution-facade.js";
+import { PLAN_VIEW_HTML } from "./plan-view.js";
 import { boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
 import { TimelineLogger, timelineLogPath } from "./timeline-logger.js";
 import { runTimeoutProbe, type ProbeMode } from "./timeout-probe.js";
@@ -73,7 +75,7 @@ const mcpInputSchemaCache = new Map<
   ReturnType<typeof fromJsonSchema>
 >();
 
-const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4`;
+const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4-plan-act-v1`;
 const LONG_CONTEXT_TOOL_ANCHOR =
   "QNECTOR IS CALLABLE NOW. If unsure, probe system.status (action=status) before declaring Qnector unavailable.";
 const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
@@ -105,6 +107,7 @@ export interface QnectorRuntimeOptions {
   ptyManager?: PtyManager;
   agentSkills?: AgentSkillService;
   memory?: MemoryStore;
+  planActStore?: PlanActStore;
   platform?: PlatformServices;
   platformServices?: PlatformServices;
   app?: FastifyInstance;
@@ -136,6 +139,7 @@ export class QnectorRuntime {
   public readonly workspace: WorkspaceState;
   public readonly memory: MemoryStore;
   public readonly memoryV2: MemoryV2Store;
+  public readonly planActStore: PlanActStore;
   public readonly platform: PlatformServices;
   private readonly configFile?: string;
   private config: QnectorConfig;
@@ -203,6 +207,10 @@ export class QnectorRuntime {
     this.workspace = services.workspace;
     this.memory = services.memory;
     this.memoryV2 = services.memoryV2;
+    this.planActStore = options.planActStore ?? new PlanActStore(
+      path.join(this.configFile ? path.dirname(this.configFile) : (process.env.APPDATA ?? process.cwd()),
+        this.configFile ? "" : "Qnector", "plan-act-state.json"),
+    );
     this.platform = services.platform;
     this.executionFacade = this.durableDaemonRoot
       ? new ExecutionFacade(this.durableDaemonRoot, this.processManager)
@@ -238,6 +246,7 @@ export class QnectorRuntime {
   public context(
     skillTraceSessionId?: string,
     abortSignal?: AbortSignal,
+    modeSessionId?: string,
   ): ToolContext {
     return {
       workspace: this.workspace,
@@ -258,6 +267,8 @@ export class QnectorRuntime {
       agentSkills: this.agentSkills,
       memory: this.memory,
       memoryV2: this.memoryV2,
+      planActStore: this.planActStore,
+      ...(modeSessionId ? { modeSessionId } : {}),
       platform: this.platform,
       activity: this.activity,
       skillTraceStore: this.skillTraceStore,
@@ -439,6 +450,7 @@ export class QnectorRuntime {
             "qnector/availability": "live-when-listed",
             "qnector/recoveryAction": "system.status",
             "qnector/skillsRouting": "manual-opt-in",
+            ...(definition.name === "mode" ? { ui: { resourceUri: "ui://qnector/plan-act.html" }, "openai/widgetAccessible": true } : {}),
           },
         },
         async (input, extra) => {
@@ -461,6 +473,7 @@ export class QnectorRuntime {
               this.context(
                 skillTraceSessionId || undefined,
                 requestContext?.requestInfo?.signal,
+                modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId),
               ),
               input,
             ));
@@ -488,6 +501,102 @@ export class QnectorRuntime {
         },
       );
     }
+    // Explicit read-only alias: ChatGPT can inspect without requiring the
+    // broad destructive permissions of the eight legacy mixed-action tools.
+    server.registerTool("inspect", {
+      title: "Qnector read-only inspection",
+      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nRead-only Qnector proxy for analysis and Plan Mode. Use target=files request={action:read,path:...}, target=workspace request={action:grep,pattern:...}, target=git request={action:diff}, etc. Only read-only actions are permitted, even while the task is in Act Mode. Use full grouped tools only for changes.`,
+      inputSchema: fromJsonSchema({
+        type: "object", additionalProperties: false,
+        properties: {
+          target: { type: "string", enum: ["system", "workspace", "files", "process", "git", "memory", "browser", "computer", "mode"] },
+          request: { type: "object", additionalProperties: true,
+            properties: { action: { type: "string" } }, required: ["action"] },
+          memoryTaskId: { type: "string" },
+        },
+        required: ["target", "request"],
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      _meta: { "qnector/schemaRevision": MCP_SCHEMA_REVISION },
+    }, async (input, extra) => {
+      const obj = input as { target: string; request: Record<string, unknown>; memoryTaskId?: string };
+      const request: Record<string, unknown> = { ...obj.request, ...(obj.memoryTaskId ? { memoryTaskId: obj.memoryTaskId } : {}) };
+      if (!isPureReadAction(obj.target, request)) {
+        const error = { ok: false, tool: "inspect", action: String(request.action ?? ""),
+          summary: "READ_ONLY_TOOL_DENIED: Only read-only Qnector actions are supported.",
+          error: { code: "READ_ONLY_TOOL_DENIED", message: "The selected action could change state. Use the normal tool in Act Mode." } };
+        return { content: [{type:"text" as const, text: error.summary}],
+          structuredContent: error, isError: true };
+      }
+      const result = await this.registry.call(
+        obj.target,
+        this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
+          modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)),
+        request,
+      );
+      const bounded = boundMcpToolResult(result);
+      const { attachments, ...jsonResult } = bounded;
+      return {
+        content: [{type:"text" as const, text:toolResultText(jsonResult)},
+          ...(attachments ?? []).map((a) => ({type:"image" as const, data:a.dataBase64, mimeType:a.mimeType}))],
+        structuredContent: jsonResult as unknown as Record<string, unknown>,
+        isError: !result.ok,
+      };
+    });
+
+    // A separately annotated approval tool allows the host to request consent
+    // without prompting for every read-only mode.get call.
+    server.registerTool("mode_approve", {
+      title: "Approve Qnector plan and enter Act Mode",
+      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nSwitch ONLY after the user has explicitly approved the displayed plan revision. This enables mutating Qnector actions for the scoped task. Use mode.get first. Use the same memoryTaskId for all subsequent calls.`,
+      inputSchema: fromJsonSchema({
+        type: "object", additionalProperties: false,
+        properties: {
+          expectedRevision: { type: "integer", minimum: 1 },
+          memoryTaskId: { type: "string" },
+        },
+        required: ["expectedRevision"],
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+      _meta: {
+        ui: { resourceUri: "ui://qnector/plan-act.html" },
+        "openai/widgetAccessible": true,
+        "qnector/schemaRevision": MCP_SCHEMA_REVISION,
+      },
+    }, async (input, extra) => {
+      const result = await this.registry.call(
+        "mode",
+        this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
+          modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)),
+        { ...(input as Record<string, unknown>), action: "approve" },
+      );
+      const bounded = boundMcpToolResult(result);
+      const { attachments, ...jsonResult } = bounded;
+      return {
+        content: [{ type: "text" as const, text: toolResultText(jsonResult) },
+          ...(attachments ?? []).map((a) => ({ type: "image" as const, data: a.dataBase64, mimeType: a.mimeType }))],
+        structuredContent: jsonResult as unknown as Record<string, unknown>,
+        isError: !result.ok,
+      };
+    });
+
+    // Inline, self-contained UI. Hosts without MCP Apps support still use the tools.
+    server.registerResource("qnector-plan-act-view", "ui://qnector/plan-act.html", {
+      title: "Qnector Plan / Act Controller",
+      description: "Inspect plans, approve a revision, and control task execution mode.",
+      mimeType: "text/html;profile=mcp-app",
+    }, async (uri) => ({
+      contents: [{
+        uri: uri.toString(),
+        mimeType: "text/html;profile=mcp-app",
+        text: PLAN_VIEW_HTML,
+        _meta: {
+          ui: { prefersBorder: true },
+          "openai/widgetDescription": "Plan/Act mode, approved revision and task checklist.",
+        },
+      }],
+    }));
+
     if (this.enableTimeoutProbe) {
       server.registerTool("system.timeout_probe", {
         title: "Qnector timeout diagnostic (opt-in only)",
@@ -528,7 +637,17 @@ export class QnectorRuntime {
         inputSchema: fromJsonSchema(durableTaskSchema),
         annotations: {destructiveHint: true, openWorldHint: false},
         _meta: {"qnector/durablePreview": true, "qnector/schemaRevision": "durable-tasks-preview-v2"},
-      }, async (input) => {
+      }, async (input, extra) => {
+        const guard = await checkPlanActGuard(
+          this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
+            modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)), "tasks", input,
+        );
+        if (!guard.allowed) return {
+          content: [{ type: "text" as const, text: guard.code + ": " + guard.message }],
+          structuredContent: { ok: false, tool: "tasks", action: String((input as {action?: string}).action ?? ""),
+            error: { code: guard.code, message: guard.message } },
+          isError: true,
+        };
         const result = await this.executionFacade!.execute(
           this.config.activeWorkspace, input as Record<string, unknown>,
           requestContext?.requestInfo?.signal);
@@ -703,6 +822,15 @@ function toolResultText(result: Record<string, unknown>): string {
     return `${code}: ${message}${hint}\n${LIVE_RESULT_ANCHOR}`;
   }
   return `${summary}\n${LIVE_RESULT_ANCHOR}`;
+}
+
+function modeSessionFromMeta(meta: unknown, fallback?: string): string | undefined {
+  const data = meta && typeof meta === "object" && !Array.isArray(meta)
+    ? meta as Record<string, unknown> : {};
+  const openaiSession = data["openai/session"];
+  const raw = typeof openaiSession === "string" && openaiSession.trim()
+    ? openaiSession.trim() : fallback;
+  return raw ? createHash("sha256").update(raw).digest("hex").slice(0, 32) : undefined;
 }
 
 function inputSchemaFor(

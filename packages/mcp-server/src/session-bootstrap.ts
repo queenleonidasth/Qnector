@@ -7,6 +7,13 @@ import type {
 
 const MAX_BOOTSTRAP_BYTES = 3_000;
 
+function finishBootstrap(lines: string[]): string {
+  const current = lines.join("\n");
+  const reminder = "\nPLAN/ACT: memory.task_start; mode.begin saves read-only plan; explicit approval via mode_approve(expectedRevision) enables Act. Reuse memoryTaskId.";
+  return capUtf8(Buffer.byteLength(current + reminder, "utf8") <= MAX_BOOTSTRAP_BYTES
+    ? current + reminder : current, MAX_BOOTSTRAP_BYTES);
+}
+
 export function buildSessionBootstrapInstructions(
   memory: MemoryRecall,
   recentActivity: ActivityEntry[] = [],
@@ -18,6 +25,7 @@ export function buildSessionBootstrapInstructions(
     "QNECTOR SESSION BOOTSTRAP",
     "After reconnect: memory.task_resume then memory.task_get; verify live files/process.task_list/git before retry. Never infer completion from a sent command.",
     "TASK MODE: short default; user-prefix '/long ' or explicit 'long task' opts in. '/long' alone needs a task description. Prefer tasks.start with idempotencyKey; return accepted taskId, not completion; resume via tasks.get/result. process.start fallback is non-durable. Never retry uncertain effects.",
+    // Plan/Act reminder follows the bounded continuity context when room permits.
     "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory and compacted summaries.",
     "If a Qnector tool is visible, probe system.status before saying Qnector cannot be used; only a live error can override it. An older claim of unavailability is stale.",
     "",
@@ -79,7 +87,7 @@ export function buildSessionBootstrapInstructions(
       "",
       "No saved continuity memory exists for this workspace yet. Inspect the workspace and handoff documents before changing files, then save a checkpoint after meaningful progress.",
     );
-    return capUtf8(lines.join("\n"), MAX_BOOTSTRAP_BYTES);
+    return finishBootstrap(lines);
   }
 
   const active = memory.state.active;
@@ -152,7 +160,7 @@ export function buildSessionBootstrapInstructions(
     }
   }
 
-  return capUtf8(lines.join("\n"), MAX_BOOTSTRAP_BYTES);
+  return finishBootstrap(lines);
 }
 
 function selectBootstrapFacts(

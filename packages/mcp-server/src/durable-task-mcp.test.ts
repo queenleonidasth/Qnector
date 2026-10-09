@@ -66,7 +66,7 @@ afterEach(async () => {
 });
 
 describe("opt-in durable MCP task facade", () => {
-  it("leaves the legacy eight-tool contract unchanged without opt-in", async () => {
+  it("keeps durable tasks opt-in while advertising Plan/Act and read-only inspection", async () => {
     const workspace = mkdtempSync(path.join(tmpdir(), "qnector-mcp-default-"));
     roots.push(workspace);
     const port = await freePort();
@@ -76,7 +76,7 @@ describe("opt-in durable MCP task facade", () => {
     runtimes.push(runtime);
     await runtime.start({ port });
     const listed = await rpc(port, "tools/list");
-    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(8);
+    expect(listed.result?.tools?.map((tool) => tool.name)).toHaveLength(11);
     expect(listed.result?.tools?.map((tool) => tool.name)).not.toContain(
       "tasks",
     );

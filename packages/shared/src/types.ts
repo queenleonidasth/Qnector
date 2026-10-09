@@ -299,7 +299,8 @@ export interface ToolDefinition {
     | "git"
     | "memory"
     | "browser"
-    | "computer";
+    | "computer"
+    | "mode";
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotation;

@@ -11,7 +11,7 @@ For the official deployment flow, see [OpenAI's ChatGPT app connection documenta
 5. Paste the Tunnel ID and Runtime API key into Qnector, keep the default `qnector` profile unless a different profile is intentional, then click **Save & Connect**.
 6. Qnector creates the `sample_mcp_remote_no_auth` profile for its local MCP endpoint, runs `tunnel-client doctor --explain`, and starts the tunnel daemon. Once the bridge reaches `connected`, the wizard continues to the ChatGPT-side setup instead of marking first-run setup complete immediately.
 7. Open **ChatGPT Connector Settings** from the wizard. Create a Qnector connector and choose **Connection: Tunnel**, then select the tunnel or paste the same `tunnel_...` ID. Depending on the ChatGPT UI version, custom connectors/apps may instead appear under **Settings → Apps → Create** or Developer mode.
-8. Scan or refresh tools, then save the connector. Confirm the eight grouped tools: `system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, and `computer`.
+8. Scan or refresh tools, then save the connector. Confirm the nine grouped tools: `system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, `computer`, and `mode`.
 9. Open a new chat and enable/select Qnector from Apps/tools, or @mention Qnector when you want ChatGPT to use this PC.
 10. Return to the Qnector wizard and click **I've added Qnector**. Only then is first-run setup marked complete.
 

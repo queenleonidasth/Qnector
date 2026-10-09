@@ -12,6 +12,8 @@ import { executeGit, gitDefinition } from "./git-tool.js";
 import { executeMemory, memoryDefinition } from "./memory-tool.js";
 import { browserDefinition, executeBrowser } from "./browser-tool.js";
 import { computerDefinition, executeComputer } from "./computer-tool.js";
+import { modeDefinition, executeMode } from "./mode-tool.js";
+import { checkPlanActGuard } from "./plan-guard.js";
 
 export const toolDefinitions: ToolDefinition[] = [
   systemDefinition,
@@ -22,6 +24,7 @@ export const toolDefinitions: ToolDefinition[] = [
   memoryDefinition,
   browserDefinition,
   computerDefinition,
+  modeDefinition,
 ];
 
 export class ToolRegistry {
@@ -37,6 +40,7 @@ export class ToolRegistry {
     ["memory", executeMemory],
     ["browser", executeBrowser],
     ["computer", executeComputer],
+    ["mode", executeMode],
   ]);
 
   public list(): ToolDefinition[] {
@@ -89,6 +93,17 @@ export class ToolRegistry {
         meta: { durationMs: 0, truncated: false, nextCursor: null },
       };
     }
+    const guard = await checkPlanActGuard(scopedContext, name, input);
+    if (!guard.allowed) {
+      return {
+        ok: false, tool: name,
+        action: typeof (input as {action?: unknown} | null)?.action === "string"
+          ? String((input as {action: string}).action) : "unknown",
+        summary: guard.code + ": " + guard.message,
+        error: { code: guard.code!, message: guard.message!, hint: "Use mode.get to review the plan and mode_approve only after explicit user approval." },
+        meta: { durationMs: 0, truncated: false, nextCursor: null },
+      };
+    }
     return handler(scopedContext, input);
   }
 }
@@ -102,6 +117,8 @@ export * from "./git-tool.js";
 export * from "./memory-tool.js";
 export * from "./browser-tool.js";
 export * from "./computer-tool.js";
+export * from "./mode-tool.js";
+export * from "./plan-guard.js";
 
 function memoryTaskIdFromInput(input: unknown): string | undefined {
   return scopedStringFromInput(input, "memoryTaskId");

@@ -8,7 +8,7 @@ $pnpm = (Get-Command "pnpm.cmd" -ErrorAction Stop).Source
 if ($LASTEXITCODE -ne 0) { throw "Qnector version mismatch; refusing to package" }
 & $pnpm build
 if ($LASTEXITCODE -ne 0) { throw "Initial workspace build failed; refusing to package" }
-$dotnet = Join-Path $env:ProgramFiles "dotnet\dotnet.exe"
+$dotnet = if ($env:QNECTOR_DOTNET -and (Test-Path -LiteralPath $env:QNECTOR_DOTNET)) { $env:QNECTOR_DOTNET } else { Join-Path $env:ProgramFiles "dotnet\dotnet.exe" }
 if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = "dotnet" }
 & $dotnet publish (Join-Path $projectRoot "tools\uia-helper\Qnector.UiaHelper.csproj") -c Release -r win-x64 --self-contained true -o (Join-Path $projectRoot "tools\uia-helper\publish")
 if ($LASTEXITCODE -ne 0) { throw "Failed to publish qnector-uia helper" }
