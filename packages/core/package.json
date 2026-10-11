@@ -9,12 +9,12 @@
   "dependencies": {
     "@napi-rs/canvas": "^1.0.8",
     "@qnector/shared": "workspace:*",
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "node-pty": "^1.1.0",
     "pdfjs-dist": "^6.3.289",
     "typescript": "^5.9.3",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "yaml": "2.8.1"
+    "yaml": "2.8.3"
   },
   "exports": {
     ".": {

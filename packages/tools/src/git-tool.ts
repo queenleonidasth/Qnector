@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { locateGitExecutable } from "./git-executable.js";
 import type { ToolDefinition, ToolResult } from "@qnector/shared";
 import {
   booleanInput,
@@ -87,9 +88,12 @@ export async function executeGit(
           (value): value is string => typeof value === "string",
         )
       : [];
+    const gitExecutable = await locateGitExecutable();
+    if (!gitExecutable)
+      throw new Error("GIT_NOT_FOUND: Install Git or set QNECTOR_GIT_PATH to git.exe.");
     let result;
     try {
-      result = await execFileAsync("git", args, {
+      result = await execFileAsync(gitExecutable, args, {
         cwd,
         windowsHide: true,
         maxBuffer: Math.max(maxChars * 2, 2_000_000),

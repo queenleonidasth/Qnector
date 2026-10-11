@@ -66,15 +66,29 @@ describe("Plan/Act live MCP integration", () => {
     }
     expect(tools.find((tool) => tool.name === "plan_panel")?.annotations)
       .toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    const panelDescription = String(
+      tools.find((tool) => tool.name === "plan_panel")?.description,
+    );
+    expect(panelDescription).toContain("FINAL PRESENTATION STEP");
+    expect(panelDescription).toContain("last Qnector tool");
+    expect(panelDescription).toContain("ONE short sentence");
+    expect(panelDescription).toContain("DO NOT repeat the plan");
     expect(tools.find((tool) => tool.name === "inspect")?.annotations)
       .toMatchObject({readOnlyHint:true,destructiveHint:false});
     const resources = (await rpc(port,"resources/list")).result?.resources ?? [];
     expect(resources.map((entry) => entry.uri)).toContain(PLAN_VIEW_URI);
+    expect(resources.map((entry) => entry.uri)).toContain("ui://qnector/plan-act-v2.html");
+    expect(resources.map((entry) => entry.uri)).toContain("ui://qnector/plan-act-v3.html");
+    for (const compatibilityUri of ["ui://qnector/plan-act-v2.html", "ui://qnector/plan-act-v3.html"]) {
+      const compatibility = (await rpc(port,"resources/read",{uri:compatibilityUri})).result?.contents ?? [];
+      expect(String(compatibility[0]?.text)).toContain('id="revokeConfirmation"');
+      expect(String(compatibility[0]?.text)).toContain("expectedStepId:step.id");
+    }
     const view = (await rpc(port,"resources/read",{uri:PLAN_VIEW_URI})).result?.contents ?? [];
     expect(String(view[0]?.text)).toContain("Qnector");
     expect(String(view[0]?.text)).toContain("mode_approve");
     expect(String(view[0]?.text)).toContain("Task Controller");
-    expect(String(view[0]?.text)).toContain("aria-selected");
+    expect(String(view[0]?.text)).toContain("aria-pressed");
     expect(String(view[0]?.text)).toContain("api.callTool");
 
     const task = "task_test_plan_act";
@@ -128,7 +142,31 @@ describe("Plan/Act live MCP integration", () => {
     });
     expect(written?.ok).toBe(true);
     expect(await readFile(path.join(root,"approved.txt"),"utf8")).toBe("allowed");
-    const back = await call(port,"mode",{action:"back_to_plan",memoryTaskId:task});
+    const approvedState = approvedPanel?.data?.data as {
+      plan?: { revision: number; approvedAt: string; steps: Array<{ id: string; done: boolean }> }
+    };
+    const revision = approvedState.plan!.revision;
+    const approvedAt = approvedState.plan!.approvedAt;
+    const stepId = approvedState.plan!.steps[0]!.id;
+    const staleCheck = await call(port,"mode",{
+      action:"step",index:0,done:true,expectedRevision:9,expectedStepId:stepId,
+      expectedApprovedAt:approvedAt,memoryTaskId:task,
+    });
+    expect(staleCheck?.error?.code).toBe("PLAN_REVISION_MISMATCH");
+    const staleBack = await call(port,"mode",{
+      action:"back_to_plan",expectedRevision:9,expectedApprovedAt:approvedAt,memoryTaskId:task,
+    });
+    expect(staleBack?.error?.code).toBe("PLAN_REVISION_MISMATCH");
+    expect((await call(port,"mode",{action:"get",memoryTaskId:task}))?.data?.data?.mode).toBe("act");
+    const checked = await call(port,"mode",{
+      action:"step",index:0,done:true,expectedRevision:revision,expectedStepId:stepId,
+      expectedApprovedAt:approvedAt,memoryTaskId:task,
+    });
+    expect(checked?.ok).toBe(true);
+    expect((checked?.data?.data?.plan as {steps?: Array<{done:boolean}>})?.steps?.[0]?.done).toBe(true);
+    const back = await call(port,"mode",{
+      action:"back_to_plan",expectedRevision:revision,expectedApprovedAt:approvedAt,memoryTaskId:task,
+    });
     expect(back?.data?.data?.mode).toBe("plan");
     const deniedAgain = await call(port,"files",{
       action:"delete",path:"approved.txt",memoryTaskId:task,

@@ -210,6 +210,7 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
     const { maxResults, offset } = pagination(input);
     const tree = prepared.project.service.getNavigationTree(prepared.file);
     const symbols: CodeSymbol[] = [];
+    const sourceFile = prepared.project.service.getProgram()?.getSourceFile(prepared.file);
     collectNavigationSymbols(
       tree.childItems ?? [],
       null,
@@ -217,6 +218,7 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
       prepared.file,
       symbols,
       input.outline ? 0 : Infinity,
+      sourceFile,
     );
     const page = paginate(symbols, offset, maxResults);
     return {
@@ -438,6 +440,7 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
       });
       const host = ts.createCompilerHost(options);
       host.getDefaultLibFileName = runtimeDefaultLibFile;
+      host.getDefaultLibLocation = runtimeTypeScriptLibDirectory;
       const program = ts.createProgram({
         rootNames: project.parsed.fileNames,
         options,
@@ -476,7 +479,7 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
         fingerprintPath(file),
       ]),
     );
-    const host: ts.LanguageServiceHost = {
+    const host: ts.LanguageServiceHost & { getDefaultLibLocation: () => string } = {
       getCompilationSettings: () => options,
       getScriptFileNames: () => parsedProject.parsed.fileNames,
       getScriptVersion: (fileName) =>
@@ -489,6 +492,7 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
       },
       getCurrentDirectory: () => path.dirname(parsedProject.configPath),
       getDefaultLibFileName: runtimeDefaultLibFile,
+      getDefaultLibLocation: runtimeTypeScriptLibDirectory,
       fileExists: ts.sys.fileExists,
       readFile: ts.sys.readFile,
       readDirectory: ts.sys.readDirectory,
@@ -519,20 +523,33 @@ function runtimeCompilerOptions(
   options: ts.CompilerOptions,
 ): ts.CompilerOptions {
   const libDirectory = runtimeTypeScriptLibDirectory();
-  const defaultDirectory = path.dirname(ts.getDefaultLibFilePath(options));
-  if (samePath(libDirectory, defaultDirectory)) return options;
-  return {
-    ...options,
-    ...(options.lib
-      ? {
-          lib: options.lib.map((entry) =>
-            path.isAbsolute(entry)
-              ? entry
-              : path.join(libDirectory, path.basename(entry)),
-          ),
-        }
-      : {}),
-  };
+  const defaultLib = ts.getDefaultLibFilePath(options);
+  if (samePath(libDirectory, path.dirname(defaultLib))) return options;
+
+  // When TypeScript is bundled inside Electron's app.asar, its implicit
+  // standard library path may not be readable by the packaged compiler host.
+  // Pin the default lib to the unpacked runtime copy, just as explicit
+  // tsconfig "lib" entries already are. Keep noLib and lib: [] semantics.
+  const resolvedLibs = options.lib
+    ? options.lib.map((entry) =>
+        path.isAbsolute(entry)
+          ? entry
+          : path.join(libDirectory, path.basename(entry)),
+      )
+    : options.noLib
+      ? undefined
+      : (() => {
+          const candidate = path.join(libDirectory, path.basename(defaultLib));
+          if (!safeStat(candidate)?.isFile()) return undefined;
+          // In an asar runtime, a full lib's triple-slash references can
+          // resolve against the bundled TypeScript module instead of the
+          // unpacked resource directory. Include the target lib explicitly.
+          const targetLib = candidate.replace(/\.full\.d\.ts$/i, ".d.ts");
+          return targetLib !== candidate && safeStat(targetLib)?.isFile()
+            ? [candidate, targetLib]
+            : [candidate];
+        })();
+  return { ...options, ...(resolvedLibs ? { lib: resolvedLibs } : {}) };
 }
 
 function runtimeDefaultLibFile(options: ts.CompilerOptions): string {
@@ -728,6 +745,7 @@ function collectNavigationSymbols(
   file: string,
   output: CodeSymbol[],
   depth = Infinity,
+  sourceFile?: ts.SourceFile,
 ): void {
   for (const item of items) {
     const span = item.spans[0];
@@ -736,7 +754,7 @@ function collectNavigationSymbols(
       name: item.text,
       kind: item.kind,
       container,
-      ...locationFromSpan(file, span, workspaceRoot),
+      ...locationFromSpan(file, span, workspaceRoot, sourceFile),
     });
     if (depth > 0)
       collectNavigationSymbols(
@@ -746,6 +764,7 @@ function collectNavigationSymbols(
         file,
         output,
         depth - 1,
+        sourceFile,
       );
   }
 }
@@ -754,14 +773,22 @@ function locationFromSpan(
   file: string,
   span: ts.TextSpan,
   workspaceRoot: string,
+  cachedSource?: ts.SourceFile,
 ): CodeLocation {
-  const text = ts.sys.readFile(file) ?? "";
-  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  // Navigation trees contain hundreds of spans for the same source file.
+  // Reuse the language service's parsed source instead of parsing it per span.
+  const source =
+    cachedSource ??
+    ts.createSourceFile(file, ts.sys.readFile(file) ?? "", ts.ScriptTarget.Latest, true);
+  const text = source.text;
   const start = Math.max(0, Math.min(span.start, text.length));
   const end = Math.max(start, Math.min(span.start + span.length, text.length));
   const startLocation = source.getLineAndCharacterOfPosition(start);
   const endLocation = source.getLineAndCharacterOfPosition(end);
-  const lineText = text.split(/\r?\n/)[startLocation.line] ?? "";
+  const starts = source.getLineStarts();
+  const lineText = text
+    .slice(starts[startLocation.line] ?? 0, starts[startLocation.line + 1] ?? text.length)
+    .replace(/\r?\n$/, "");
   return {
     file: displayPath(file, workspaceRoot),
     line: startLocation.line + 1,

@@ -2,7 +2,8 @@ param(
   [string]$Version,
   [string]$ReleaseDir,
   [string]$NotesPath,
-  [switch]$VerifyOnly
+  [switch]$VerifyOnly,
+  [switch]$Prerelease
 )
 
 $ErrorActionPreference = "Stop"
@@ -105,7 +106,7 @@ if (-not $release) {
     name = "Qnector $tag"
     body = $notes
     draft = $false
-    prerelease = $false
+    prerelease = [bool]$Prerelease
   } | ConvertTo-Json -Compress
   $payloadBytes = [Text.Encoding]::UTF8.GetBytes($payload)
   $release = Invoke-RestMethod -Method Post -Uri "$repositoryApi/releases" -Headers $headers -ContentType "application/json; charset=utf-8" -Body $payloadBytes

@@ -50,7 +50,7 @@ describe("GitHub release pipeline", () => {
       ),
     ) as { dependencies?: Record<string, string> };
     expect(packageJson.dependencies?.["@modelcontextprotocol/client"]).toBe(
-      "2.0.0",
+      "2.2.0",
     );
   });
 });

@@ -6,7 +6,7 @@
   "dependencies": {
     "@fastify/cors": "^11.3.0",
     "@qnector/shared": "workspace:*",
-    "fastify": "^5.12.1",
+    "fastify": "^5.12.5",
     "ws": "^8.21.3"
   },
   "devDependencies": {

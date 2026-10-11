@@ -1294,7 +1294,7 @@ function App(): React.ReactElement {
   return (
     <div className="app-container">
       {error && (
-        <div className="error-toast">
+        <div className="error-toast" role="alert" aria-live="assertive">
           <span>{error}</span>
           <button
             style={{
@@ -1303,6 +1303,8 @@ function App(): React.ReactElement {
               color: "#ffffff",
               cursor: "pointer",
             }}
+            type="button"
+            aria-label="Dismiss error"
             onClick={() => setError(undefined)}
           >
             ✕

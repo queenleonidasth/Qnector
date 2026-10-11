@@ -107,6 +107,9 @@ checks.schema = "P19 browser actions advertised";
 try {
   const launch = await call("launch", {
     browser: "auto",
+    ...(process.env.QNECTOR_TEST_BROWSER_EXECUTABLE
+      ? { executablePath: process.env.QNECTOR_TEST_BROWSER_EXECUTABLE }
+      : {}),
     port: devtoolsPort,
     url: baseUrl,
     profile: "web-dev-acceptance",

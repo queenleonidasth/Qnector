@@ -1,6 +1,6 @@
 # Windows-MCP integration
 
-Qnector can use [CursorTouch/Windows-MCP](https://github.com/cursortouch/windows-mcp) as an optional external MCP upstream without expanding Qnector beyond its eight grouped MCP tools. Discovery and invocation stay behind `system.mcp_servers`, `system.mcp_tools`, and `system.mcp_call`.
+Qnector can use [CursorTouch/Windows-MCP](https://github.com/cursortouch/windows-mcp) as an optional external MCP upstream without expanding Qnector beyond its nine grouped MCP tools. Discovery and invocation stay behind `system.mcp_servers`, `system.mcp_tools`, and `system.mcp_call`.
 
 ## Recommended local profile
 

@@ -1,3 +1,9 @@
 packages:
   - apps/*
   - packages/*
+
+# Keep vulnerable transitive dependencies on patched versions of their own major.
+overrides:
+  fast-uri@3.1.6: 3.1.8
+  fast-uri@4.1.3: 4.1.5
+  hono@4.13.5: 4.13.7

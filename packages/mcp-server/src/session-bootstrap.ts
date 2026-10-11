@@ -9,7 +9,7 @@ const MAX_BOOTSTRAP_BYTES = 3_000;
 
 function finishBootstrap(lines: string[]): string {
   const current = lines.join("\n");
-  const reminder = "\nPLAN/ACT: memory.task_start; mode.begin saves read-only plan; plan_panel(memoryTaskId) opens the live ChatGPT controller; explicit approval via mode_approve(expectedRevision) enables Act. Reuse memoryTaskId.";
+  const reminder = "\nPLAN/ACT UX: use mode.begin early for read-only guard, inspect fully, finalize with mode.update and mode.get, THEN call plan_panel(memoryTaskId) once at the end. Host displays inline panel above the reply; no long recap below it. Act needs explicit mode_approve(expectedRevision). Reuse memoryTaskId.";
   return capUtf8(Buffer.byteLength(current + reminder, "utf8") <= MAX_BOOTSTRAP_BYTES
     ? current + reminder : current, MAX_BOOTSTRAP_BYTES);
 }
@@ -24,10 +24,11 @@ export function buildSessionBootstrapInstructions(
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
     "After reconnect: memory.task_resume then memory.task_get; verify live files/process.task_list/git before retry. Never infer completion from a sent command.",
-    "TASK MODE: short default; user-prefix '/long ' or explicit 'long task' opts in. '/long' alone needs a task description. Prefer tasks.start with idempotencyKey; return accepted taskId, not completion; resume via tasks.get/result. process.start fallback is non-durable. Never retry uncertain effects.",
+    "TASK MODE: short default; '/long ' or 'long task' opts in. '/long' alone needs a task description. Prefer tasks.start with idempotencyKey; return accepted taskId, not completion; check tasks.get/result. Never retry uncertain effects.",
+    "PANEL UX: finish inspection and planning BEFORE plan_panel; show it once at the end, with no lengthy text beneath it. Panel owns details and approval.",
     // Plan/Act reminder follows the bounded continuity context when room permits.
     "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory and compacted summaries.",
-    "If a Qnector tool is visible, probe system.status before saying Qnector cannot be used; only a live error can override it. An older claim of unavailability is stale.",
+    "When Qnector appears, probe system.status before saying Qnector cannot be used; an older claim of unavailability is stale.",
     "",
     `Workspace: ${clip(memory.workspacePath, 260)}`,
     `Memory updated: ${memory.updatedAt}`,

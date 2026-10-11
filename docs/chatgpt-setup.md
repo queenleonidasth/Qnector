@@ -29,6 +29,17 @@ Use Qnector to create qnector-test.txt in the active workspace with the current
 date and a short success message. Read it back and show the Git diff.
 ```
 
+For UX-focused planning, the user can request a panel-first review without a duplicate essay:
+
+```text
+Use Qnector Plan Mode. Enter read-only mode and finish all analysis first.
+Refine and verify the final plan; show plan_panel only once when ready.
+Put details and approval in the interactive panel, not a long chat reply below it.
+Do not execute changes until I approve the displayed revision.
+```
+
+**ChatGPT host limitation:** An inline MCP App is placed above the model's generated reply. Qnector cannot move it beneath that reply. The v3 controller therefore keeps the plan compact, with expandable explanation and steps; the assistant should add at most one short sentence after it. The final-only tool ordering is guidance to the model and must be verified in a real ChatGPT host after refreshing the connector snapshot.
+
 For coding tasks:
 
 ```text

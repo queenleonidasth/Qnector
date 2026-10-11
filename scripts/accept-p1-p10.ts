@@ -154,6 +154,9 @@ try {
   const browserLaunch = await call("browser", {
     action: "launch",
     browser: "chrome",
+    ...(process.env.QNECTOR_TEST_BROWSER_EXECUTABLE
+      ? { executablePath: process.env.QNECTOR_TEST_BROWSER_EXECUTABLE }
+      : {}),
     port: devtoolsPort,
     url: `http://127.0.0.1:${webPort}/`,
   });

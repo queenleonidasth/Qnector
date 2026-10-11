@@ -184,12 +184,21 @@ export class PlanActStore {
       const nextTitle = title === undefined ? plan.title : normalizedText(title, 200, "Title");
       const nextSummary = summary === undefined ? plan.summary : normalizedText(summary, 8_000, "Summary");
       const nextSteps = steps === undefined ? plan.steps.map((item) => item.text) : normalizedSteps(steps);
+      // Preserve verified progress for unchanged steps when editing a plan.
+      // Match by text rather than index so reorder/insertion cannot transfer
+      // a completed checkbox to an unrelated step.
+      const priorByText = new Map<string, PlanActStep[]>();
+      for (const entry of plan.steps) {
+        const matches = priorByText.get(entry.text) ?? [];
+        matches.push(entry);
+        priorByText.set(entry.text, matches);
+      }
       state.plan = {
         title: nextTitle, summary: nextSummary, revision: plan.revision + 1,
-        steps: nextSteps.map((text, i) => ({
-          id: plan.steps[i]?.text === text ? plan.steps[i].id : randomUUID(),
-          text, done: false,
-        })),
+        steps: nextSteps.map((text) => {
+          const old = priorByText.get(text)?.shift();
+          return { id: old?.id ?? randomUUID(), text, done: old?.done ?? false };
+        }),
         approvedRevision: null, approvedAt: null,
       };
       state.updatedAt = new Date().toISOString();
@@ -213,11 +222,19 @@ export class PlanActStore {
     });
   }
 
-  public async backToPlan(scopeId: string | undefined): Promise<PlanActState> {
+  public async backToPlan(
+    scopeId: string | undefined,
+    expectedRevision?: number,
+    expectedApprovedAt?: string,
+  ): Promise<PlanActState> {
     const scope = requiredScope(scopeId);
     return this.transact(async () => {
       const state = this.states.get(scope);
       if (!state) return fail("PLAN_NOT_FOUND", "No plan exists for this task. Start a plan first.");
+      if (expectedRevision !== undefined && state.plan?.revision !== expectedRevision)
+        return fail("PLAN_REVISION_MISMATCH", "The plan changed before returning to Plan Mode. Refresh the panel.");
+      if (expectedApprovedAt !== undefined && state.plan?.approvedAt !== expectedApprovedAt)
+        return fail("PLAN_APPROVAL_MISMATCH", "The approval state changed. Refresh before revoking it.");
       state.mode = "plan";
       if (state.plan) {
         state.plan.approvedRevision = null;
@@ -228,15 +245,28 @@ export class PlanActStore {
     });
   }
 
-  public async markStep(scopeId: string | undefined, index: number, done: boolean): Promise<PlanActState> {
+  public async markStep(
+    scopeId: string | undefined,
+    index: number,
+    done: boolean,
+    expectedRevision?: number,
+    expectedStepId?: string,
+    expectedApprovedAt?: string,
+  ): Promise<PlanActState> {
     const scope = requiredScope(scopeId);
     return this.transact(async () => {
       const state = this.states.get(scope);
       if (!state || state.mode !== "act" || !state.plan ||
           state.plan.approvedRevision !== state.plan.revision)
         return fail("PLAN_NOT_APPROVED", "An approved Act Mode plan is required to mark steps.");
+      if (expectedRevision !== undefined && state.plan.revision !== expectedRevision)
+        return fail("PLAN_REVISION_MISMATCH", "The checklist changed. Refresh the panel before editing it.");
+      if (expectedApprovedAt !== undefined && state.plan.approvedAt !== expectedApprovedAt)
+        return fail("PLAN_APPROVAL_MISMATCH", "The approval state changed. Refresh before editing the checklist.");
       if (!Number.isSafeInteger(index) || index < 0 || index >= state.plan.steps.length)
         return fail("INVALID_PLAN_STEP", "Step index is out of range (zero-based).");
+      if (expectedStepId !== undefined && state.plan.steps[index]!.id !== expectedStepId)
+        return fail("PLAN_STEP_MISMATCH", "The checklist step changed. Refresh the panel.");
       state.plan.steps[index]!.done = done;
       state.updatedAt = new Date().toISOString();
       return state;

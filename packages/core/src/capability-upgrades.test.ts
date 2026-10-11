@@ -180,6 +180,11 @@ describe("P1-P10 capability upgrades", () => {
       "\ndeclare const QNECTOR_PACKAGED_LIB_SENTINEL: number;\n",
       "utf8",
     );
+    await appendFile(
+      path.join(runtimeLib, "lib.es5.d.ts"),
+      "\ndeclare const QNECTOR_PACKAGED_ES5_SENTINEL: number;\n",
+      "utf8",
+    );
     await writeFile(
       path.join(project, "tsconfig.json"),
       JSON.stringify({
@@ -195,7 +200,7 @@ describe("P1-P10 capability upgrades", () => {
     );
     await writeFile(
       path.join(project, "src", "sentinel.ts"),
-      "export const sentinel = QNECTOR_PACKAGED_LIB_SENTINEL;\n",
+      "export const sentinel = QNECTOR_PACKAGED_LIB_SENTINEL + QNECTOR_PACKAGED_ES5_SENTINEL;\n",
       "utf8",
     );
     const previous = process.env.QNECTOR_TYPESCRIPT_LIB_PATH;
@@ -208,6 +213,21 @@ describe("P1-P10 capability upgrades", () => {
         maxResults: 20,
       });
       expect(result.total).toBe(0);
+      // A packaged runtime must also resolve the implicit target default lib.
+      await writeFile(
+        path.join(project, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: { strict: true, target: "ES2022", noEmit: true },
+          include: ["src/**/*.ts"],
+        }),
+        "utf8",
+      );
+      const implicit = await new TypeScriptCodeIntelligence().diagnostics({
+        workspaceRoot: project,
+        path: ".",
+        maxResults: 20,
+      });
+      expect(implicit.diagnostics).toEqual([]);
     } finally {
       if (previous === undefined)
         delete process.env.QNECTOR_TYPESCRIPT_LIB_PATH;

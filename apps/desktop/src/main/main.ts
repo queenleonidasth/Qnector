@@ -48,6 +48,7 @@ import {
   windowsAppUserModelId,
 } from "./login-item.js";
 import { DesktopUpdater } from "./updater.js";
+import { requireSafeExternalUrl } from "./external-url.js";
 import { ensurePreviewDaemon, watchPreviewDaemon } from "./durable-daemon.js";
 import { shouldEnableDurableTasks } from "./durable-policy.js";
 import {
@@ -588,7 +589,7 @@ function registerIpc(): void {
     ),
   );
   ipcMain.handle("system:open-url", (_event, url: string) =>
-    shell.openExternal(url).then(() => undefined),
+    shell.openExternal(requireSafeExternalUrl(url)).then(() => undefined),
   );
 }
 

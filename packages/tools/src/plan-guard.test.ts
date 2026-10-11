@@ -78,6 +78,24 @@ describe("Plan/Act MCP dispatch guard", () => {
     expect((await checkPlanActGuard(context, "files", { action: "read", path: root })).allowed).toBe(true);
   });
 
+  it("rejects an approved Act scope after changing the active workspace", async () => {
+    const { context, root, store, taskId } = await contextForTest();
+    await store.begin("task:" + taskId, root, "Plan", "summary", ["one"]);
+    await store.approve("task:" + taskId, 1);
+    const switchedContext = {
+      ...context,
+      getConfig: () => ({ activeWorkspace: path.join(root, "other-workspace") }),
+    } as unknown as ToolContext;
+    const result = await checkPlanActGuard(switchedContext, "files", {
+      action: "write", path: "unsafe.txt", content: "unsafe",
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.code).toBe("PLAN_SCOPE_REQUIRED");
+    expect((await checkPlanActGuard(switchedContext, "files", {
+      action: "read", path: "safe.txt",
+    })).allowed).toBe(true);
+  });
+
   it("permits work in an approved Act task but not an unrelated Plan task", async () => {
     const { context, root, store, taskId } = await contextForTest();
     await store.begin("task:" + taskId, root, "Plan", "summary", ["one"]);

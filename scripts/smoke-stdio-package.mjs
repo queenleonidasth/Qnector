@@ -77,6 +77,23 @@ try {
     throw new Error(`STDIO_TASKS_NOT_ADVERTISED ${JSON.stringify(listed)}`);
   if (listed.result?.tools?.some(tool=>tool.name==='social'))
     throw new Error('PACKAGED_REMOVED_SOCIAL_TOOL_ADVERTISED');
+  // UX release gate against the packaged MCP runtime, not development source.
+  const panel=listed.result?.tools?.find(tool=>tool.name==='plan_panel');
+  const panelUri='ui://qnector/plan-act-v4.html';
+  if (panel?._meta?.ui?.resourceUri!==panelUri ||
+      panel?._meta?.['openai/outputTemplate']!==panelUri)
+    throw new Error('PACKAGED_PLAN_PANEL_V3_NOT_ADVERTISED');
+  const resources=await rpc(10,'resources/list');
+  if (!resources.result?.resources?.some(entry=>entry.uri===panelUri))
+    throw new Error('PACKAGED_PLAN_PANEL_V3_RESOURCE_MISSING');
+  const view=await rpc(11,'resources/read',{uri:panelUri});
+  const html=view.result?.contents?.[0]?.text;
+  if (typeof html!=='string' ||
+      !html.includes('id="summaryToggle"') ||
+      !html.includes('id="stepsToggle"') ||
+      !html.includes('id="approve"'))
+    throw new Error('PACKAGED_PLAN_PANEL_V3_UI_INCOMPLETE');
+  console.log('PACKAGED_PLAN_PANEL_UX_PASSED');
   const marker=path.join(root,'once.txt');
   const start=await rpc(3,'tools/call',{name:'tasks',arguments:{action:'start',idempotencyKey:'packaged-stdio-once',waitTimeoutMs:0,
     command:{kind:'direct',file:process.execPath,args:['-e',

@@ -1,6 +1,6 @@
 # Qnector MCP tool reference
 
-Qnector advertises **eight grouped MCP tools**. Each call uses an object with an `action` field. Relative filesystem paths resolve from the active workspace; absolute paths are supported.
+Qnector advertises **nine grouped MCP tools**. Each call uses an object with an `action` field. Relative filesystem paths resolve from the active workspace; absolute paths are supported.
 
 ## Tool/action overview
 

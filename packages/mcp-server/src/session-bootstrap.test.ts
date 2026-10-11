@@ -65,6 +65,8 @@ describe("session memory bootstrap", () => {
     expect(result).toContain("QNECTOR SESSION BOOTSTRAP");
     expect(result).toContain("Skills: manual opt-in only");
     expect(result).toContain("CURRENT CAPABILITY RULE");
+    expect(result).toContain("PANEL UX: finish inspection and planning BEFORE plan_panel");
+    expect(result).toContain("no lengthy text beneath it");
     expect(result).toContain("short default");
     expect(result).toContain("'/long '");
     expect(result).toContain("'long task'");

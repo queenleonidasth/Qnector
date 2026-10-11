@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { ToolContext } from "./tool-result.js";
 
 const READ_ONLY_ACTIONS: Record<string, ReadonlySet<string>> = {
@@ -100,6 +101,18 @@ export async function checkPlanActGuard(
     return { allowed: true };
   }
   const state = await context.planActStore.get(scope, workspace);
+  if (state.plan) {
+    const planWorkspace = path.resolve(state.workspace);
+    const activeWorkspace = path.resolve(workspace);
+    const sameWorkspace = process.platform === "win32"
+      ? planWorkspace.toLowerCase() === activeWorkspace.toLowerCase()
+      : planWorkspace === activeWorkspace;
+    if (!sameWorkspace)
+      return {
+        allowed: false, code: "PLAN_SCOPE_REQUIRED",
+        message: "This task's Plan/Act approval belongs to a different workspace. Start and approve a new plan for the active workspace before making changes.",
+      };
+  }
   if (state.mode === "plan")
     return {
       allowed: false, code: "PLAN_MODE_READ_ONLY",

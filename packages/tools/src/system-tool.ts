@@ -24,6 +24,7 @@ import {
 import { executeSystemMcp } from "./system-mcp-adapter.js";
 import { executeSystemSkills } from "./system-skills-adapter.js";
 import { executeSystemDesktop } from "./system-desktop-adapter.js";
+import { locateGitExecutable } from "./git-executable.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -402,7 +403,7 @@ export async function executeSystem(
         add(
           "mcp-tools",
           "pass",
-          "8 grouped tools registered by Qnector runtime",
+          "9 grouped tools registered by Qnector runtime",
         );
         try {
           const info = await stat(config.activeWorkspace);
@@ -427,7 +428,7 @@ export async function executeSystem(
           shellPath ? "pass" : "fail",
           shellPath ?? "PowerShell executable not found",
         );
-        const gitPath = await locateExecutable("git");
+        const gitPath = await locateGitExecutable();
         add(
           "git",
           gitPath ? "pass" : "warn",
@@ -735,6 +736,8 @@ async function locateExecutable(name: string): Promise<string | null> {
       }
     }
   }
+  if (["git", "git.exe"].includes(name.toLowerCase()))
+    return locateGitExecutable();
   const command = process.platform === "win32" ? "where.exe" : "which";
   try {
     const result = await execFileAsync(command, [name], { windowsHide: true });

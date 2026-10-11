@@ -7,18 +7,19 @@ Plan / Act is an optional task-scoped **behavioral MCP dispatch guard**, not a W
 1. In ChatGPT, enable Qnector and ask: "Use Qnector to start a task and plan this project before editing it."
 2. ChatGPT calls memory.task_start and captures its taskId.
 3. Pass that ID as memoryTaskId to **every** Qnector call for this task, including calls through inspect, mode, process, files, git, browser, and tasks.
-4. Use mode.begin with title, summary and one or more numbered step descriptions. This saves revision 1 and **enters Plan Mode**. Call `plan_panel` with the same `memoryTaskId` to display the interactive controller in ChatGPT.
-5. Use inspect (read-only tool) or read-only actions on original tools to inspect code. In Plan Mode, execution and mutation requests are denied by ToolRegistry.
-6. Use mode.get to review the revision. mode.update changes the plan, increases its revision and invalidates prior approval.
-7. Only **after the user explicitly approves the displayed plan**, call mode_approve with the exact expectedRevision and the same memoryTaskId.
-8. Execute the approved steps in Act Mode. Use mode.step with zero-based index and done to maintain the checklist.
-9. Use mode.back_to_plan to reject **new** mutations for this task and revoke approval.
+4. Call `mode.begin` **early** to enforce strict read-only Plan Mode. This is a draft, not the user-facing panel.
+5. Complete all inspection and analysis with `inspect` or other read-only actions. **Do not call `plan_panel` while researching, revising or drafting.**
+6. Finalize the title, rationale and actionable checklist via `mode.update`. Verify the final revision using `mode.get`. Any update invalidates prior approval.
+7. Only **after the plan is finished**, call `plan_panel(memoryTaskId)` **once as the final presentation tool call**. It shows a concise overview, progressive-disclosure details, real checklist progress, and the approval CTA.
+8. The ChatGPT host always puts an inline app **above** the generated model reply. Qnector cannot force the iframe below a reply. After showing the panel, the assistant should give **at most one brief next-step sentence**, not a duplicate plan, table, or long explanation.
+9. Only **after the user explicitly approves the displayed revision**, call `mode_approve(expectedRevision)`. Act Mode enables mutations; `mode.step` updates the checklist after verified work.
+10. Use `mode.back_to_plan` to revoke approval and block **new** mutations. In the panel, selecting the Plan tab only focuses the separate return control; the user must press that control and explicitly confirm revocation. The Act tab likewise does not approve the plan; the dedicated revision approval button must be clicked. Do not display a new panel each time a step changes; the existing panel can refresh its state.
 
 Do not issue mode_approve simply because a plan exists. The user must accept the exact plan revision. ChatGPT may still require confirmations for individual tools.
 
 ## ChatGPT panel
 
-Qnector exposes a versioned MCP Apps resource at `ui://qnector/plan-act-v2.html` through a dedicated read-only `plan_panel` tool. The tool declares both standard `_meta.ui.resourceUri` and ChatGPT `_meta["openai/outputTemplate"]`. Compatible hosts can render the live mode tabs, revision, checklist and execution controls. These controls make actual MCP calls using `window.openai.callTool` (including revision-checked approval), not simulated UI state. It does not automate ChatGPT's browser, read cookies or acquire credentials.
+Qnector exposes the versioned MCP Apps resource `ui://qnector/plan-act-v4.html` through a dedicated read-only `plan_panel` presentation tool (with v2/v3 compatibility resources for older ChatGPT snapshots). Its standard `_meta.ui.resourceUri` and ChatGPT `_meta["openai/outputTemplate"]` point to the same view. The compact panel shows the complete plan by progressive disclosure: summary preview, expand/collapse, next three pending steps, show all steps, live completion progress, revision and an explicit approval CTA. These controls use real `window.openai.callTool` actions (including revision-checked approval), not simulated UI state. No ChatGPT browser automation, session tokens, cookies, remote UI scripts, or credentials are used.
 
 Qnector cannot insert native controls into the ChatGPT composer. Without MCP Apps UI support, plain MCP tools still work. The controller appears **within the chat response after calling `plan_panel`**, not as a permanent ChatGPT composer toolbar. After installing a new Qnector version, go to ChatGPT Settings → Apps / Plugins → Qnector → Refresh tools, review/enable the new `mode`, `mode_approve`, `inspect` and `plan_panel` actions, and start a new chat. Workspace admins may need to review and publish the refreshed app tool list; ChatGPT does not automatically refresh a frozen approved app snapshot.
 
