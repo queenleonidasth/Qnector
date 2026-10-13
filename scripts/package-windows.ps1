@@ -1,4 +1,6 @@
 $ErrorActionPreference = "Stop"
+# Electron UI tests require GUI mode even under an Electron-hosted build task.
+Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 # A clean release worktree has no workspace dist yet. Build dependencies before
