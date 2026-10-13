@@ -15,6 +15,14 @@ async function fixture() {
   return { root, file: path.join(root, "plan-act.json"), workspace: path.join(root, "project") };
 }
 
+async function finalizeDiscussion(store: PlanActStore, scope: string) {
+  const pending = await store.ask(scope, "What matters most for this project?");
+  await store.resolve(scope,pending.plan!.decisions!.at(-1)!.id,"Correctness and reliability","human");
+  return store.finalize(scope,
+   "Design a reliable architecture, protect existing behavior and make every feature safely testable before release.",
+   "Write failing tests, implement the smallest changes, run all regressions, verify the installation and prepare rollback.");
+}
+
 describe("PlanActStore", () => {
   it("preserves legacy Act behavior until a task begins planning", async () => {
     const { file, workspace } = await fixture();
@@ -32,19 +40,21 @@ describe("PlanActStore", () => {
     const { file, workspace } = await fixture();
     const store = new PlanActStore(file);
     await store.begin("task:one", workspace, "Feature", "Build safe mode", ["Write code", "Test"]);
+    await finalizeDiscussion(store,"task:one");
     await expect(store.approve("task:one", 99)).rejects.toThrow("PLAN_REVISION_MISMATCH");
-    const approved = await store.approve("task:one", 1);
+    const approved = await store.approve("task:one", 2);
     expect(approved.mode).toBe("act");
-    expect(approved.plan?.approvedRevision).toBe(1);
+    expect(approved.plan?.approvedRevision).toBe(2);
     expect((await store.markStep("task:one", 0, true)).plan?.steps[0]?.done).toBe(true);
     const back = await store.backToPlan("task:one");
     expect(back.mode).toBe("plan");
     expect(back.plan?.approvedRevision).toBeNull();
     await expect(store.markStep("task:one", 1, true)).rejects.toThrow("PLAN_NOT_APPROVED");
     const revised = await store.update("task:one", undefined, "New design", ["Write code", "Review"]);
-    expect(revised.plan?.revision).toBe(2);
+    expect(revised.plan?.revision).toBe(3);
+    await finalizeDiscussion(store,"task:one");
     await expect(store.approve("task:one", 1)).rejects.toThrow("PLAN_REVISION_MISMATCH");
-    expect((await store.approve("task:one", 2)).mode).toBe("act");
+    expect((await store.approve("task:one", 4)).mode).toBe("act");
     const recovered = new PlanActStore(file);
     expect((await recovered.get("task:one", workspace)).plan?.steps[0]?.text).toBe("Write code");
   });
@@ -74,12 +84,13 @@ describe("PlanActStore", () => {
       "task:progress", workspace, "Plan", "Original details", ["Analyze", "Implement", "Validate"],
     );
     const originalIds = initial.plan!.steps.map((entry) => entry.id);
-    await store.approve("task:progress", 1);
+    await finalizeDiscussion(store,"task:progress");
+    await store.approve("task:progress", 2);
     await store.markStep("task:progress", 0, true);
     await store.markStep("task:progress", 2, true);
     await store.backToPlan("task:progress");
     const summaryOnly = await store.update("task:progress", undefined, "More details");
-    expect(summaryOnly.plan?.revision).toBe(2);
+    expect(summaryOnly.plan?.revision).toBe(3);
     expect(summaryOnly.mode).toBe("plan");
     expect(summaryOnly.plan?.approvedRevision).toBeNull();
     expect(summaryOnly.plan?.steps.map((entry) => entry.done)).toEqual([true, false, true]);
@@ -88,14 +99,15 @@ describe("PlanActStore", () => {
     const edited = await store.update(
       "task:progress", undefined, undefined, ["Validate", "New step", "Implement", "Analyze"],
     );
-    expect(edited.plan?.revision).toBe(3);
+    expect(edited.plan?.revision).toBe(4);
     expect(edited.plan?.steps.map((entry) => entry.done)).toEqual([true, false, false, true]);
     expect(edited.plan?.steps.map((entry) => entry.id)).toEqual([
       originalIds[2], expect.any(String), originalIds[1], originalIds[0],
     ]);
     expect(edited.plan?.steps[1]?.id).not.toBe(originalIds[0]);
     expect(edited.plan?.steps[1]?.id).not.toBe(originalIds[1]);
-    await store.approve("task:progress", 3);
+    await finalizeDiscussion(store,"task:progress");
+    await store.approve("task:progress", 5);
     const reopened = new PlanActStore(file);
     expect((await reopened.get("task:progress", workspace)).plan?.steps.map((entry) => entry.done))
       .toEqual([true, false, false, true]);
@@ -105,31 +117,33 @@ describe("PlanActStore", () => {
     const { file, workspace } = await fixture();
     const store = new PlanActStore(file);
     await store.begin("task:safe", workspace, "Safe approval", "Do not replay stale UI writes", ["Inspect", "Execute"]);
-    const first = await store.approve("task:safe", 1);
+    await finalizeDiscussion(store,"task:safe");
+    const first = await store.approve("task:safe", 2);
     const firstAt = first.plan!.approvedAt!;
     const firstStepId = first.plan!.steps[0]!.id;
 
     await expect(store.backToPlan("task:safe", 77, firstAt))
       .rejects.toThrow("PLAN_REVISION_MISMATCH");
-    await expect(store.backToPlan("task:safe", 1, "old-approval"))
+    await expect(store.backToPlan("task:safe", 2, "old-approval"))
       .rejects.toThrow("PLAN_APPROVAL_MISMATCH");
     expect((await store.get("task:safe", workspace)).mode).toBe("act");
 
-    await expect(store.markStep("task:safe", 0, true, 2, firstStepId, firstAt))
+    await expect(store.markStep("task:safe", 0, true, 3, firstStepId, firstAt))
       .rejects.toThrow("PLAN_REVISION_MISMATCH");
-    await expect(store.markStep("task:safe", 0, true, 1, "outdated-step", firstAt))
+    await expect(store.markStep("task:safe", 0, true, 2, "outdated-step", firstAt))
       .rejects.toThrow("PLAN_STEP_MISMATCH");
-    await expect(store.markStep("task:safe", 0, true, 1, firstStepId, "old-approval"))
+    await expect(store.markStep("task:safe", 0, true, 2, firstStepId, "old-approval"))
       .rejects.toThrow("PLAN_APPROVAL_MISMATCH");
     expect((await store.get("task:safe", workspace)).plan?.steps[0]?.done).toBe(false);
 
-    const updated = await store.markStep("task:safe", 0, true, 1, firstStepId, firstAt);
+    const updated = await store.markStep("task:safe", 0, true, 2, firstStepId, firstAt);
     expect(updated.plan?.steps[0]?.done).toBe(true);
-    await store.backToPlan("task:safe", 1, firstAt);
+    await store.backToPlan("task:safe", 2, firstAt);
     const revision2 = await store.update("task:safe", undefined, "New revision", ["Inspect", "Execute"]);
-    expect(revision2.plan?.revision).toBe(2);
-    const reapproved = await store.approve("task:safe", 2);
-    expect(reapproved.plan?.approvedRevision).toBe(2);
+    expect(revision2.plan?.revision).toBe(3);
+    await finalizeDiscussion(store,"task:safe");
+    const reapproved = await store.approve("task:safe", 4);
+    expect(reapproved.plan?.approvedRevision).toBe(4);
     await expect(store.backToPlan("task:safe", 1, firstAt)).rejects.toThrow("PLAN_REVISION_MISMATCH");
     await expect(store.markStep("task:safe", 0, true, 1, firstStepId, firstAt))
       .rejects.toThrow("PLAN_REVISION_MISMATCH");

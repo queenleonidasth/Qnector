@@ -25,6 +25,14 @@ async function contextForTest() {
   return { context, store, root, taskId };
 }
 
+async function finalizeDiscussion(store: PlanActStore, scope: string){
+ const q=await store.ask(scope,"What result matters to you?");
+ await store.resolve(scope,q.plan!.decisions![0]!.id,"Reliability and security","human");
+ return store.finalize(scope,
+  "Design a testable architecture which preserves all existing work and enforces explicit user approval.",
+  "Write failing tests and implement the minimum verified change, run regression tests, audit security and prepare rollback.");
+}
+
 describe("Plan/Act MCP dispatch guard", () => {
   it("keeps individual read actions while denying file, process, browser and Git mutations", async () => {
     const { context, store, root, taskId } = await contextForTest();
@@ -81,7 +89,8 @@ describe("Plan/Act MCP dispatch guard", () => {
   it("rejects an approved Act scope after changing the active workspace", async () => {
     const { context, root, store, taskId } = await contextForTest();
     await store.begin("task:" + taskId, root, "Plan", "summary", ["one"]);
-    await store.approve("task:" + taskId, 1);
+    await finalizeDiscussion(store,"task:" + taskId);
+    await store.approve("task:" + taskId, 2);
     const switchedContext = {
       ...context,
       getConfig: () => ({ activeWorkspace: path.join(root, "other-workspace") }),
@@ -100,7 +109,8 @@ describe("Plan/Act MCP dispatch guard", () => {
     const { context, root, store, taskId } = await contextForTest();
     await store.begin("task:" + taskId, root, "Plan", "summary", ["one"]);
     await store.begin("task:other", root, "Plan", "summary", ["one"]);
-    await store.approve("task:" + taskId, 1);
+    await finalizeDiscussion(store,"task:" + taskId);
+    await store.approve("task:" + taskId, 2);
     expect((await checkPlanActGuard(context, "process", { action:"run", command:"echo safe" })).allowed).toBe(true);
     expect((await checkPlanActGuard(context, "process", {
       action:"run", command:"echo blocked", memoryTaskId:"other",

@@ -75,7 +75,7 @@ const mcpInputSchemaCache = new Map<
   ReturnType<typeof fromJsonSchema>
 >();
 
-const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4-plan-act-v4-ui`;
+const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4-plan-act-v5-chat-first`;
 const LONG_CONTEXT_TOOL_ANCHOR =
   "QNECTOR IS CALLABLE NOW. If unsure, probe system.status (action=status) before declaring Qnector unavailable.";
 const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
@@ -548,7 +548,7 @@ export class QnectorRuntime {
     // without triggering a mixed-permission Plan/Act tool just to show its UI.
     server.registerTool("plan_panel", {
       title: "Open Qnector Plan / Act Task Controller",
-      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nFINAL PRESENTATION STEP: Show the compact interactive Qnector Task Controller in ChatGPT only AFTER completing all read-only research and reasoning, saving the final Plan revision with mode.begin/update, and verifying it with mode.get. Call plan_panel once, as the last Qnector tool of the response, with the same memoryTaskId; do not call it before research or use it as a progress update. The panel already contains the plan, expandable details, checklist and approval controls. Inline widgets render ABOVE the model reply by ChatGPT host design; write at most ONE short sentence after the panel and DO NOT repeat the plan, status table, or steps below it. For later updates use mode.get/mode.step; refresh the live panel only on user request. Read-only; never approves or executes actions.`,
+      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nFINAL PRESENTATION STEP: Use local Superpowers on every Plan activation, interview the human in ordinary ChatGPT one question at a time (mode.ask and mode.resolve), record delegated decisions with rationale. After all decisions are complete, call mode.update with the full checklist, mode.finalize with substantive design and implementationPlan, then verify phase ready using mode.get. ONLY THEN call plan_panel ONCE as the last Qnector tool. The tool rejects unfinished discovery. The panel owns the full design, decisions and approval. Write at most ONE short sentence below it and DO NOT repeat the plan, status table or checklist. Read-only; it does not approve or execute actions.`,
       inputSchema: fromJsonSchema({
         type: "object", additionalProperties: false,
         properties: {
@@ -570,6 +570,14 @@ export class QnectorRuntime {
           modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)),
         { action: "get", ...(args.memoryTaskId ? { memoryTaskId: args.memoryTaskId } : {}) },
       );
+      const state = (result.data as {data?:{mode?:string;plan?:{phase?:string}|null}} | undefined)?.data;
+      if (result.ok && state?.mode === "plan" && state.plan?.phase !== "ready") {
+        const output = {ok: false, tool: "plan_panel", action: "show",
+          error: {code: "PLAN_DISCOVERY_IN_PROGRESS", message:
+            "Continue ChatGPT Q&A, resolve material decisions, and finalize the plan before opening the Panel."}};
+        return {content: [{type:"text" as const,text:output.error.message}],
+          structuredContent:output,isError:true};
+      }
       const bounded = boundMcpToolResult(result);
       const { attachments, ...jsonResult } = bounded;
       const output = { ...jsonResult, tool: "plan_panel", action: "show" };
@@ -616,7 +624,7 @@ export class QnectorRuntime {
     });
 
     // Inline, self-contained UI. Hosts without MCP Apps support still use the tools.
-    server.registerResource("qnector-plan-act-view-v4", PLAN_VIEW_URI, {
+    server.registerResource("qnector-plan-act-view-v5", PLAN_VIEW_URI, {
       title: "Qnector Plan / Act Controller",
       description: "Inspect plans, approve a revision, and control task execution mode.",
       mimeType: "text/html;profile=mcp-app",
@@ -631,6 +639,17 @@ export class QnectorRuntime {
           "openai/ui": { availableDisplayModes: ["inline"] },
         },
       }],
+    }));
+
+    // Serve cached older resource URIs with the latest safe approval UI.
+    server.registerResource("qnector-plan-act-view-v4-legacy", "ui://qnector/plan-act-v4.html", {
+      title: "Qnector Plan / Act Controller (v4 compatibility)",
+      description: "Compatibility resource for cached ChatGPT Plan/Act metadata.",
+      mimeType: "text/html;profile=mcp-app",
+    }, async (uri) => ({
+      contents: [{uri:uri.toString(),mimeType:"text/html;profile=mcp-app",
+        text:PLAN_VIEW_HTML,_meta:{ui:{prefersBorder:true},
+        "openai/ui":{availableDisplayModes:["inline"]}}}],
     }));
 
     // Existing ChatGPT conversations may still hold the v2/v3 tool snapshot.

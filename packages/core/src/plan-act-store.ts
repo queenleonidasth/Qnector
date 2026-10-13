@@ -10,7 +10,24 @@ export interface PlanActStep {
   done: boolean;
 }
 
+export type PlanDecisionSource = "human" | "ai-delegated";
+export interface PlanActDecision {
+  id: string;
+  question: string;
+  answer: string | null;
+  decidedBy: PlanDecisionSource | null;
+  rationale: string | null;
+  alternatives: string[];
+  epoch: number;
+}
+
 export interface PlanActPlan {
+  /** Undefined in previously persisted plan files; legacy approvals remain valid. */
+  phase?: "discovery" | "ready";
+  decisions?: PlanActDecision[];
+  design?: string | null;
+  implementationPlan?: string | null;
+  discoveryEpoch?: number;
   revision: number;
   title: string;
   summary: string;
@@ -34,6 +51,7 @@ interface PersistedPlans {
 
 const MAX_STATES = 300;
 const MAX_STEPS = 60;
+const MAX_DECISIONS = 50;
 
 function fail(code: string, reason: string): never {
   throw new Error(code + ": " + reason);
@@ -166,6 +184,7 @@ export class PlanActStore {
         plan: {
           revision, title: safeTitle, summary: safeSummary,
           steps: safeSteps.map((text) => ({ id: randomUUID(), text, done: false })),
+          phase: "discovery", decisions: [], design: null, implementationPlan: null, discoveryEpoch: 1,
           approvedRevision: null, approvedAt: null,
         },
       };
@@ -193,8 +212,11 @@ export class PlanActStore {
         matches.push(entry);
         priorByText.set(entry.text, matches);
       }
+      const wasReady = plan.phase === "ready";
       state.plan = {
         title: nextTitle, summary: nextSummary, revision: plan.revision + 1,
+        phase: "discovery", decisions: plan.decisions ?? [], design: null, implementationPlan: null,
+        discoveryEpoch: (plan.discoveryEpoch ?? 1) + (wasReady ? 1 : 0),
         steps: nextSteps.map((text) => {
           const old = priorByText.get(text)?.shift();
           return { id: old?.id ?? randomUUID(), text, done: old?.done ?? false };
@@ -206,6 +228,81 @@ export class PlanActStore {
     });
   }
 
+  /** Only one outstanding question is allowed: ask in ChatGPT, then wait for the answer. */
+  public async ask(scopeId: string | undefined, question: string): Promise<PlanActState> {
+    const scope = requiredScope(scopeId);
+    const safeQuestion = normalizedText(question, 600, "Question");
+    return this.transact(async () => {
+      const state = this.states.get(scope);
+      if (!state || state.mode !== "plan" || !state.plan)
+        return fail("PLAN_NOT_ACTIVE", "Start Plan Mode to ask a question.");
+      const plan = state.plan;
+      if (plan.phase === "ready") return fail("PLAN_ALREADY_FINALIZED", "Revise the plan before asking again.");
+      const decisions = plan.decisions ?? [];
+      if (decisions.length >= MAX_DECISIONS) return fail("PLAN_TOO_MANY_QUESTIONS", "Question limit reached.");
+      if (decisions.some((decision) => decision.answer === null))
+        return fail("PLAN_DECISIONS_PENDING", "Answer the existing question before adding another.");
+      plan.phase = "discovery";
+      plan.discoveryEpoch ??= 1;
+      plan.decisions = [...decisions, {id:randomUUID(),question:safeQuestion,answer:null,
+        decidedBy:null,rationale:null,alternatives:[],epoch:plan.discoveryEpoch}];
+      state.updatedAt = new Date().toISOString();
+      return state;
+    });
+  }
+
+  public async resolve(scopeId: string | undefined, decisionId: string, answer: string,
+    decidedBy: PlanDecisionSource, rationale?: string, alternatives: string[] = [],
+    delegationConfirmed = false): Promise<PlanActState> {
+    const scope = requiredScope(scopeId);
+    const safeAnswer = normalizedText(answer, 2_000, "Answer");
+    if (decidedBy !== "human" && decidedBy !== "ai-delegated")
+      return fail("PLAN_INVALID_DECIDER", "Decision owner must be human or ai-delegated.");
+    if (decidedBy === "ai-delegated" && !delegationConfirmed)
+      return fail("PLAN_DELEGATION_REQUIRED", "Record explicit user delegation.");
+    if (decidedBy === "ai-delegated" && (!Array.isArray(alternatives) || !alternatives.length))
+      return fail("PLAN_ALTERNATIVES_REQUIRED", "AI-delegated decisions need alternatives.");
+    if (decidedBy === "ai-delegated" && !rationale?.trim())
+      return fail("PLAN_RATIONALE_REQUIRED", "AI-delegated decisions need rationale.");
+    if (!Array.isArray(alternatives) || alternatives.length > 10)
+      return fail("PLAN_INVALID_ALTERNATIVES", "At most 10 alternatives allowed.");
+    const safeAlternatives = alternatives.map((item,i) => normalizedText(item,500,"Alternative "+i));
+    const safeRationale = rationale?.trim() ? normalizedText(rationale,2_000,"Rationale") : null;
+    return this.transact(async () => {
+      const state = this.states.get(scope);
+      if (!state || state.mode !== "plan" || !state.plan || state.plan.phase === "ready")
+        return fail("PLAN_NOT_ACTIVE", "Draft Plan Mode is required.");
+      const decision = state.plan.decisions?.find((x) => x.id === decisionId);
+      if (!decision) return fail("PLAN_DECISION_NOT_FOUND", "Question not found in this plan.");
+      if (decision.answer !== null) return fail("PLAN_DECISION_ALREADY_RESOLVED", "Question already answered.");
+      decision.answer=safeAnswer;decision.decidedBy=decidedBy;decision.rationale=safeRationale;
+      decision.alternatives=safeAlternatives;state.updatedAt=new Date().toISOString();
+      return state;
+    });
+  }
+
+  public async finalize(scopeId: string | undefined, design: string, implementationPlan: string): Promise<PlanActState> {
+    const scope = requiredScope(scopeId);
+    const safeDesign = normalizedText(design, 12_000, "Design");
+    const safeImplementation = normalizedText(implementationPlan,16_000,"Implementation plan");
+    if (safeDesign.length < 60 || safeImplementation.length < 60)
+      return fail("PLAN_DOCUMENTS_REQUIRED", "Provide substantive design and implementation plans.");
+    return this.transact(async () => {
+      const state = this.states.get(scope);
+      if (!state || state.mode !== "plan" || !state.plan)
+        return fail("PLAN_NOT_ACTIVE", "Start Plan Mode before finalizing.");
+      const plan = state.plan;
+      if (plan.phase === "ready") return fail("PLAN_ALREADY_FINALIZED", "Plan already finalized.");
+      if (plan.decisions?.some((x)=>x.answer===null))
+        return fail("PLAN_DECISIONS_PENDING", "Answer all recorded questions in ChatGPT first.");
+      if (!plan.decisions?.some((x)=>x.epoch===(plan.discoveryEpoch??1)))
+        return fail("PLAN_QUESTIONS_REQUIRED", "Ask and resolve a material question on every Plan activation.");
+      plan.design=safeDesign;plan.implementationPlan=safeImplementation;plan.phase="ready";
+      plan.revision++;plan.approvedRevision=null;plan.approvedAt=null;
+      state.updatedAt=new Date().toISOString();return state;
+    });
+  }
+
   public async approve(scopeId: string | undefined, expectedRevision: number): Promise<PlanActState> {
     const scope = requiredScope(scopeId);
     return this.transact(async () => {
@@ -214,6 +311,10 @@ export class PlanActStore {
         return fail("PLAN_NOT_ACTIVE", "A saved Plan Mode plan is required before Act Mode.");
       if (!Number.isSafeInteger(expectedRevision) || state.plan.revision !== expectedRevision)
         return fail("PLAN_REVISION_MISMATCH", "The plan changed; inspect the current revision before approving.");
+      if (state.plan.phase !== undefined && state.plan.phase !== "ready")
+        return fail("PLAN_NOT_READY", "Discuss and finalize the full design before approving.");
+      if (state.plan.decisions?.some((decision) => decision.answer === null))
+        return fail("PLAN_DECISIONS_PENDING", "Unanswered decisions block approval.");
       state.mode = "act";
       state.plan.approvedRevision = state.plan.revision;
       state.plan.approvedAt = new Date().toISOString();
@@ -239,6 +340,10 @@ export class PlanActStore {
       if (state.plan) {
         state.plan.approvedRevision = null;
         state.plan.approvedAt = null;
+        state.plan.phase = "discovery";
+        state.plan.discoveryEpoch = (state.plan.discoveryEpoch ?? 0) + 1;
+        state.plan.design = null;
+        state.plan.implementationPlan = null;
       }
       state.updatedAt = new Date().toISOString();
       return state;

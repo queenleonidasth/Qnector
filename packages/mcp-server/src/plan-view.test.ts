@@ -4,7 +4,7 @@ import { PLAN_VIEW_HTML, PLAN_VIEW_URI } from "./plan-view.js";
 
 describe("Qnector ChatGPT Task Controller", () => {
   it("keeps a versioned MCP Apps resource and a self-contained valid script", () => {
-    expect(PLAN_VIEW_URI).toBe("ui://qnector/plan-act-v4.html");
+    expect(PLAN_VIEW_URI).toBe("ui://qnector/plan-act-v5.html");
     expect(PLAN_VIEW_HTML).toContain('role="group"');
     expect(PLAN_VIEW_HTML).toContain('aria-pressed="true"');
     expect(PLAN_VIEW_HTML).toContain('id="planTab"');

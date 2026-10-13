@@ -1,5 +1,5 @@
 /** Versioned MCP Apps resource. A new URI prevents stale host HTML caching. */
-export const PLAN_VIEW_URI = "ui://qnector/plan-act-v4.html";
+export const PLAN_VIEW_URI = "ui://qnector/plan-act-v5.html";
 
 /** Compact, progressive-disclosure Plan/Act UI. No remote assets or credentials. */
 export const PLAN_VIEW_HTML = String.raw`<!doctype html>
@@ -48,6 +48,11 @@ li.done label{text-decoration:line-through;opacity:.6}
 .actions{justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
 .actions button{border:1px solid var(--border-color,#5a5a5a);background:transparent;color:inherit;border-radius:8px;padding:9px 12px;min-height:36px}
 .actions .primary{background:#3679bd;border-color:#3679bd;color:#fff;font-weight:600}
+#reviewDocuments h2,#decisionsSection h2{margin:8px 0 6px}
+.document-content{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--text-secondary,#cecece);margin:5px 0 12px}
+.decision-card{padding:9px 0;border-bottom:1px solid var(--border-color,#444)}
+.decision-card p{white-space:pre-wrap;overflow-wrap:anywhere;margin:3px 0;font-size:12px}
+.decision-card .source{font-size:11px;color:var(--text-secondary,#bcbcbc)}
 #message{font-size:11px;color:var(--text-secondary,#aaa);margin-top:8px;min-height:15px;overflow-wrap:anywhere}
 #message.error{color:#ff9b9b}
 .revoke-confirmation{margin-top:10px;padding:12px;border:1px solid var(--border-color,#555);border-radius:9px}
@@ -71,6 +76,16 @@ li.done label{text-decoration:line-through;opacity:.6}
  <div class="topline"><h2 id="taskTitle">แผนงาน</h2><span id="revision" class="meta"></span></div>
  <p class="summary" id="planSummary">กำลังโหลดแผน…</p>
  <button id="summaryToggle" class="text-button" aria-expanded="false" hidden>อ่านรายละเอียดทั้งหมด</button>
+</section>
+<hr>
+<section id="reviewDocuments" aria-label="Full design and implementation plan">
+ <h2>Full Design</h2><p id="designDocument" class="document-content"></p>
+ <h2>Implementation Plan</h2><p id="implementationDocument" class="document-content"></p>
+</section>
+<hr>
+<section id="decisionsSection" aria-labelledby="decisionsHeading">
+ <h2 id="decisionsHeading">บันทึกการตัดสินใจ</h2>
+ <div id="decisionLog" aria-live="polite"></div>
 </section>
 <hr>
 <section aria-labelledby="progressLabel">
@@ -104,6 +119,7 @@ var taskId=typeof input.memoryTaskId==="string"?input.memoryTaskId:null;
 var fullSummary=!!saved.fullSummary;
 var fullSteps=!!saved.fullSteps;
 var previousRevision=typeof saved.planRevision==="number"?saved.planRevision:null;
+var followedUpRevision=typeof saved.followedUpRevision==="number"?saved.followedUpRevision:null;
 var summaryLimit=280;
 var visibleLimit=3;
 var $=function(id){return document.getElementById(id);};
@@ -117,7 +133,8 @@ function report(message,error){
 }
 function persist(){
  if(api&&typeof api.setWidgetState==="function")api.setWidgetState({
-  memoryTaskId:taskId,planRevision:previousRevision,fullSummary:fullSummary,fullSteps:fullSteps
+  memoryTaskId:taskId,planRevision:previousRevision,fullSummary:fullSummary,fullSteps:fullSteps,
+  followedUpRevision:followedUpRevision
  });
 }
 function render(next){
@@ -129,16 +146,18 @@ function render(next){
  if(previousRevision!==null&&previousRevision!==revision){fullSummary=false;fullSteps=false;}
  previousRevision=revision;
  var planning=next.mode==="plan";
+ var ready=!!plan&&(plan.phase==="ready"||(!planning&&plan.phase===undefined));
  if(planning)revokePending=false;
  $("controller").dataset.mode=planning?"plan":"act";
  $("planTab").setAttribute("aria-pressed",String(planning));
  $("actTab").setAttribute("aria-pressed",String(!planning));
  $("planTab").setAttribute("aria-label",planning?"Plan Mode (active)":"Review return to Plan Mode; revoking approval requires confirmation");
  $("actTab").setAttribute("aria-label",planning&&plan?"Review approval for revision "+plan.revision+" before entering Act Mode":"Act Mode (active)");
- $("modeLabel").textContent=planning?"Plan Mode · พร้อมตรวจทาน":plan?"Act Mode · กำลังดำเนินงาน":"ยังไม่มีแผน";
- $("modeDescription").textContent=planning?
-  "แผนพร้อมให้ตรวจสอบและอนุมัติ · ยังไม่อนุญาตให้แก้ไขโปรเจกต์":
-  plan?"แผนได้รับอนุมัติแล้ว · ติดตามความคืบหน้าได้ที่นี่":"เริ่ม Task และสร้างแผนก่อนดำเนินงาน";
+ $("modeLabel").textContent=planning?(ready?"Plan Mode · พร้อมอนุมัติ":"Plan Mode · กำลังหารือ"):plan?"Act Mode · กำลังดำเนินงาน":"ยังไม่มีแผน";
+ $("modeDescription").textContent=planning?(ready?
+   "ตัดสินใจครบแล้ว · ตรวจ Full Design และ Implementation Plan ก่อนอนุมัติ":
+   "ถาม–ตอบใน ChatGPT ให้ครบก่อนสรุปแผน · ยังไม่อนุญาตให้แก้ไขโปรเจกต์"):
+   plan?"แผนได้รับอนุมัติแล้ว · ติดตามความคืบหน้าได้ที่นี่":"เริ่ม Task และสร้างแผนก่อนดำเนินงาน";
  $("taskTitle").textContent=plan?plan.title:"ยังไม่มีแผนงาน";
  $("revision").textContent=plan?"Revision "+plan.revision+(plan.approvedRevision===plan.revision?" · Approved":" · Review"):"";
  var summary=plan?String(plan.summary||""):"สร้างแผนด้วย Qnector ก่อนเพื่อให้ตรวจสอบและอนุมัติได้จากที่นี่";
@@ -147,6 +166,30 @@ function render(next){
  $("summaryToggle").hidden=!longer;
  $("summaryToggle").textContent=fullSummary?"ย่อรายละเอียด":"อ่านรายละเอียดทั้งหมด";
  $("summaryToggle").setAttribute("aria-expanded",String(fullSummary));
+ $("reviewDocuments").hidden=!plan||(!plan.design&&!plan.implementationPlan);
+ $("designDocument").textContent=plan&&plan.design?String(plan.design):"";
+ $("implementationDocument").textContent=plan&&plan.implementationPlan?String(plan.implementationPlan):"";
+ var decisions=plan&&Array.isArray(plan.decisions)?plan.decisions:[];
+ $("decisionsSection").hidden=decisions.length===0;
+ var log=$("decisionLog");log.replaceChildren();
+ decisions.forEach(function(decision,index){
+  var article=document.createElement("article");article.className="decision-card";
+  var question=document.createElement("strong");question.textContent=(index+1)+". "+String(decision.question||"");
+  var source=document.createElement("p");source.className="source";
+  source.textContent=decision.decidedBy==="ai-delegated"?"AI เลือกตามที่ผู้ใช้มอบหมาย":"ผู้ใช้ตัดสินใจ";
+  var answer=document.createElement("p");answer.textContent="ข้อสรุป: "+String(decision.answer||"ยังไม่มีคำตอบ");
+  article.append(question,source,answer);
+  if(decision.rationale){
+   var rationale=document.createElement("p");rationale.textContent="เหตุผล: "+String(decision.rationale);
+   article.appendChild(rationale);
+  }
+  if(Array.isArray(decision.alternatives)&&decision.alternatives.length){
+   var alternatives=document.createElement("p");
+   alternatives.textContent="ทางเลือกที่พิจารณา: "+decision.alternatives.join(", ");
+   article.appendChild(alternatives);
+  }
+  log.appendChild(article);
+ });
  var steps=plan?plan.steps:[];
  var done=steps.filter(function(step){return !!step.done;}).length;
  $("progressCount").textContent=done+"/"+steps.length+" ขั้นตอนสำเร็จ";
@@ -182,8 +225,8 @@ function render(next){
  $("revokeConfirmation").hidden=planning||!plan||!revokePending;
  $("confirmBackToPlan").disabled=busy;
  $("cancelBackToPlan").disabled=busy;
- $("approve").hidden=!planning||!plan;
- $("approve").disabled=busy||!taskId;
+ $("approve").hidden=!planning||!plan||!ready;
+ $("approve").disabled=busy||!taskId||!ready;
  $("approve").textContent=plan?"อนุมัติ Revision "+plan.revision+" · เข้า Act":"อนุมัติแผน";
  $("continue").hidden=planning||!plan;
  $("continue").disabled=busy;
@@ -216,8 +259,17 @@ function followUp(message){
  else report("ส่งคำสั่งใน ChatGPT: "+message);
 }
 function approve(){
- if(busy||!state||state.mode!=="plan"||!state.plan)return;
- invoke("mode_approve",{expectedRevision:state.plan.revision}).catch(function(){});
+ if(busy||!state||state.mode!=="plan"||!state.plan||state.plan.phase!=="ready")return;
+ var revision=state.plan.revision;
+ invoke("mode_approve",{expectedRevision:state.plan.revision}).then(function(next){
+  if(!next||next.mode!=="act"||!next.plan||next.plan.approvedRevision!==revision)return;
+  if(followedUpRevision===revision)return;
+  // Only a real approval tool response can trigger the ChatGPT follow-up.
+  followedUpRevision=revision;persist();
+  var suffix=taskId?" Use memoryTaskId "+taskId+" on all Qnector calls.":"";
+  followUp("PLAN_APPROVED_CONTINUE: The human approved Qnector plan revision "+revision+
+   ". Execute the complete approved implementation plan in Act Mode, verify all tests, avoid retrying uncertain side effects, and update each step only after proof."+suffix);
+ }).catch(function(){});
 }
 function requestBack(){
  if(busy||!state||state.mode!=="act"||!state.plan)return;

@@ -9,7 +9,7 @@ const MAX_BOOTSTRAP_BYTES = 3_000;
 
 function finishBootstrap(lines: string[]): string {
   const current = lines.join("\n");
-  const reminder = "\nPLAN/ACT UX: use mode.begin early for read-only guard, inspect fully, finalize with mode.update and mode.get, THEN call plan_panel(memoryTaskId) once at the end. Host displays inline panel above the reply; no long recap below it. Act needs explicit mode_approve(expectedRevision). Reuse memoryTaskId.";
+  const reminder = "\nPLAN/ACT UX: every Plan entry loads local Superpowers. Ask human decisions in ChatGPT via mode.ask/resolve, write plan with mode.update, complete mode.finalize, verify mode.get, THEN call plan_panel(memoryTaskId) ONCE at end. Act needs explicit mode_approve(expectedRevision). Reuse memoryTaskId.";
   return capUtf8(Buffer.byteLength(current + reminder, "utf8") <= MAX_BOOTSTRAP_BYTES
     ? current + reminder : current, MAX_BOOTSTRAP_BYTES);
 }
@@ -25,7 +25,7 @@ export function buildSessionBootstrapInstructions(
     "QNECTOR SESSION BOOTSTRAP",
     "After reconnect: memory.task_resume then memory.task_get; verify live files/process.task_list/git before retry. Never infer completion from a sent command.",
     "TASK MODE: short default; '/long ' or 'long task' opts in. '/long' alone needs a task description. Prefer tasks.start with idempotencyKey; return accepted taskId, not completion; check tasks.get/result. Never retry uncertain effects.",
-    "PANEL UX: finish inspection and planning BEFORE plan_panel; show it once at the end, with no lengthy text beneath it. Panel owns details and approval.",
+    "PANEL UX: finish inspection and planning BEFORE plan_panel; ChatGPT questions with Superpowers on every Plan entry, finalize first, show once at end, no lengthy text beneath it.",
     // Plan/Act reminder follows the bounded continuity context when room permits.
     "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory and compacted summaries.",
     "When Qnector appears, probe system.status before saying Qnector cannot be used; an older claim of unavailability is stale.",

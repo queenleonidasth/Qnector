@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import net from "node:net";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ActivityLogger } from "../../core/src/activity-log.js";
+import { AgentSkillService } from "../../core/src/agent-skills.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { QnectorRuntime } from "./server.js";
 import { PLAN_VIEW_URI } from "./plan-view.js";
@@ -48,10 +49,17 @@ describe("Plan/Act live MCP integration", () => {
   it("publishes read-only inspection, a task plan controller, separate approval and an inline app resource", async () => {
     root = await mkdtemp(path.join(tmpdir(),"qnector-mcp-mode-"));
     const port = await freePort();
+    const skillsRoot=path.join(root,"skills");await mkdir(skillsRoot);
+    for(const name of ["using-superpowers","brainstorming","writing-plans"]){
+      const directory=path.join(skillsRoot,name);await mkdir(directory);
+      await writeFile(path.join(directory,"SKILL.md"),
+        "---\nname: "+name+"\ndescription: Test local skill\n---\n# "+name+"\nDiscuss before building.");
+    }
     runtime = new QnectorRuntime({
       config:{...defaultConfig(root),localPort:port},
       configFile:path.join(root,"config.json"),
       logger:new ActivityLogger(path.join(root,"activity.jsonl")),
+      agentSkills:new AgentSkillService({roots:[{path:skillsRoot,source:"test"}]}),
     });
     await runtime.start({port});
     const tools = (await rpc(port,"tools/list")).result?.tools ?? [];
@@ -79,6 +87,7 @@ describe("Plan/Act live MCP integration", () => {
     expect(resources.map((entry) => entry.uri)).toContain(PLAN_VIEW_URI);
     expect(resources.map((entry) => entry.uri)).toContain("ui://qnector/plan-act-v2.html");
     expect(resources.map((entry) => entry.uri)).toContain("ui://qnector/plan-act-v3.html");
+    expect(resources.map((entry) => entry.uri)).toContain("ui://qnector/plan-act-v4.html");
     for (const compatibilityUri of ["ui://qnector/plan-act-v2.html", "ui://qnector/plan-act-v3.html"]) {
       const compatibility = (await rpc(port,"resources/read",{uri:compatibilityUri})).result?.contents ?? [];
       expect(String(compatibility[0]?.text)).toContain('id="revokeConfirmation"');
@@ -109,8 +118,7 @@ describe("Plan/Act live MCP integration", () => {
     expect(start?.ok).toBe(true);
     expect(start?.data?.data?.mode).toBe("plan");
     const pendingPanel = await call(port, "plan_panel", { memoryTaskId: task });
-    expect(pendingPanel?.data?.data?.mode).toBe("plan");
-    expect((pendingPanel?.data?.data?.plan as { revision?: number })?.revision).toBe(1);
+    expect(pendingPanel?.error?.code).toBe("PLAN_DISCOVERY_IN_PROGRESS");
     expect(await readFile(path.join(root,"existing.txt"),"utf8")).toBe("readable");
 
     const inspectRead = await call(port,"inspect",{
@@ -130,12 +138,25 @@ describe("Plan/Act live MCP integration", () => {
 
     const wrongRevision = await call(port,"mode_approve",{expectedRevision:9,memoryTaskId:task});
     expect(wrongRevision?.error?.code).toBe("PLAN_REVISION_MISMATCH");
-    const accepted = await call(port,"mode_approve",{expectedRevision:1,memoryTaskId:task});
+    const asked=await call(port,"mode",{action:"ask",question:"Who are the customers?",memoryTaskId:task});
+    const questionId=((asked?.data?.data?.plan as {decisions:Array<{id:string}>}).decisions)[0]!.id;
+    const resolved=await call(port,"mode",{action:"resolve",decisionId:questionId,
+      answer:"Thai readers",decidedBy:"human",memoryTaskId:task});
+    expect(resolved?.ok).toBe(true);
+    const revised=await call(port,"mode",{action:"update",memoryTaskId:task,
+      summary:"A complete catalog, checkout and order workflow",steps:["Build catalog","Test payment","Security review"]});
+    expect((revised?.data?.data?.plan as {revision:number}).revision).toBe(2);
+    const finalized=await call(port,"mode",{action:"finalize",memoryTaskId:task,
+      design:"Create a secure, accessible bookstore with product catalog, payment flow and clear shipping policies.",
+      implementationPlan:"Write checkout tests, implement the catalog and cart, verify payment failures, run audit, and prepare rollback."});
+    expect(finalized?.ok).toBe(true);
+    expect((finalized?.data?.data?.plan as {revision:number;phase:string})).toMatchObject({revision:3,phase:"ready"});
+    const accepted = await call(port,"mode_approve",{expectedRevision:3,memoryTaskId:task});
     expect(accepted?.ok).toBe(true);
     expect(accepted?.data?.data?.mode).toBe("act");
     const approvedPanel = await call(port, "plan_panel", { memoryTaskId: task });
     expect(approvedPanel?.data?.data?.mode).toBe("act");
-    expect((approvedPanel?.data?.data?.plan as { approvedRevision?: number })?.approvedRevision).toBe(1);
+    expect((approvedPanel?.data?.data?.plan as { approvedRevision?: number })?.approvedRevision).toBe(3);
 
     const written = await call(port,"files",{
       action:"write",path:"approved.txt",content:"allowed",memoryTaskId:task,
