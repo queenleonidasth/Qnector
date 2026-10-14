@@ -2063,6 +2063,7 @@ class CdpClient {
       timer: NodeJS.Timeout;
     }
   >();
+  private closedHandler?: () => void;
 
   public constructor(private readonly target: BrowserTarget) {}
 
@@ -2091,11 +2092,10 @@ class CdpClient {
         reject(new Error(`BROWSER_CDP_ERROR: ${error.message}`));
         this.rejectAll(new Error(`BROWSER_CDP_ERROR: ${error.message}`));
       });
-      socket.once("close", () =>
-        this.rejectAll(
-          new Error("BROWSER_TARGET_GONE: CDP target connection closed"),
-        ),
-      );
+      socket.once("close", () => {
+        this.rejectAll(new Error("BROWSER_TARGET_GONE: CDP target connection closed"));
+        this.closedHandler?.();
+      });
     });
   }
 
@@ -2128,7 +2128,10 @@ class CdpClient {
   public close(): void {
     this.socket?.close();
     this.socket = undefined;
+    this.closedHandler?.();
   }
+
+  public onClosed(handler: () => void): void { this.closedHandler = handler; }
 
   private handleMessage(payload: string): void {
     let message: CdpMessage;
@@ -2165,16 +2168,69 @@ class CdpClient {
   }
 }
 
+interface CachedCdpConnection {
+  client: CdpClient;
+  connecting?: Promise<CdpClient>;
+  idleTimer?: NodeJS.Timeout;
+  lastUsed: number;
+  queue: Promise<void>;
+}
+const cdpConnections = new Map<string, CachedCdpConnection>();
+const MAX_CDP_CONNECTIONS = 8;
+const CDP_IDLE_MS = 15_000;
+
 async function withCdpClient<T>(
   target: BrowserTarget,
   work: (client: CdpClient) => Promise<T>,
 ): Promise<T> {
-  const client = new CdpClient(target);
-  await client.connect();
+  const socketUrl = target.webSocketDebuggerUrl;
+  if (!socketUrl) throw new Error("BROWSER_TARGET_NO_WEBSOCKET: target has no CDP endpoint");
+  const key = `${target.id}\0${socketUrl}`;
+  for (const [oldKey, old] of cdpConnections) {
+    if (oldKey.startsWith(`${target.id}\0`) && oldKey !== key) {
+      cdpConnections.delete(oldKey);
+      if (old.idleTimer) clearTimeout(old.idleTimer);
+      old.client.close();
+    }
+  }
+  let entry = cdpConnections.get(key);
+  if (!entry) {
+    const client = new CdpClient(target);
+    entry = { client, lastUsed: Date.now(), queue: Promise.resolve() };
+    const current = entry;
+    client.onClosed(() => {
+      if (cdpConnections.get(key) === current) cdpConnections.delete(key);
+      if (current.idleTimer) clearTimeout(current.idleTimer);
+    });
+    entry.connecting = client.connect().then(() => client).catch((error: unknown) => {
+      if (cdpConnections.get(key) === current) cdpConnections.delete(key);
+      throw error;
+    });
+    cdpConnections.set(key, entry);
+    while (cdpConnections.size > MAX_CDP_CONNECTIONS) {
+      const oldest = [...cdpConnections.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed)[0];
+      if (!oldest) break;
+      cdpConnections.delete(oldest[0]);
+      if (oldest[1].idleTimer) clearTimeout(oldest[1].idleTimer);
+      oldest[1].client.close();
+    }
+  }
+  if (entry.idleTimer) clearTimeout(entry.idleTimer);
+  const client = entry.connecting ? await entry.connecting : entry.client;
+  entry.connecting = undefined;
+  entry.lastUsed = Date.now();
+  const operation = entry.queue.then(() => work(client));
+  entry.queue = operation.then(() => undefined, () => undefined);
   try {
-    return await work(client);
+    return await operation;
   } finally {
-    client.close();
+    entry.lastUsed = Date.now();
+    entry.idleTimer = setTimeout(() => {
+      if (cdpConnections.get(key) !== entry) return;
+      cdpConnections.delete(key);
+      client.close();
+    }, CDP_IDLE_MS);
+    entry.idleTimer.unref();
   }
 }
 

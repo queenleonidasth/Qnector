@@ -1883,6 +1883,7 @@ describe("Qnector grouped tools", () => {
 
   it("captures browser screenshots and bounded DOM diagnostics over one CDP session", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-browser-dom-"));
+    let cdpConnections = 0;
     browserWebSocketServer = new WebSocketServer({
       host: "127.0.0.1",
       port: 0,
@@ -1894,6 +1895,7 @@ describe("Qnector grouped tools", () => {
     const wsPort =
       typeof wsAddress === "object" && wsAddress ? wsAddress.port : 0;
     browserWebSocketServer.on("connection", (socket) => {
+      cdpConnections += 1;
       socket.on("message", (payload) => {
         const request = JSON.parse(payload.toString()) as {
           id: number;
@@ -2117,6 +2119,7 @@ describe("Qnector grouped tools", () => {
     expect(snapshot.ok).toBe(true);
     expect(JSON.stringify(snapshot)).toContain('"tag":"button"');
     expect(JSON.stringify(snapshot)).toContain('"id":"save"');
+    const connectionsAfterSnapshot = cdpConnections;
 
     const queried = await registry.call("browser", context, {
       action: "query",
@@ -2128,6 +2131,7 @@ describe("Qnector grouped tools", () => {
     expect(queried.ok).toBe(true);
     expect(JSON.stringify(queried)).toContain('"nodeId":42');
     expect(JSON.stringify(queried)).toContain('"text":"Save"');
+    expect(cdpConnections).toBe(connectionsAfterSnapshot);
 
     const inspected = await registry.call("browser", context, {
       action: "inspect",
@@ -2203,6 +2207,7 @@ describe("Qnector grouped tools", () => {
     expect(JSON.stringify(performance)).not.toContain('"Frames":1');
     expect(JSON.stringify(performance)).toContain("first-paint");
     expect(JSON.stringify(performance)).toContain('"duration":123.4');
+    expect(cdpConnections).toBeLessThan(5);
   });
 
   it("allows normal web page targets while keeping the DevTools endpoint local", async () => {
