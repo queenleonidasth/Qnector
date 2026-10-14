@@ -1,0 +1,31 @@
+{
+  "commit": "3ed229ab23dcf289bc4d3dd50ca69f6eca31fd17",
+  "node": "v24.20.0",
+  "platform": "win32",
+  "featureFlag": "QNECTOR_PROCESS_RUN_WORKER_POOL=1",
+  "correctnessOracle": "exact fixture marker, exitCode 0, complete stdout",
+  "warm": {
+    "baseline": {
+      "n": 30,
+      "medianMs": 1191,
+      "p95Ms": 1206
+    },
+    "candidate": {
+      "n": 30,
+      "medianMs": 2,
+      "p95Ms": 3
+    }
+  },
+  "cold": {
+    "baseline": {
+      "n": 10,
+      "medianMs": 1190,
+      "p95Ms": 1285
+    },
+    "candidate": {
+      "n": 10,
+      "medianMs": 1191,
+      "p95Ms": 1207
+    }
+  }
+}

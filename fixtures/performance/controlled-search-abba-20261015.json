@@ -1,0 +1,476 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "semantic-search-actual-baseline-vs-candidate",
+  "createdAt": "2026-10-14T18:43:07.175Z",
+  "baseline": {
+    "root": "D:\\Projects\\Qnector-PlanMode2",
+    "revision": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6"
+  },
+  "candidate": {
+    "root": "D:\\Projects\\Qnector-Performance-20261014-r4",
+    "revision": "3ed229ab23dcf289bc4d3dd50ca69f6eca31fd17"
+  },
+  "platform": "win32",
+  "node": "v24.20.0",
+  "freeMemoryBytes": 26180300800,
+  "warmupRounds": 5,
+  "samplesPerVariant": 30,
+  "coldIndexSamplesPerVariant": 10,
+  "hostClientGap": "UNKNOWN",
+  "coldProcessStarts": "UNKNOWN",
+  "limitations": "Same-process source-module comparison of actual semantic search under synthetic local read-only fixtures. Cold index means a fresh search service, NOT cold process or OS disk cache. No host/model/network, interactive UI, documents or package performance is inferred.",
+  "cases": [
+    {
+      "files": 20,
+      "oracleSha256": "718bd3348187ffc54266cb90f07098d4ed204b5a8a4aa874135480e04cd9bf6e",
+      "correctness": "PASS",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 0.5361000000000331,
+            "p95Ms": 0.7971000000000004,
+            "medianConfidence95Ms": [
+              0.4802999999999997,
+              0.5676000000000272
+            ],
+            "p95Confidence95Ms": [
+              0.6758000000000379,
+              0.8232999999999606
+            ],
+            "minMs": 0.42910000000000537,
+            "maxMs": 0.8232999999999606,
+            "meanMs": 0.5606333333333376
+          },
+          "cpuUserUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 15000,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ],
+            "minMs": 0,
+            "maxMs": 16000,
+            "meanMs": 1033.3333333333333
+          },
+          "cpuSystemUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 85569536,
+          "readFiles": [
+            0
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 0.5178999999999974,
+            "p95Ms": 0.6632000000000176,
+            "medianConfidence95Ms": [
+              0.49279999999998836,
+              0.5701000000000249
+            ],
+            "p95Confidence95Ms": [
+              0.6168999999999869,
+              0.7008999999999901
+            ],
+            "minMs": 0.4416999999999689,
+            "maxMs": 0.7008999999999901,
+            "meanMs": 0.5423033333333346
+          },
+          "cpuUserUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              15000
+            ],
+            "minMs": 0,
+            "maxMs": 15000,
+            "meanMs": 500
+          },
+          "cpuSystemUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 85745664,
+          "readFiles": [
+            0
+          ]
+        }
+      },
+      "coldIndex": {
+        "baseline": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 1.6182000000000016,
+            "p95Ms": 2.2293999999999983,
+            "medianConfidence95Ms": [
+              1.5274,
+              2.1359999999999673
+            ],
+            "p95Confidence95Ms": [
+              2.0182000000000357,
+              2.2293999999999983
+            ],
+            "minMs": 1.4168999999999983,
+            "maxMs": 2.2293999999999983,
+            "meanMs": 1.8061499999999966
+          },
+          "cpuUserUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ],
+            "minMs": 0,
+            "maxMs": 16000,
+            "meanMs": 1600
+          },
+          "cpuSystemUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 86450176,
+          "readFiles": [
+            20
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 1.6433000000000106,
+            "p95Ms": 2.4610000000000127,
+            "medianConfidence95Ms": [
+              1.5194999999999936,
+              2.3851000000000226
+            ],
+            "p95Confidence95Ms": [
+              2.0037000000000376,
+              2.4610000000000127
+            ],
+            "minMs": 1.5161999999999694,
+            "maxMs": 2.4610000000000127,
+            "meanMs": 1.8745400000000074
+          },
+          "cpuUserUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ],
+            "minMs": 0,
+            "maxMs": 16000,
+            "meanMs": 1600
+          },
+          "cpuSystemUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 86085632,
+          "readFiles": [
+            20
+          ]
+        }
+      }
+    },
+    {
+      "files": 100,
+      "oracleSha256": "95809850b65e88cf0559ed2bdcb241a2918b1a548c65e1c982fc558d2208c745",
+      "correctness": "PASS",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 1.4769000000000005,
+            "p95Ms": 2.3233000000000175,
+            "medianConfidence95Ms": [
+              1.3473999999999933,
+              1.6117000000000417
+            ],
+            "p95Confidence95Ms": [
+              1.7373999999999796,
+              3.064200000000028
+            ],
+            "minMs": 1.2092000000000098,
+            "maxMs": 3.064200000000028,
+            "meanMs": 1.5590866666666707
+          },
+          "cpuUserUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ],
+            "minMs": 0,
+            "maxMs": 16000,
+            "meanMs": 2100
+          },
+          "cpuSystemUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 90238976,
+          "readFiles": [
+            0
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 1.4000999999999522,
+            "p95Ms": 1.992399999999975,
+            "medianConfidence95Ms": [
+              1.369100000000003,
+              1.4496000000000322
+            ],
+            "p95Confidence95Ms": [
+              1.5306999999999675,
+              2.6035000000000537
+            ],
+            "minMs": 1.1023000000000138,
+            "maxMs": 2.6035000000000537,
+            "meanMs": 1.466353333333321
+          },
+          "cpuUserUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 15000,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ],
+            "minMs": 0,
+            "maxMs": 16000,
+            "meanMs": 1033.3333333333333
+          },
+          "cpuSystemUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 89518080,
+          "readFiles": [
+            0
+          ]
+        }
+      },
+      "coldIndex": {
+        "baseline": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 6.8933000000000675,
+            "p95Ms": 8.145399999999995,
+            "medianConfidence95Ms": [
+              6.599100000000021,
+              7.719400000000064
+            ],
+            "p95Confidence95Ms": [
+              7.458900000000085,
+              8.145399999999995
+            ],
+            "minMs": 6.171199999999999,
+            "maxMs": 8.145399999999995,
+            "meanMs": 7.136620000000005
+          },
+          "cpuUserUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "medianConfidence95Ms": [
+              0,
+              16000
+            ],
+            "p95Confidence95Ms": [
+              15000,
+              16000
+            ],
+            "minMs": 0,
+            "maxMs": 16000,
+            "meanMs": 7800
+          },
+          "cpuSystemUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 97583104,
+          "readFiles": [
+            100
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 6.576900000000023,
+            "p95Ms": 8.351800000000026,
+            "medianConfidence95Ms": [
+              6.168999999999983,
+              7.32669999999996
+            ],
+            "p95Confidence95Ms": [
+              7.12360000000001,
+              8.351800000000026
+            ],
+            "minMs": 5.977399999999989,
+            "maxMs": 8.351800000000026,
+            "meanMs": 6.894589999999994
+          },
+          "cpuUserUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "medianConfidence95Ms": [
+              0,
+              15000
+            ],
+            "p95Confidence95Ms": [
+              15000,
+              16000
+            ],
+            "minMs": 0,
+            "maxMs": 16000,
+            "meanMs": 6200
+          },
+          "cpuSystemUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "medianConfidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ],
+            "minMs": 0,
+            "maxMs": 0,
+            "meanMs": 0
+          },
+          "peakRssBytes": 98844672,
+          "readFiles": [
+            100
+          ]
+        }
+      }
+    }
+  ],
+  "releaseEligible": false,
+  "note": "Workload subset only. Full Task12 ABBA, client-host timings, and cold PROCESS startups remain unverified."
+}
