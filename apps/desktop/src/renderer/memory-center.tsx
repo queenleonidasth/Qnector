@@ -307,8 +307,15 @@ export function MemoryCenter({
             No saved session topic for this workspace yet.
           </p>
         )}
+        {memory?.v2?.freshness && (
+          <p className="memory-center-note" data-testid="memory-freshness">
+            Tool events: {formatTime(memory.v2.freshness.toolEventsAt ?? undefined)}
+            {" · "}Saved facts: {formatTime(memory.v2.freshness.semanticFactsAt ?? undefined)}
+            {" · "}Explicit chat excerpts: {formatTime(memory.v2.freshness.conversationTurnsAt ?? undefined)}
+          </p>
+        )}
         <p className="memory-center-disclaimer">
-          QNECTOR stores task context, not the words spoken in ChatGPT.
+          QNECTOR stores task/tool context. Chat words are saved only when the user explicitly opts in to recording a specific excerpt; ordinary ChatGPT messages are not captured automatically.
         </p>
         {memory && (
           <details className="memory-center-optional">

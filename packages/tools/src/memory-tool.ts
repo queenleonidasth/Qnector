@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   MemoryActiveState,
   MemoryCategory,
@@ -7,6 +8,7 @@ import type {
 import type { MemoryStore } from "@qnector/core";
 import {
   booleanInput,
+  getMemoryJournalHealth,
   numberInput,
   objectInput,
   runWithActivity,
@@ -19,7 +21,7 @@ const categories: MemoryCategory[] = ["fact", "decision", "rule", "note"];
 export const memoryDefinition: ToolDefinition = {
   name: "memory",
   description:
-    "Persist and recall local Qnector workspace context across chat sessions. recall can rank facts by an optional query; working_set combines the active task, relevant facts, latest checkpoint, recent files/commands/errors and a resume hint. Save checkpoints, project facts, decisions and rules; compact or clear only the active workspace memory. Memory is local-only and secrets are best-effort redacted before persistence.",
+    "Local Qnector task memory, separate from ChatGPT Memory. working_set is a compact task brief by default; details=true returns extended diagnostics. record_turn explicitly stores a user-authorized conversation excerpt, not a passive ChatGPT transcript. Data is local and best-effort redacted.",
   inputSchema: {
     type: "object",
     properties: {
@@ -28,6 +30,8 @@ export const memoryDefinition: ToolDefinition = {
         enum: [
           "recall",
           "working_set",
+          "health",
+          "record_turn",
           "save_checkpoint",
           "note",
           "list",
@@ -71,6 +75,12 @@ export const memoryDefinition: ToolDefinition = {
       tags: { type: "array", items: { type: "string" } },
       id: { type: "string" },
       query: { type: "string" },
+      details: { type: "boolean", description: "Opt in to verbose working set with process and command history." },
+      sinceRevision: { type: "string", description: "Last working_set revision. Returns a minimal unchanged response if context has not changed." },
+      turnId: { type: "string", description: "Caller-stable ID for explicit conversation turn deduplication." },
+      role: { type: "string", enum: ["user", "assistant"] },
+      consent: { type: "boolean", description: "Must be true: caller explicitly authorizes storing this excerpt locally." },
+      text: { type: "string", description: "User-authorized message excerpt; Qnector cannot passively capture ChatGPT messages." },
       limit: { type: "integer", minimum: 1 },
       cursor: { type: "integer", minimum: 0 },
       checkpointLimit: { type: "integer", minimum: 1 },
@@ -148,7 +158,7 @@ export async function executeMemory(
           ? { taskId: context.memoryTaskId ?? stringInput(object, "taskId") }
           : {}),
       });
-      const sessionId = stringInput(object, "sessionId");
+      const sessionId = context.hostChatSessionId ?? stringInput(object, "sessionId");
       if (sessionId) context.memoryV2.bindSession(sessionId, task.id);
       return {
         summary: `Started Memory v2 task '${task.title}'`,
@@ -165,9 +175,9 @@ export async function executeMemory(
       if (!context.memoryV2)
         throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
       const resumed = context.memoryV2.resumeTask(stringInput(object, "query"));
-      if (resumed.task && stringInput(object, "sessionId"))
+      if (resumed.task && (context.hostChatSessionId || stringInput(object, "sessionId")))
         context.memoryV2.bindSession(
-          stringInput(object, "sessionId")!,
+          context.hostChatSessionId ?? stringInput(object, "sessionId")!,
           resumed.task.id,
         );
       return {
@@ -322,8 +332,43 @@ export async function executeMemory(
       };
     }
 
+    if (action === "health") {
+      const snapshot = context.memoryV2?.snapshot({eventLimit: 1, taskLimit: 1, memoryLimit: 1});
+      return {
+        summary: "Qnector local Memory capture diagnostics",
+        data: { journal: getMemoryJournalHealth(), freshness: snapshot?.freshness ?? null,
+          counts: snapshot?.counts ?? null, capture: "tool-driven; not passive ChatGPT transcript" },
+      };
+    }
+
     if (action === "working_set")
-      return workingSetAction(context, memory, stringInput(object, "query"));
+      return workingSetAction(context, memory, stringInput(object, "query"), booleanInput(object, "details", false), stringInput(object, "sinceRevision"));
+
+    if (action === "record_turn") {
+      if (!context.memoryV2) throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
+      if (!booleanInput(object, "consent", false))
+        throw new Error("MEMORY_TURN_CONSENT_REQUIRED: explicitly opt in to saving this excerpt");
+      const role = stringInput(object, "role", true)!;
+      if (role !== "user" && role !== "assistant")
+        throw new Error("INVALID_INPUT: role must be user or assistant");
+      const turnId = stringInput(object, "turnId", true)!;
+      const turnText = stringInput(object, "text", true)!;
+      if (!turnText.trim() || turnId.length > 200 || turnText.length > 2_000)
+        throw new Error("INVALID_INPUT: turnId must be <=200 chars and text 1..2000 chars");
+      const event = context.memoryV2.recordToolEvent({
+        ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
+        source: "conversation", action: "explicit-turn", status: "success",
+        summary: role + ": " + turnText,
+        metadata: { role, capture: "explicit-opt-in" },
+        dedupeKey: "turn:" + role + ":" + turnId,
+      });
+      if (!event) throw new Error("MEMORY_TURN_NOT_PERSISTED: conversation event was not saved");
+      return {
+        summary: "Saved user-authorized Qnector conversation excerpt locally",
+        data: { eventId: event.id, taskId: event.taskId, persisted: true,
+          timestamp: event.timestamp, capture: "explicit-opt-in-only" },
+      };
+    }
 
     if (action === "save_checkpoint") {
       const active = {
@@ -494,11 +539,92 @@ export async function executeMemory(
   });
 }
 
+/** Fast task-scoped context. Verbose diagnostic data stays local unless requested. */
+async function compactWorkingSetAction(
+  context: ToolContext,
+  memory: MemoryStore,
+  query?: string,
+  sinceRevision?: string,
+) {
+  const recall = await memory.recall({
+    checkpointLimit: 1, factLimit: 6, changeLimit: 2,
+    ...(query ? { query } : {}),
+  });
+  const task = context.memoryTaskId
+    ? context.memoryV2?.getTask(context.memoryTaskId) : null;
+  const v2 = context.memoryV2?.snapshot({
+    ...(task ? { taskId: task.id } : {}),
+    eventLimit: 3, taskLimit: 1, memoryLimit: 6,
+  });
+  const source = task ?? recall.state.active;
+  const active = source ? {
+    currentTask: briefText(source.currentTask, 230),
+    pendingSteps: source.pendingSteps.slice(0, 3).map(x => briefText(x, 150)),
+    completedSteps: source.completedSteps.slice(-2).map(x => briefText(x, 140)),
+    criticalContext: briefText(source.criticalContext, 330),
+  } : null;
+  const activity = context.activity.list()
+    .filter(e => e.status !== "running" && (!task || e.taskId === task.id))
+    .slice(-30).reverse();
+  const recentErrors = activity.filter(e => e.status === "error").slice(0, 2)
+    .map(e => ({ action: e.tool + "." + e.action,
+      error: briefText(e.error?.message ?? e.summary ?? "", 150) }));
+  const relevantFacts = (v2?.memories.length ? v2.memories : recall.state.facts)
+    .slice(0, 5).map(fact => ({
+      key: briefText(fact.key, 90),
+      category: fact.category,
+      value: briefText(fact.value, 180),
+    }));
+  const recentEvents = (v2?.events ?? []).map(event => ({
+    timestamp: event.timestamp,
+    action: briefText(event.source + "." + event.action, 70),
+    status: event.status,
+    summary: briefText(event.summary, 150),
+  }));
+  const data = {
+    mode: "compact",
+    workspace: briefText(context.getConfig().activeWorkspace, 180),
+    generatedAt: new Date().toISOString(),
+    ...(task ? { taskId: task.id } : {}),
+    active,
+    relevantFacts,
+    latestCheckpoint: recall.checkpoints[0] ?
+      { id: recall.checkpoints[0].id, createdAt: recall.checkpoints[0].createdAt } : null,
+    recentEvents,
+    recentErrors,
+    resumeHint: briefText(buildResumeHint(active, recentErrors), 185),
+    memoryStatus: {
+      eventUpdatedAt: task?.lastEventAt ?? null,
+      semanticFacts: v2?.counts.memories ?? recall.state.facts.length,
+      capture: "explicit-tool-events-only",
+    },
+    hint: "Use working_set details=true or memory.task_get / memory.recall for deeper history.",
+  };
+  const revision = createHash("sha256").update(JSON.stringify({
+    active: data.active, facts: data.relevantFacts, events: data.recentEvents,
+    errors: data.recentErrors, checkpoint: data.latestCheckpoint,
+  })).digest("hex").slice(0, 16);
+  if (sinceRevision && sinceRevision === revision)
+    return { summary: "Qnector task context unchanged", data: {
+      mode: "delta", revision, unchanged: true, taskId: task?.id ?? null,
+      hint: "Reuse previously received task context; no change to hydrate.",
+    } };
+  return { summary: "Prepared compact Qnector task working set", data: { ...data, revision } };
+}
+
+function briefText(value: string, limit: number): string {
+  const safe = value.replace(/\s+/g, " ").trim();
+  return safe.length <= limit ? safe : safe.slice(0, limit - 1) + "…";
+}
+
 async function workingSetAction(
   context: ToolContext,
   memory: MemoryStore,
   explicitQuery?: string,
+  details = false,
+  sinceRevision?: string,
 ) {
+  if (!details) return compactWorkingSetAction(context, memory, explicitQuery, sinceRevision);
   const baseRecall = await memory.recall({
     checkpointLimit: 1,
     factLimit: 8,

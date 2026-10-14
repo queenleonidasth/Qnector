@@ -30,9 +30,9 @@ const READ_ONLY_ACTIONS: Record<string, ReadonlySet<string>> = {
     "which", "search_files", "env", "clipboard_read", "screen_capture", "window_list",
   ]),
   memory: new Set([
-    "recall", "working_set", "list", "get", "v2_snapshot", "v2_inventory",
+    "recall", "working_set", "health", "list", "get", "v2_snapshot", "v2_inventory",
     "task_start", "task_resume", "task_list", "task_get", "task_update",
-    "task_complete", "task_bind_session", "save_checkpoint", "note", "set",
+    "task_complete", "task_bind_session", "save_checkpoint", "note", "set", "record_turn",
   ]),
   tasks: new Set(["get", "list", "wait", "output", "result", "inspect", "doctor", "overview", "lookup"]),
   mode: new Set(["get", "begin", "update", "back_to_plan", "step", "approve"]),

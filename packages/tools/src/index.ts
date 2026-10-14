@@ -56,7 +56,10 @@ export class ToolRegistry {
     context: ToolContext,
     input: unknown,
   ): Promise<ToolResult> {
-    const memoryTaskId = memoryTaskIdFromInput(input) ?? context.memoryTaskId;
+    const startingNewTask = name === "memory" && !!input && typeof input === "object" && (input as { action?: unknown }).action === "task_start";
+    const linkedTask = !startingNewTask && context.hostChatSessionId
+      ? context.memoryV2?.taskForSession(context.hostChatSessionId) : undefined;
+    const memoryTaskId = memoryTaskIdFromInput(input) ?? context.memoryTaskId ?? linkedTask ?? undefined;
     const skillRouteId = skillRouteIdFromInput(input);
     // Direct tools are the default. Only explicit skill_get / skills_route calls
     // activate Skills; existing task/session/route handles preserve their trace.

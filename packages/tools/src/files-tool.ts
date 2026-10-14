@@ -968,14 +968,18 @@ function applyUnifiedFilePatch(current: string, patchLines: string[]): string {
   const output: string[] = [];
   let sourceIndex = 0;
   let index = 0;
+  let matchedHunk = false;
   while (index < patchLines.length) {
     const header = patchLines[index]!.match(
       /^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@/,
     );
     if (!header) {
+      if (patchLines[index]!.startsWith("@@"))
+        throw new Error("INVALID_PATCH: Update has malformed unified hunk header");
       index += 1;
       continue;
     }
+    matchedHunk = true;
     const start = Math.max(0, Number(header[1]) - 1);
     while (sourceIndex < start) output.push(original[sourceIndex++]!);
     index += 1;
@@ -999,6 +1003,8 @@ function applyUnifiedFilePatch(current: string, patchLines: string[]): string {
       index += 1;
     }
   }
+  if (!matchedHunk)
+    throw new Error("INVALID_PATCH: Update requires a valid unified @@ -old,+new hunk");
   while (sourceIndex < original.length) output.push(original[sourceIndex++]!);
   return `${output.join("\n")}${output.length ? "\n" : ""}`;
 }

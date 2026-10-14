@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -38,6 +38,8 @@ export interface MemoryV2RecordInput {
   paths?: string[];
   metadata?: Record<string, unknown>;
   workspaceEvidence?: string[];
+  /** Optional caller-stable idempotency key; only its scoped hash is persisted. */
+  dedupeKey?: string;
 }
 
 export interface MemoryTaskStartInput {
@@ -372,8 +374,16 @@ export class MemoryV2Store {
       return null;
     const taskId = this.resolveTaskId(input.taskId);
     const now = new Date().toISOString();
+    const eventId = input.dedupeKey
+      ? `event_${createHash("sha256").update([this.workspaceId, taskId, input.dedupeKey].join(":")).digest("hex").slice(0, 40)}`
+      : `event_${randomUUID()}`;
+    if (input.dedupeKey) {
+      const found = this.db.prepare("SELECT * FROM events WHERE id=? AND workspace_id=?")
+        .get(eventId, this.workspaceId) as EventRow | undefined;
+      if (found) return eventFromRow(found);
+    }
     const event: MemoryV2Event = {
-      id: `event_${randomUUID()}`,
+      id: eventId,
       workspaceId: this.workspaceId,
       taskId,
       timestamp: now,
@@ -697,6 +707,20 @@ export class MemoryV2Store {
     const events = eventRows.map(eventFromRow);
     const memories = this.listMemories(taskId, options.memoryLimit ?? 100);
     const conflicts = detectConflicts(tasks);
+    const eventTimes = this.db.prepare(
+      `SELECT MAX(timestamp) AS last_event,
+        MAX(CASE WHEN source='conversation' AND action='explicit-turn' THEN timestamp END) AS last_turn
+        FROM events WHERE workspace_id=? AND (? IS NULL OR task_id=?)`,
+    ).get(this.workspaceId, taskId ?? null, taskId ?? null) as { last_event: string | null; last_turn: string | null };
+    const factTimes = this.db.prepare(
+      `SELECT MAX(updated_at) AS last_fact FROM memories
+       WHERE workspace_id=? AND (? IS NULL OR task_id IS NULL OR task_id=?)`,
+    ).get(this.workspaceId, taskId ?? null, taskId ?? null) as { last_fact: string | null };
+    const freshness = {
+      toolEventsAt: eventTimes.last_event ?? null,
+      semanticFactsAt: factTimes.last_fact ?? null,
+      conversationTurnsAt: eventTimes.last_turn ?? null,
+    };
     // A linked session provides a topic, never the actual ChatGPT messages.
     const lastSessionRow = this.db
       .prepare(
@@ -723,6 +747,7 @@ export class MemoryV2Store {
       workspacePath: this.workspacePath,
       updatedAt,
       revision: this.revision,
+      freshness,
       tasks,
       events,
       lastSession: lastSessionRow

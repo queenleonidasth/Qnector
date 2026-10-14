@@ -14,7 +14,7 @@ async function rpc(port:number,method:string,params:Record<string,unknown>={}) {
  const res=await fetch("http://127.0.0.1:"+port+"/mcp",{method:"POST",headers:{"content-type":"application/json",accept:"application/json,text/event-stream"},
   body:JSON.stringify({jsonrpc:"2.0",id:100,method,params})});
  const body=await res.text(),data=body.split(/\r?\n/).find(l=>l.startsWith("data:"));
- return (data?JSON.parse(data.slice(5).trim()):JSON.parse(body)) as {result?:{structuredContent?:{ok:boolean;error?:{code:string};data?:{data?:Record<string,unknown>}};tools?:Array<{name:string}>}};
+ return (data?JSON.parse(data.slice(5).trim()):JSON.parse(body)) as {result?:{structuredContent?:{ok:boolean;error?:{code:string};data?:{data?:Record<string,unknown>}};tools?:Array<{name:string;inputSchema?:{properties?:{action?:{enum?:string[]}}}}> }};
 }
 async function call(port:number,name:string,args:Record<string,unknown>){return (await rpc(port,"tools/call",{name,arguments:args})).result?.structuredContent;}
 async function setup(withSkills=true){
@@ -32,6 +32,13 @@ async function setup(withSkills=true){
 const design="A secure, accessible webshop with products, checkout, clear pricing and shipping details for target customers.";
 const implementationPlan="Implement catalog and checkout with tests first, verify order/payment lifecycle, run security audit and document rollback.";
 describe("ChatGPT Q&A and final panel MCP boundary",()=>{
+ it("advertises the full Plan interview actions in the live MCP descriptor",async()=>{
+   const {port}=await setup();
+   const result=await rpc(port,"tools/list");
+   const mode=result.result?.tools?.find(t=>t.name==="mode");
+   expect(mode).toBeDefined();
+   expect(mode?.inputSchema?.properties?.action?.enum).toEqual(expect.arrayContaining(["begin","ask","resolve","finalize","get"]));
+ });
  it("loads Superpowers and refuses panel/approval until decisions and full plan complete",async()=>{
   const {port,task}=await setup();const input={memoryTaskId:task};
   const begin=await call(port,"mode",{...input,action:"begin",title:"Store",summary:"Discuss first",steps:["Build","Test"]});

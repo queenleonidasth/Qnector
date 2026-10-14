@@ -8,10 +8,10 @@ import { planScopeForCall } from "./plan-guard.js";
 const REQUIRED_SUPERPOWERS = ["using-superpowers","brainstorming","writing-plans"] as const;
 
 /** Use only the three allowlisted user-installed local skills. Never auto-install remote code. */
-async function loadPlanSuperpowers(context: ToolContext) {
+async function loadPlanSuperpowers(context: ToolContext, includeInstructions = true) {
   if (!context.agentSkills)
     throw new Error("PLAN_SUPERPOWERS_MISSING: Qnector Agent Skills service unavailable.");
-  const skills: Array<{name:string;instructions:string;origin:string}> = [];
+  const skills: Array<{name:string;instructions?:string;origin:string}> = [];
   for(const name of REQUIRED_SUPERPOWERS){
     let skill: Awaited<ReturnType<NonNullable<ToolContext["agentSkills"]>["get"]>>;
     try{skill=await context.agentSkills.get(name);}catch{
@@ -23,7 +23,7 @@ async function loadPlanSuperpowers(context: ToolContext) {
       throw new Error("PLAN_SUPERPOWERS_MISSING: Wrong skill origin for "+name+"; expected "+expected);
     if(skill.enabled===false || !skill.instructions?.trim())
       throw new Error("PLAN_SUPERPOWERS_MISSING: Skill "+name+" is disabled or empty.");
-    skills.push({name,origin:origin??skill.source,instructions:skill.instructions.slice(0,12_000)});
+    skills.push({name,origin:origin??skill.source,...(includeInstructions ? {instructions:skill.instructions.slice(0,12_000)} : {})});
   }
   return{status:"loaded" as const,skills,
     workflow:"ChatGPT: discuss ONE human decision at a time. Record with mode.ask, await reply and mode.resolve. " +
@@ -64,7 +64,8 @@ export async function executeMode(context:ToolContext,input:unknown):Promise<Too
   const store=context.planActStore;
   if(action==="get"){
    const state=await store.get(scopeId,workspace);
-   const superpowers=state.mode==="plan"?await loadPlanSuperpowers(context):undefined;
+   // Routine status must not re-send 24K of skill instructions.
+   const superpowers=state.mode==="plan"?await loadPlanSuperpowers(context,false):undefined;
    return{summary:state.plan?"Task "+state.mode+" Mode, revision "+state.plan.revision:
      "Task defaults to Act Mode (no plan saved)",data:{...state,...(superpowers?{superpowers}:{}),scoped:!!scopeId}};
   }
@@ -77,7 +78,7 @@ export async function executeMode(context:ToolContext,input:unknown):Promise<Too
    // Make the read-only guard active before loading skill files.
    const superpowers=await loadPlanSuperpowers(context);
    return{summary:"Plan Mode active, revision "+state.plan?.revision+
-    ". Local Superpowers loaded; ask ONE substantive question in ChatGPT.",data:{...state,superpowers}};
+    ". Superpowers loaded. NEXT: call mode.ask, ask ONE substantive question in ChatGPT, and wait for its answer.",data:{...state,superpowers,requiredNextAction:"mode.ask"}};
   }
   if(action==="update"){
    if(object.steps!==undefined&&(!Array.isArray(object.steps)||!object.steps.every(x=>typeof x==="string")))
@@ -103,7 +104,7 @@ export async function executeMode(context:ToolContext,input:unknown):Promise<Too
    return{summary:"Decision recorded. Ask further questions only if important choices remain.",data:state};
   }
   if(action==="finalize"){
-   const superpowers=await loadPlanSuperpowers(context);
+   const superpowers=await loadPlanSuperpowers(context,false);
    const state=await store.finalize(scopeId,stringInput(object,"design",true)!,
     stringInput(object,"implementationPlan",true)!);
    return{summary:"Full design and implementation finalized, revision "+state.plan?.revision+

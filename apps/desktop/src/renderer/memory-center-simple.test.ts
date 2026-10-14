@@ -64,7 +64,7 @@ describe("simplified Memory Center", () => {
     expect(html).toContain("Discussed deployment steps");
     expect(html).toContain("Most recently linked session");
     expect(html).toContain(
-      "QNECTOR stores task context, not the words spoken in ChatGPT",
+      "QNECTOR stores task/tool context. Chat words are saved only when the user explicitly opts in",
     );
     expect(html).toContain("Saved task context: Review updater");
   });

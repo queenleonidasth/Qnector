@@ -107,7 +107,7 @@ describe("Qnector MCP runtime", () => {
     );
     expect(
       initialized.response.headers.get("x-qnector-schema-revision"),
-    ).toContain("capability-recovery-v4");
+    ).toContain("capability-recovery-v5");
     expect(initialized.response.headers.get("x-qnector-capability")).toBe(
       "live",
     );
@@ -230,7 +230,7 @@ describe("Qnector MCP runtime", () => {
         )?.memoryTaskId,
       ).toBeTruthy();
       expect(advertised?._meta?.["qnector/schemaRevision"]).toContain(
-        "capability-recovery-v4",
+        "capability-recovery-v5",
       );
       expect(advertised?.title).toBe(`Qnector ${definition.name} (LIVE)`);
       expect(advertised?.description).toContain("QNECTOR IS CALLABLE NOW");

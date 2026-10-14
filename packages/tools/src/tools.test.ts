@@ -21,6 +21,7 @@ import { WindowsFileSearchService } from "../../core/src/file-search.js";
 import { LocalSemanticSearchService } from "../../core/src/semantic-search.js";
 import { defaultConfig } from "../../core/src/config.js";
 import { MemoryStore } from "../../core/src/memory-store.js";
+import { MemoryV2Store } from "../../core/src/memory-v2-store.js";
 import type { PlatformServices } from "../../core/src/platform-services.js";
 import type {
   UiAutomationElement,
@@ -129,6 +130,11 @@ describe("Qnector grouped tools", () => {
       patch: "*** Begin Patch\n*** Add File: added.txt\n+added\n*** End Patch",
     });
     expect(patch.ok).toBe(true);
+    const malformed = await registry.call("files", context, {
+      action: "apply_patch",
+      patch: "*** Begin Patch\n*** Update File: hello.txt\n@@\n-new\n+broken\n*** End Patch",
+    });
+    expect(malformed.error?.code).toBe("INVALID_PATCH");
     expect(await readFile(path.join(root, "hello.txt"), "utf8")).toBe("new\n");
     expect(await readFile(path.join(root, "added.txt"), "utf8")).toBe(
       "added\n",
@@ -1005,6 +1011,65 @@ describe("Qnector grouped tools", () => {
     expect(data.relevantFacts[0]?.key).toBe("Updater behavior");
     expect(data.latestCheckpoint?.id).toMatch(/^checkpoint_/);
     expect(data.resumeHint).toContain("Verify download progress");
+  });
+
+  it("returns a compact scoped working set and explicitly deduplicates authorized chat turns", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-lean-memory-"));
+    const context = makeContext(defaultConfig(root));
+    const v2 = new MemoryV2Store(root, { file: path.join(root, "memory-v2.sqlite") });
+    context.memoryV2 = v2;
+    context.hostChatSessionId = "hashed-host-chat-1";
+    try {
+      const registry = new ToolRegistry();
+      const started = await registry.call("memory", context, {
+        action: "task_start", title: "Improve context speed",
+      });
+      const taskId = ((started.data as { data: { taskId: string } }).data).taskId;
+      const scoped = { ...context, memoryTaskId: taskId };
+      expect(v2.taskForSession("hashed-host-chat-1")).toBe(taskId);
+      await registry.call("memory", context, { action: "note", memoryScope: "task",
+        category: "decision", key: "Host session link", value: "Persist linked task" });
+      expect(v2.snapshot({ taskId }).memories.some(m => m.key === "Host session link")).toBe(true);
+      const blocked = await registry.call("memory", scoped, {
+        action: "record_turn", role: "user", turnId: "turn-1",
+        text: "Keep current behavior while reducing input size.",
+      });
+      expect(blocked.error?.code).toBe("MEMORY_TURN_CONSENT_REQUIRED");
+      const args = { action: "record_turn", role: "user", turnId: "turn-1",
+        text: "Keep current behavior while reducing input size.", consent: true };
+      const saved = await registry.call("memory", scoped, args);
+      const duplicated = await registry.call("memory", scoped, args);
+      expect(saved.ok && duplicated.ok).toBe(true);
+      const eventId = (saved.data as { data: { eventId: string } }).data.eventId;
+      expect((duplicated.data as { data: { eventId: string } }).data.eventId).toBe(eventId);
+      expect(v2.snapshot({ taskId }).events.filter(e => e.source === "conversation")).toHaveLength(1);
+      expect(v2.snapshot({ taskId }).freshness?.conversationTurnsAt).toBeTruthy();
+      await registry.call("memory", scoped, {
+        action: "note", memoryScope: "task", category: "rule",
+        key: "Speed guard", value: "Keep every approved behavior working",
+      });
+      const result = await registry.call("memory", scoped, { action: "working_set" });
+      expect(result.ok).toBe(true);
+      const data = (result.data as { data: Record<string, unknown> }).data;
+      expect(data.mode).toBe("compact");
+      expect(data).not.toHaveProperty("managedProcesses");
+      expect(data).not.toHaveProperty("lastCommands");
+      expect(JSON.stringify(data).length).toBeLessThan(4000);
+      expect(JSON.stringify(data)).toContain("Speed guard");
+      const delta = await registry.call("memory", scoped, {
+        action: "working_set", sinceRevision: data.revision,
+      });
+      const deltaData = (delta.data as { data: Record<string, unknown> }).data;
+      expect(deltaData.mode).toBe("delta");
+      expect(deltaData.unchanged).toBe(true);
+      expect(JSON.stringify(deltaData).length).toBeLessThan(400);
+      const verbose = await registry.call("memory", scoped, { action: "working_set", details: true });
+      expect((verbose.data as { data: Record<string, unknown> }).data).toHaveProperty("managedProcesses");
+      const health = await registry.call("memory", scoped, { action: "health" });
+      expect((health.data as { data: Record<string, unknown> }).data).toHaveProperty("journal");
+    } finally {
+      v2.close();
+    }
   });
 
   it("resolves relative paths and runs a direct command", async () => {

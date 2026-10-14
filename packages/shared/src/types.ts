@@ -198,6 +198,12 @@ export interface MemoryV2Snapshot {
   workspacePath: string;
   updatedAt: string;
   revision: number;
+  /** Separate timestamps prevent treating a tool event as a new memory fact. */
+  freshness?: {
+    toolEventsAt: string | null;
+    semanticFactsAt: string | null;
+    conversationTurnsAt: string | null;
+  };
   tasks: MemoryTask[];
   events: MemoryV2Event[];
   /** Latest explicit session-to-task binding; not a chat transcript. */

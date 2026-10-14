@@ -53,6 +53,8 @@ export interface ToolContext {
   planActStore?: PlanActStore;
   /** Host-provided conversation context, not a model-controlled argument. */
   modeSessionId?: string;
+  /** Hash of trusted openai/session metadata only; absent on unsupported hosts. */
+  hostChatSessionId?: string;
   memoryTaskId?: string;
   skillTraceSessionId?: string;
   abortSignal?: AbortSignal;
@@ -407,6 +409,21 @@ export async function runWithActivity<T>(
   }
 }
 
+export interface MemoryJournalHealth {
+  recorded: number;
+  skippedByWorkspace: number;
+  writeErrors: number;
+  lastErrorAt: string | null;
+  lastErrorType: string | null;
+}
+const memoryJournalHealth: MemoryJournalHealth = {
+  recorded: 0, skippedByWorkspace: 0, writeErrors: 0,
+  lastErrorAt: null, lastErrorType: null,
+};
+export function getMemoryJournalHealth(): MemoryJournalHealth {
+  return { ...memoryJournalHealth };
+}
+
 function recordMemoryV2Event(
   context: ToolContext,
   tool: string,
@@ -427,7 +444,7 @@ function recordMemoryV2Event(
     paths,
   );
   try {
-    context.memoryV2.recordToolEvent({
+    const recorded = context.memoryV2.recordToolEvent({
       ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
       source: tool,
       action,
@@ -436,8 +453,13 @@ function recordMemoryV2Event(
       paths,
       workspaceEvidence,
     });
-  } catch {
-    // Memory v2 continuity metadata must never change a tool result.
+    if (recorded) memoryJournalHealth.recorded++;
+    else memoryJournalHealth.skippedByWorkspace++;
+  } catch (error) {
+    // Preserve the original tool outcome, but expose diagnostic counts.
+    memoryJournalHealth.writeErrors++;
+    memoryJournalHealth.lastErrorAt = new Date().toISOString();
+    memoryJournalHealth.lastErrorType = error instanceof Error ? error.name : "UnknownError";
   }
 }
 

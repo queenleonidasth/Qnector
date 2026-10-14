@@ -24,7 +24,11 @@ describe("Chat-first Plan Mode MCP tool",()=>{
   const data=begin.data as {data:{mode:string;superpowers:{skills:Array<{name:string;instructions:string}>}}};
   expect(data.data.mode).toBe("plan");expect(data.data.superpowers.skills.map(s=>s.name)).toEqual(skillNames);
   expect(data.data.superpowers.skills[1]?.instructions).toContain("Ask before building.");
-  await invoke("get");expect(calls).toEqual([...skillNames,...skillNames]);
+  const inspected=await invoke("get");expect(calls).toEqual([...skillNames,...skillNames]);
+  const compact=(inspected.data as {data:{superpowers:{skills:Array<{name:string;instructions?:string}>}}}).data.superpowers;
+  expect(compact.skills).toHaveLength(3);
+  expect(compact.skills.every(s=>s.instructions===undefined)).toBe(true);
+  expect(JSON.stringify(compact).length).toBeLessThan(1300);
   const q=await invoke("ask",{question:"What product?"});const did=(q.data as {data:{plan:{decisions:Array<{id:string}>}}}).data.plan.decisions[0]!.id;
   await invoke("resolve",{decisionId:did,answer:"Books",decidedBy:"human"});
   await invoke("finalize",{design,implementationPlan});await invoke("approve",{expectedRevision:2});

@@ -75,7 +75,7 @@ const mcpInputSchemaCache = new Map<
   ReturnType<typeof fromJsonSchema>
 >();
 
-const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v4-plan-act-v5-chat-first`;
+const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v5-plan-act-chat-first-lean-memory`;
 const LONG_CONTEXT_TOOL_ANCHOR =
   "QNECTOR IS CALLABLE NOW. If unsure, probe system.status (action=status) before declaring Qnector unavailable.";
 const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
@@ -247,6 +247,7 @@ export class QnectorRuntime {
     skillTraceSessionId?: string,
     abortSignal?: AbortSignal,
     modeSessionId?: string,
+    hostChatSessionId?: string,
   ): ToolContext {
     return {
       workspace: this.workspace,
@@ -269,6 +270,7 @@ export class QnectorRuntime {
       memoryV2: this.memoryV2,
       planActStore: this.planActStore,
       ...(modeSessionId ? { modeSessionId } : {}),
+      ...(hostChatSessionId ? { hostChatSessionId } : {}),
       platform: this.platform,
       activity: this.activity,
       skillTraceStore: this.skillTraceStore,
@@ -474,6 +476,7 @@ export class QnectorRuntime {
                 skillTraceSessionId || undefined,
                 requestContext?.requestInfo?.signal,
                 modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId),
+                modeSessionFromMeta(extra.mcpReq._meta),
               ),
               input,
             ));
