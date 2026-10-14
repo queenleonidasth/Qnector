@@ -228,6 +228,8 @@
       "name": "process",
       "actions": [
         "run",
+        "waitAndCollect",
+        "evidence_read",
         "start",
         "output",
         "stdin",
@@ -252,6 +254,7 @@
         "workflow_get",
         "workflow_start",
         "workflow_run",
+        "workflow_recipe",
         "workflow_wait",
         "workflow_result",
         "workflow_document_batch",
@@ -295,7 +298,15 @@
         "intervalMs",
         "cols",
         "rows",
-        "enter"
+        "enter",
+        "waitBudgetMs",
+        "evidenceCursor",
+        "evidenceBudgetBytes",
+        "evidenceId",
+        "evidenceStoreCursor",
+        "recipeName",
+        "recipeInput",
+        "revision"
       ],
       "permissionHints": {
         "readOnlyHint": false,

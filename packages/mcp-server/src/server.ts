@@ -43,6 +43,7 @@ import {
   ReleaseManager,
   DocumentIntelligenceService,
   WorkflowManager,
+  ResultEvidenceStore,
   ResourceCoordinator,
   PtyManager,
   AgentSkillService,
@@ -141,6 +142,7 @@ export class QnectorRuntime {
   public readonly workspace: WorkspaceState;
   public readonly memory: MemoryStore;
   public readonly memoryV2: MemoryV2Store;
+  public readonly resultEvidenceStore: ResultEvidenceStore;
   public readonly planActStore: PlanActStore;
   public readonly platform: PlatformServices;
   private readonly configFile?: string;
@@ -209,6 +211,7 @@ export class QnectorRuntime {
     this.workspace = services.workspace;
     this.memory = services.memory;
     this.memoryV2 = services.memoryV2;
+    this.resultEvidenceStore = services.resultEvidenceStore;
     this.planActStore = options.planActStore ?? new PlanActStore(
       path.join(this.configFile ? path.dirname(this.configFile) : (process.env.APPDATA ?? process.cwd()),
         this.configFile ? "" : "Qnector", "plan-act-state.json"),
@@ -271,6 +274,7 @@ export class QnectorRuntime {
       agentSkills: this.agentSkills,
       memory: this.memory,
       memoryV2: this.memoryV2,
+      resultEvidenceStore: this.resultEvidenceStore,
       planActStore: this.planActStore,
       ...(modeSessionId ? { modeSessionId } : {}),
       ...(hostChatSessionId ? { hostChatSessionId } : {}),

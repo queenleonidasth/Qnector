@@ -21,6 +21,7 @@ import {
   ResourceCoordinator,
   PtyManager,
   AgentSkillService,
+  ResultEvidenceStore,
 } from "@qnector/core";
 import type { QnectorConfig } from "@qnector/shared";
 import type { ToolContext } from "@qnector/tools";
@@ -123,6 +124,9 @@ export function createRuntimeServices(input: {
       ? { file: path.join(path.dirname(configFile), "memory-v2.sqlite") }
       : {}),
   });
+  const resultEvidenceStore = new ResultEvidenceStore(
+    path.join(configFile ? path.dirname(configFile) : path.dirname(activityLogPath()), "result-evidence"),
+  );
   const platform =
     options.platform ??
     options.platformServices ??
@@ -147,6 +151,7 @@ export function createRuntimeServices(input: {
     workspace,
     memory,
     memoryV2,
+    resultEvidenceStore,
     platform,
   };
 }

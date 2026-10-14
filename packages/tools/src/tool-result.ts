@@ -19,6 +19,7 @@ import type {
   PtyManager,
   AgentSkillService,
   ResourceCoordinator,
+  ResultEvidenceStore,
 } from "@qnector/core";
 import type {
   ActivitySkillTrace,
@@ -63,6 +64,7 @@ export interface ToolContext {
   skillTraceSessionId?: string;
   abortSignal?: AbortSignal;
   resourceCoordinator?: ResourceCoordinator;
+  resultEvidenceStore?: ResultEvidenceStore;
   resourceOwnerToken?: string;
   platform?: PlatformServices;
   activity: ActivityLogger;

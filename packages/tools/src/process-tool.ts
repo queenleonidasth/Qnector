@@ -21,6 +21,8 @@ export const processDefinition: ToolDefinition = {
         type: "string",
         enum: [
           "run",
+          "waitAndCollect",
+          "evidence_read",
           "start",
           "output",
           "stdin",
@@ -45,6 +47,7 @@ export const processDefinition: ToolDefinition = {
           "workflow_get",
           "workflow_start",
           "workflow_run",
+          "workflow_recipe",
           "workflow_wait",
           "workflow_result",
           "workflow_document_batch",
@@ -63,6 +66,11 @@ export const processDefinition: ToolDefinition = {
       outputMode: { type: "string", enum: ["raw", "smart"] },
       env: { type: "object" },
       processId: { type: "string" },
+      waitBudgetMs: { type: "integer", minimum: 0, maximum: 5000 },
+      evidenceCursor: { type: "integer", minimum: 0 },
+      evidenceBudgetBytes: { type: "integer", minimum: 1, maximum: 100000 },
+      evidenceId: { type: "string" },
+      evidenceStoreCursor: { type: "string" },
       ptyId: { type: "string" },
       taskId: { type: "string" },
       workflowName: { type: "string" },
@@ -527,6 +535,8 @@ export async function executeProcess(
             : snapshot,
       };
     }
+    if (action === "waitAndCollect") return waitAndCollect(context, object);
+    if (action === "evidence_read") return readResultEvidence(context, object);
     const command = stringInput(object, "command", true)!;
     const cwd = context.workspace.resolve(stringInput(object, "cwd") ?? ".");
     const shellValue = stringInput(object, "shell") as ProcessShell | undefined;
@@ -627,6 +637,87 @@ export async function executeProcess(
     }
     throw new Error(`INVALID_ACTION: Unknown process action '${action}'`);
   });
+}
+
+async function waitAndCollect(
+  context: ToolContext,
+  input: Record<string, unknown>,
+): Promise<Omit<ToolResult, "tool" | "action" | "meta">> {
+  const jobId = stringInput(input, "processId") || stringInput(input, "taskId");
+  if (!jobId) throw new Error("INVALID_INPUT: processId or taskId is required");
+  const waitBudgetMs = Math.max(0, Math.min(numberInput(input, "waitBudgetMs", 0), 5_000));
+  const cursor = Math.max(0, numberInput(input, "evidenceCursor", 0));
+  const budgetBytes = Math.max(1, Math.min(numberInput(input, "evidenceBudgetBytes", 32_000), 100_000));
+  let snapshot;
+  try {
+    snapshot = context.processManager.snapshot(jobId);
+  } catch {
+    return { ok: true, summary: "Execution state is unknown; submission was not repeated", data: {
+      jobId, state: "unknown", verified: false, exitCode: null, evidence: [],
+      truncated: false, requiresHydration: false, nextPollAfterMs: null, outputRevision: null,
+    } };
+  }
+  if (snapshot.state === "running" && waitBudgetMs > 0) {
+    try { snapshot = await context.processManager.waitForExit(jobId, waitBudgetMs, context.abortSignal); }
+    catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith("PROCESS_WAIT_TIMEOUT:")) throw error;
+      snapshot = context.processManager.snapshot(jobId);
+    }
+  }
+  const output = context.processManager.output(jobId, cursor, Math.min(100_000, Math.ceil(budgetBytes / 4)), "raw");
+  const owner = {
+    workspaceId: context.getConfig().activeWorkspace,
+    taskId: context.memoryTaskId ?? stringInput(input, "memoryTaskId") ?? jobId,
+  };
+  if (output.text && !context.resultEvidenceStore)
+    throw new Error("RESULT_EVIDENCE_UNAVAILABLE: refusing to discard process output");
+  const evidence = output.text && context.resultEvidenceStore
+    ? [await context.resultEvidenceStore.put(owner, output.text, `${jobId}:${cursor}:${output.nextCursor}`)]
+    : [];
+  const verifiedEvidence = evidence.length && context.resultEvidenceStore
+    ? await Promise.all(evidence.map(async (ref) => {
+        const page = await context.resultEvidenceStore!.read(owner, ref.id, null, Math.max(1, ref.bytes));
+        return { id: ref.id, sha256: ref.sha256, verified: page.complete && page.sha256 === ref.sha256 };
+      }))
+    : [];
+  const running = snapshot.state === "running";
+  const succeeded = snapshot.state === "exited" && snapshot.exitCode === 0;
+  const terminal = !running;
+  const state = running ? "running" : succeeded ? "succeeded" : terminal ? "failed" : "unknown";
+  return {
+    ok: true,
+    summary: running ? `Execution ${jobId} is still running` : `Execution ${jobId} is ${state}`,
+    data: {
+      jobId, state, verified: !running && !output.truncated && verifiedEvidence.length === evidence.length,
+      exitCode: terminal ? snapshot.exitCode : null,
+      evidence, verifiedEvidence, truncated: output.truncated,
+      ...(output.truncated ? { outputUnavailableReason: "Complete output is not retained in the bounded process buffer; this response contains only the available page." } : {}),
+      requiresHydration: evidence.length > 0 || output.truncated,
+      nextPollAfterMs: running ? 1_000 : null,
+      outputRevision: output.nextCursor,
+      stateRevision: snapshot.endedAt ?? snapshot.startedAt,
+    },
+  };
+}
+
+async function readResultEvidence(
+  context: ToolContext,
+  input: Record<string, unknown>,
+): Promise<Omit<ToolResult, "tool" | "action" | "meta">> {
+  if (!context.resultEvidenceStore) throw new Error("RESULT_EVIDENCE_UNAVAILABLE");
+  const id = stringInput(input, "evidenceId", true)!;
+  const cursor = stringInput(input, "evidenceStoreCursor");
+  const budget = Math.max(1, Math.min(numberInput(input, "evidenceBudgetBytes", 32_000), 1_000_000));
+  const owner = {
+    workspaceId: context.getConfig().activeWorkspace,
+    taskId: context.memoryTaskId ?? stringInput(input, "memoryTaskId") ?? stringInput(input, "processId", true)!,
+  };
+  const page = await context.resultEvidenceStore.read(owner, id, cursor ?? null, budget);
+  return {
+    ok: true,
+    summary: page.complete ? "Read and verified terminal evidence" : "Read and verified an evidence page",
+    data: { ...page, verified: true },
+  };
 }
 
 function outputMode(

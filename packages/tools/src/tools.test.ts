@@ -8,6 +8,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { WebSocketServer } from "ws";
 import AdmZip from "adm-zip";
@@ -30,6 +31,7 @@ import type {
 } from "../../core/src/ui-automation.js";
 import { ProcessManager } from "../../core/src/process-manager.js";
 import { WorkflowManager } from "../../core/src/workflow-manager.js";
+import { ResultEvidenceStore } from "../../core/src/result-evidence-store.js";
 import { WorkspaceState } from "../../core/src/workspace-state.js";
 import { ToolRegistry, type ToolContext } from "./index.js";
 
@@ -139,6 +141,139 @@ describe("Qnector grouped tools", () => {
     expect(await readFile(path.join(root, "added.txt"), "utf8")).toBe(
       "added\n",
     );
+  });
+
+  it("uses the opt-in PowerShell pool through the actual process.run tool", async () => {
+    if (process.platform !== "win32") return;
+    root = await mkdtemp(path.join(tmpdir(), "qnector-process-run-pool-"));
+    const previous = process.env.QNECTOR_PROCESS_RUN_WORKER_POOL;
+    process.env.QNECTOR_PROCESS_RUN_WORKER_POOL = "1";
+    const context = makeContext(defaultConfig(root));
+    context.processManager = new ProcessManager("powershell");
+    try {
+      const registry = new ToolRegistry();
+      await context.processManager.run({
+        command: "Write-Output 'tool-pool-prime'", cwd: root,
+        shell: "powershell", timeoutMs: 10_000,
+      });
+      const invoke = (command: string) => registry.call("process", context, {
+        action: "run", command, cwd: root, shell: "powershell", timeoutMs: 4_000,
+      });
+      const first = await invoke("Write-Output 'mcp-pooled'; Write-Error 'mcp-stderr'");
+      const second = await invoke("Write-Output 'mcp-reused'");
+      expect(first.ok && second.ok).toBe(true);
+      const firstData = JSON.stringify(first.data);
+      const secondData = JSON.stringify(second.data);
+      expect(firstData).toContain("mcp-pooled");
+      expect(firstData).toContain("mcp-stderr");
+      expect(firstData).toContain('"exitCode":0');
+      expect(firstData).toMatch(/[a-f0-9]{64}/);
+      expect(secondData).toContain("mcp-reused");
+    } finally {
+      await context.processManager.stopAll();
+      if (previous === undefined) delete process.env.QNECTOR_PROCESS_RUN_WORKER_POOL;
+      else process.env.QNECTOR_PROCESS_RUN_WORKER_POOL = previous;
+    }
+  }, 30_000);
+
+  it("waitAndCollect returns compact terminal status and persisted, idempotent output evidence", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-wait-collect-"));
+    const context = makeContext(defaultConfig(root));
+    context.processManager = new ProcessManager("direct");
+    context.resultEvidenceStore = new ResultEvidenceStore(path.join(root, "evidence"));
+    const registry = new ToolRegistry();
+    const command = `"${process.execPath}" -e "console.log('COLLECTED_ONCE')"`;
+    const snapshot = context.processManager.start({
+      command, cwd: root, shell: "direct", timeoutMs: 5_000,
+    });
+    const first = await registry.call("process", context, {
+      action: "waitAndCollect", processId: snapshot.id, waitBudgetMs: 2_000,
+      evidenceCursor: 0, evidenceBudgetBytes: 10_000,
+    });
+    const retry = await registry.call("process", context, {
+      action: "waitAndCollect", processId: snapshot.id, waitBudgetMs: 0,
+      evidenceCursor: 0, evidenceBudgetBytes: 10_000,
+    });
+    await context.processManager.stopAll();
+    expect(first.ok && retry.ok, JSON.stringify({ first, retry })).toBe(true);
+    const firstData = first.data as { data?: { state?: string; exitCode?: number; evidence?: Array<{ id: string }> } };
+    const retryData = retry.data as typeof firstData;
+    expect(firstData.data?.state).toBe("succeeded");
+    expect(firstData.data?.exitCode).toBe(0);
+    expect((firstData.data as { verified?: boolean }).verified).toBe(true);
+    expect((firstData.data as { verifiedEvidence?: Array<{ verified: boolean }> }).verifiedEvidence?.[0]?.verified).toBe(true);
+    expect(firstData.data?.evidence?.[0]?.id).toBe(retryData.data?.evidence?.[0]?.id);
+    const evidence = await context.resultEvidenceStore.read(
+      { workspaceId: root, taskId: snapshot.id },
+      firstData.data!.evidence![0]!.id, null, 10_000,
+    );
+    expect(Buffer.from(evidence.dataBase64, "base64").toString("utf8")).toContain("COLLECTED_ONCE");
+    expect(JSON.stringify(firstData.data)).not.toContain("COLLECTED_ONCE");
+    const hydrated = await registry.call("process", context, {
+      action: "evidence_read", evidenceId: firstData.data!.evidence![0]!.id,
+      processId: snapshot.id,
+      evidenceBudgetBytes: 3,
+    });
+    expect(hydrated.ok).toBe(true);
+    expect((hydrated.data as { data?: { verified?: boolean; complete?: boolean; nextCursor?: string } }).data)
+      .toMatchObject({ verified: true, complete: false });
+    await context.processManager.stopAll();
+  });
+
+  it("waitAndCollect preserves an unknown state for a lost or unavailable job", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-unknown-job-"));
+    const context = makeContext(defaultConfig(root));
+    const result = await new ToolRegistry().call("process", context, {
+      action: "waitAndCollect", processId: "proc_response_lost", waitBudgetMs: 0,
+    });
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result.data)).toContain('"state":"unknown"');
+    expect(JSON.stringify(result.data)).not.toContain('"verified":true');
+  });
+
+  it("marks bounded-buffer output loss explicitly instead of claiming complete evidence", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-large-output-"));
+    const context = makeContext(defaultConfig(root));
+    context.processManager = new ProcessManager("direct");
+    context.resultEvidenceStore = new ResultEvidenceStore(path.join(root, "evidence"));
+    const snapshot = context.processManager.start({
+      command: `"${process.execPath}" -e "process.stdout.write('x'.repeat(300000))"`,
+      cwd: root, shell: "direct", timeoutMs: 10_000,
+    });
+    await context.processManager.waitForExit(snapshot.id, 8_000);
+    const result = await new ToolRegistry().call("process", context, {
+      action: "waitAndCollect", processId: snapshot.id, evidenceBudgetBytes: 100_000,
+    });
+    expect(result.ok).toBe(true);
+    const data = (result.data as { data: Record<string, unknown> }).data;
+    expect(data.truncated).toBe(true);
+    expect(data.verified).toBe(false);
+    expect(data.outputUnavailableReason).toContain("bounded process buffer");
+  });
+
+  it("executes inspect_repository as a typed WorkflowManager recipe with the task handle", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-recipe-"));
+    execFileSync("git", ["init", "--quiet", root]);
+    const registry = new ToolRegistry();
+    const base = makeContext(defaultConfig(root));
+    const fileWatch = new FileWatchService();
+    let context!: ToolContext;
+    const workflowManager = new WorkflowManager(base.processManager, fileWatch, {
+      executeTool: async (tool, input) => registry.call(tool, context, input),
+    });
+    context = { ...base, memoryTaskId: "recipe-task-1", workflowManager, fileWatch };
+    const started = await registry.call("process", context, {
+      action: "workflow_recipe", recipeName: "inspect_repository", recipeInput: { cwd: root },
+      revision: "context-revision-1", idempotencyKey: "recipe-run-1",
+    });
+    expect(started.ok).toBe(true);
+    const run = (started.data as { data?: { runId?: string } }).data?.runId;
+    expect(run).toBeTruthy();
+    const waited = await workflowManager.wait(root, run!, 10_000);
+    expect(waited.run.state).toBe("succeeded");
+    expect(waited.run.memoryTaskId).toBe("recipe-task-1");
+    await workflowManager.shutdown();
+    await base.processManager.stopAll();
   });
 
   it("keeps per-tool routing scope schema compact and omits redundant skill intent", () => {
