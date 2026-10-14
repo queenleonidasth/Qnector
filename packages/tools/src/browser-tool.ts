@@ -7,6 +7,7 @@ import {
   type Page,
 } from "playwright-core";
 import { sanitizeValue } from "@qnector/core";
+import { BrowserTargetCache } from "./browser-target-cache.js";
 import type { ToolDefinition, ToolResult } from "@qnector/shared";
 import {
   booleanInput,
@@ -73,6 +74,8 @@ const PLAYWRIGHT_ACTIONS = new Set([
 ]);
 
 const playwrightConnections = new Map<string, PlaywrightBrowser>();
+const playwrightTargetCaches = new WeakMap<PlaywrightBrowserContext, BrowserTargetCache<Page>>();
+const targetCloseHooks = new WeakSet<Page>();
 
 interface BrowserTarget {
   id: string;
@@ -1087,6 +1090,8 @@ async function playwrightBrowser(
     const browser = await chromium.connectOverCDP(endpoint, { timeout: 5_000 });
     playwrightConnections.set(endpoint, browser);
     browser.on("disconnected", () => {
+      for (const context of browser.contexts())
+        playwrightTargetCaches.get(context)?.invalidateTargets("browser disconnected");
       if (playwrightConnections.get(endpoint) === browser)
         playwrightConnections.delete(endpoint);
     });
@@ -1106,10 +1111,27 @@ async function playwrightPage(
   if (pages.length === 0)
     throw new Error("BROWSER_NO_TARGET: the browser has no page tabs");
   if (!targetId) return pages[0]!;
-  for (const page of pages) {
-    const id = await playwrightTargetId(context, page).catch(() => null);
-    if (id === targetId) return page;
+  let cache = playwrightTargetCaches.get(context);
+  if (!cache) {
+    cache = new BrowserTargetCache<Page>();
+    playwrightTargetCaches.set(context, cache);
   }
+  const generation = cache.currentGeneration();
+  const page = await cache.resolveTarget(targetId, generation, async () => {
+    for (const candidate of context.pages()) {
+      if (candidate.isClosed()) continue;
+      const id = await playwrightTargetId(context, candidate).catch(() => null);
+      if (id === targetId) {
+        if (!targetCloseHooks.has(candidate)) {
+          targetCloseHooks.add(candidate);
+          candidate.once("close", () => cache?.invalidateTargets("tab closed"));
+        }
+        return candidate;
+      }
+    }
+    throw new Error(`BROWSER_TARGET_NOT_FOUND: '${targetId}' was not found`);
+  }, (candidate) => !candidate.isClosed() && context.pages().includes(candidate));
+  if (page) return page;
   throw new Error(`BROWSER_TARGET_NOT_FOUND: '${targetId}' was not found`);
 }
 
