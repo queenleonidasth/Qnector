@@ -9,6 +9,7 @@ import {
 } from "./tool-result.js";
 import type { ProcessShell, WorkflowStep } from "@qnector/core";
 import { compileRecipe, type RecipeName } from "@qnector/core";
+import { executeMemory } from "./memory-tool.js";
 
 export const processDefinition: ToolDefinition = {
   name: "process",
@@ -123,11 +124,16 @@ export async function executeProcess(
       if (action === "workflow_recipe") {
         const taskId = context.memoryTaskId;
         if (!taskId) throw new Error("RECIPE_TASK_CONTEXT_REQUIRED: bind an active memory task before running a recipe");
+        const expectedRevision = stringInput(object, "revision", true)!;
+        const contextResult = await executeMemory(context, { action: "working_set" });
+        const currentRevision = (contextResult.data as { data?: { revision?: unknown } } | undefined)?.data?.revision;
+        if (typeof currentRevision !== "string" || currentRevision !== expectedRevision)
+          throw new Error("RECIPE_REVISION_MISMATCH: refresh the current task working_set before starting this recipe");
         const recipeName = stringInput(object, "recipeName", true)! as RecipeName;
         const definition = compileRecipe(
           recipeName,
           objectInput(object.recipeInput ?? {}),
-          { workspaceId: workspace, taskId, revision: stringInput(object, "revision", true)! },
+          { workspaceId: workspace, taskId, revision: expectedRevision },
         );
         const run = await context.workflowManager.run(workspace, {
           name: definition.name,

@@ -262,9 +262,18 @@ describe("Qnector grouped tools", () => {
       executeTool: async (tool, input) => registry.call(tool, context, input),
     });
     context = { ...base, memoryTaskId: "recipe-task-1", workflowManager, fileWatch };
+    const workingSet = await registry.call("memory", context, { action: "working_set" });
+    const revision = (workingSet.data as { data: { revision: string } }).data.revision;
+    const stale = await registry.call("process", context, {
+      action: "workflow_recipe", recipeName: "inspect_repository", recipeInput: { cwd: root },
+      revision: "stale-revision", idempotencyKey: "stale-run-must-not-exist",
+    });
+    expect(stale.ok).toBe(false);
+    expect(JSON.stringify(stale)).toContain("RECIPE_REVISION_MISMATCH");
+    expect(await workflowManager.listRuns(root)).toHaveLength(0);
     const started = await registry.call("process", context, {
       action: "workflow_recipe", recipeName: "inspect_repository", recipeInput: { cwd: root },
-      revision: "context-revision-1", idempotencyKey: "recipe-run-1",
+      revision, idempotencyKey: "recipe-run-1",
     });
     expect(started.ok).toBe(true);
     const run = (started.data as { data?: { runId?: string } }).data?.runId;
