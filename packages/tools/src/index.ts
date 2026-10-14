@@ -14,6 +14,8 @@ import { browserDefinition, executeBrowser } from "./browser-tool.js";
 import { computerDefinition, executeComputer } from "./computer-tool.js";
 import { modeDefinition, executeMode } from "./mode-tool.js";
 import { checkPlanActGuard } from "./plan-guard.js";
+import { qnectorPerformance } from "@qnector/core";
+import { performance } from "node:perf_hooks";
 
 export const toolDefinitions: ToolDefinition[] = [
   systemDefinition,
@@ -96,7 +98,9 @@ export class ToolRegistry {
         meta: { durationMs: 0, truncated: false, nextCursor: null },
       };
     }
+    const validateStarted = performance.now();
     const guard = await checkPlanActGuard(scopedContext, name, input);
+    qnectorPerformance.recordStage({traceId:scopedContext.traceId ?? `tool-${performance.now()}`, ...(memoryTaskId ? {taskId:memoryTaskId} : {}), action:name, stage:"validate", durationMs:performance.now()-validateStarted});
     if (!guard.allowed) {
       return {
         ok: false, tool: name,

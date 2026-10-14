@@ -57,6 +57,18 @@ describe("MCP timeline diagnostics", () => {
     expect(JSON.stringify(lines)).not.toContain("stdout");
   });
 
+  it("bounded_logger_under_disk_failure", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-timeline-failure-"));
+    const blocker = path.join(root, "not-a-directory");
+    await import("node:fs/promises").then(fs => fs.writeFile(blocker, "x"));
+    const logger = new TimelineLogger(path.join(blocker, "events.ndjson"));
+    const span = logger.start("failure-test");
+    for (let i=0;i<700;i++) logger.record(span, "tool_end", {ok:true}, "system");
+    await logger.flush();
+    expect(logger.droppedCount).toBeGreaterThan(0);
+    expect(logger.droppedCount).toBeLessThanOrEqual(700);
+  });
+
   it("correlates HTTP receive, tool execution, write, flush and close without logging tool output", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-timeline-http-"));
     const file = path.join(root, "logs", "test.ndjson");
@@ -69,7 +81,7 @@ describe("MCP timeline diagnostics", () => {
     });
     await runtime.start({port: 0});
     const port = (runtime.app.server.address() as AddressInfo).port;
-    const url = `http://127.0.0.1:${port}/mcp`;
+    const url = `http://127.0.0.1:${port}/mcp?token=timeline-secret-must-not-appear`;
     const call = async (payload: unknown): Promise<Response> => {
       const response = await fetch(url, {method: "POST", headers: {
         "content-type": "application/json", accept: "application/json, text/event-stream",
@@ -99,9 +111,10 @@ describe("MCP timeline diagnostics", () => {
       expect(related.map(event => event.phase), `missing ${phase}`).toContain(phase);
     }
     expect(related.find(event => event.phase === "tool_start")?.toolName).toBe("system");
-    expect(related.find(event => event.phase === "rpc_parsed")?.detail?.rpcId).toBe("2");
+    expect(related.find(event => event.phase === "rpc_parsed")?.detail?.method).toBe("tools/call");
     expect(related.find(event => event.phase === "response_flushed")?.detail?.socketBytesDelta).toBeGreaterThan(0);
     expect(JSON.stringify(related)).not.toContain("arguments");
+    expect(JSON.stringify(related)).not.toContain("timeline-secret-must-not-appear");
     const probeEvents = (await events(file)).filter(event =>
       event.requestId === probe.headers.get("x-qnector-trace-id"));
     expect(probeEvents.some(event => event.phase === "tool_end" &&

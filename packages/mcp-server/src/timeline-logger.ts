@@ -35,7 +35,10 @@ export function timelineLogPath(configFile?: string, date = new Date()): string 
  * stdout, tool payload, credentials or URLs are recorded. */
 export class TimelineLogger {
   private readonly storage = new AsyncLocalStorage<TimelineContext>();
-  private pending: Promise<void> = Promise.resolve();
+  private queue: string[] = [];
+  private draining: Promise<void> | undefined;
+  private dropped = 0;
+  private static readonly MAX_PENDING = 500;
 
   constructor(private readonly file: string | (() => string)) {}
 
@@ -62,17 +65,29 @@ export class TimelineLogger {
       ...(toolName ? {toolName} : {}),
       ...(detail ? {detail} : {}),
     };
-    const line = `${JSON.stringify(event)}\n`;
-    const file = typeof this.file === "string" ? this.file : this.file();
-    this.pending = this.pending.then(async () => {
-      await mkdir(path.dirname(file), {recursive: true});
-      await appendFile(file, line, "utf8");
-    }).catch(() => {
-      // A full/unavailable log volume must never fail a tool or its response.
-    });
+    if (this.queue.length >= TimelineLogger.MAX_PENDING) { this.dropped++; return; }
+    this.queue.push(`${JSON.stringify(event)}\n`);
+    void this.drain();
   }
 
   async flush(): Promise<void> {
-    await this.pending;
+    while (this.draining || this.queue.length) await this.drain();
   }
+
+  private drain(): Promise<void> {
+    if (this.draining) return this.draining;
+    this.draining = (async () => {
+      while (this.queue.length) {
+        const line = this.queue.shift()!;
+        try {
+          const file = typeof this.file === "string" ? this.file : this.file();
+          await mkdir(path.dirname(file), {recursive: true});
+          await appendFile(file, line, "utf8");
+        } catch { this.dropped++; }
+      }
+    })().finally(() => { this.draining = undefined; });
+    return this.draining;
+  }
+
+  get droppedCount(): number { return this.dropped; }
 }

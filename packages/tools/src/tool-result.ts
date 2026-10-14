@@ -31,6 +31,8 @@ import type {
 import type { ProcessManager } from "@qnector/core";
 import type { WorkspaceState } from "@qnector/core";
 import { QNECTOR_VERSION } from "@qnector/core";
+import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 
 export interface ToolContext {
   workspace: WorkspaceState;
@@ -56,6 +58,8 @@ export interface ToolContext {
   /** Hash of trusted openai/session metadata only; absent on unsupported hosts. */
   hostChatSessionId?: string;
   memoryTaskId?: string;
+  /** Request correlation ID supplied by the MCP transport, if available. */
+  traceId?: string;
   skillTraceSessionId?: string;
   abortSignal?: AbortSignal;
   resourceCoordinator?: ResourceCoordinator;
@@ -278,6 +282,8 @@ export async function runWithActivity<T>(
   input: unknown,
   work: () => Promise<T>,
 ): Promise<ToolResult<T>> {
+  const traceId = context.traceId ?? randomUUID();
+  const monotonicStartedAt = performance.now();
   const startedAt = Date.now();
   const taskCorrelation = context.memoryTaskId
     ? { taskId: context.memoryTaskId }
@@ -311,6 +317,7 @@ export async function runWithActivity<T>(
   else await context.activity.record(runningEntry);
   try {
     const result = await work();
+    qnectorPerformance.recordStage({traceId, ...(context.memoryTaskId ? {taskId: context.memoryTaskId} : {}), action: tool, stage: "execute", durationMs: performance.now() - monotonicStartedAt, bytes: Buffer.byteLength(JSON.stringify(result), "utf8")});
     qnectorPerformance.operation(
       "tool",
       `${tool}.${action}`,
@@ -373,6 +380,7 @@ export async function runWithActivity<T>(
     }
     return response;
   } catch (error) {
+    qnectorPerformance.recordStage({traceId, ...(context.memoryTaskId ? {taskId: context.memoryTaskId} : {}), action: tool, stage: "execute", durationMs: performance.now() - monotonicStartedAt});
     qnectorPerformance.operation(
       "tool",
       `${tool}.${action}`,

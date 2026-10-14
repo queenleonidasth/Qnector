@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { handleHttpMcp } from "./http-mcp-host.js";
 import { createRuntimeServices } from "./runtime-services.js";
 import { execFile } from "node:child_process";
@@ -21,6 +22,7 @@ import {
 } from "@modelcontextprotocol/server";
 import {
   ActivityLogger,
+  qnectorPerformance,
   QNECTOR_VERSION,
   loadConfig,
   saveConfig,
@@ -248,6 +250,7 @@ export class QnectorRuntime {
     abortSignal?: AbortSignal,
     modeSessionId?: string,
     hostChatSessionId?: string,
+    traceId?: string,
   ): ToolContext {
     return {
       workspace: this.workspace,
@@ -271,6 +274,7 @@ export class QnectorRuntime {
       planActStore: this.planActStore,
       ...(modeSessionId ? { modeSessionId } : {}),
       ...(hostChatSessionId ? { hostChatSessionId } : {}),
+      ...(traceId ? { traceId } : {}),
       platform: this.platform,
       activity: this.activity,
       skillTraceStore: this.skillTraceStore,
@@ -457,6 +461,12 @@ export class QnectorRuntime {
         },
         async (input, extra) => {
           const toolTimeline = this.timeline.current();
+          if (toolTimeline) {
+            const callInput = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string,unknown> : {};
+            qnectorPerformance.recordStage({traceId:toolTimeline.requestId,
+              ...(typeof callInput.memoryTaskId === "string" ? {taskId:callInput.memoryTaskId} : {}),
+              action:definition.name,stage:"queue",durationMs:Math.max(0,performance.now()-toolTimeline.startedAt)});
+          }
           const progressToken = (extra.mcpReq._meta as {progressToken?: string | number} | undefined)?.progressToken;
           // Only log token presence, never its actual value.
           this.timeline.record(toolTimeline, "tool_start", {progressTokenProvided: progressToken !== undefined}, definition.name);
@@ -477,6 +487,7 @@ export class QnectorRuntime {
                 requestContext?.requestInfo?.signal,
                 modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId),
                 modeSessionFromMeta(extra.mcpReq._meta),
+                toolTimeline?.requestId,
               ),
               input,
             ));
@@ -487,11 +498,19 @@ export class QnectorRuntime {
             throw error;
           }
           this.timeline.record(toolTimeline, "tool_end", {ok: result.ok}, definition.name);
+          const serializeStarted = performance.now();
           const bounded = boundMcpToolResult(result);
           const { attachments, ...jsonResult } = bounded;
+          const serializedText = toolResultText(jsonResult);
+          const actionArgs = input && typeof input === "object" && !Array.isArray(input)
+            ? input as Record<string, unknown> : {};
+          qnectorPerformance.recordStage({traceId:toolTimeline?.requestId ?? randomUUID(),
+            ...(typeof actionArgs.memoryTaskId === "string" ? {taskId:actionArgs.memoryTaskId} : {}),
+            action:definition.name,stage:"serialize",
+            durationMs:performance.now()-serializeStarted,bytes:Buffer.byteLength(serializedText,"utf8")});
           return {
             content: [
-              { type: "text", text: toolResultText(jsonResult) },
+              { type: "text", text: serializedText },
               ...(attachments ?? []).map((attachment) => ({
                 type: "image" as const,
                 data: attachment.dataBase64,

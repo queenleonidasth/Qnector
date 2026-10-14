@@ -39,13 +39,8 @@ export async function handleHttpMcp(
       ? (request.body as Record<string, unknown>)
       : undefined;
   dependencies.timeline.record(timelineContext, "rpc_parsed", {
-    method:
-      typeof rpc?.method === "string"
-        ? rpc.method.slice(0, 80)
-        : request.method,
-    ...(typeof rpc?.id === "number" || typeof rpc?.id === "string"
-      ? { rpcId: String(rpc.id).slice(0, 80) }
-      : {}),
+    method: typeof rpc?.method === "string" && ["initialize","notifications/initialized","tools/list","tools/call","resources/list","resources/read","ping"].includes(rpc.method)
+      ? rpc.method : "other",
   });
   const startedAt = Date.now();
   // Capture before finish: reply.raw.socket may be cleared on close.
@@ -66,9 +61,8 @@ export async function handleHttpMcp(
       action: "exchange",
       argsSummary: JSON.stringify({
         traceId,
-        requestId: request.id,
         method: request.method,
-        path: request.url.split("?", 1)[0],
+        endpoint: "mcp",
         statusCode: reply.raw.statusCode,
         durationMs: Date.now() - startedAt,
         socketBytesDelta,
@@ -173,7 +167,7 @@ export async function handleHttpMcp(
     });
     recordTrace(
       "error",
-      `MCP exchange failed: ${error instanceof Error ? error.message : String(error)}`,
+        "MCP exchange failed",
     );
     stopHeartbeat();
     throw error;
