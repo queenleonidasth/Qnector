@@ -1063,6 +1063,20 @@ describe("Qnector grouped tools", () => {
       expect(deltaData.mode).toBe("delta");
       expect(deltaData.unchanged).toBe(true);
       expect(JSON.stringify(deltaData).length).toBeLessThan(400);
+      const reconnect = await registry.call("memory", {...scoped, hostChatSessionId:"hashed-host-chat-reconnect"}, {
+        action:"working_set", sinceRevision:data.revision,
+      });
+      expect((reconnect.data as {data:Record<string,unknown>}).data.mode).toBe("compact");
+      const beforeTail = (reconnect.data as {data:{revision:string}}).data.revision;
+      await v2.updateTask({taskId,criticalContext:"ก".repeat(340)+"最後のไทย"});
+      const afterTail = await registry.call("memory", scoped, {action:"working_set",sinceRevision:beforeTail});
+      expect((afterTail.data as {data:{revision:string;mode:string}}).data.revision).not.toBe(beforeTail);
+      expect((afterTail.data as {data:{active:{criticalContext:string}}}).data.active.criticalContext).toContain("最後のไทย");
+      await v2.updateTask({taskId,criticalContext:"ก".repeat(10_001)});
+      const oversized = await registry.call("memory", scoped, {action:"working_set"});
+      const oversizedData=(oversized.data as {data:Record<string,unknown>}).data;
+      expect(oversizedData).toMatchObject({truncated:true,requiresHydration:true,criticalContextTruncated:true});
+      expect(oversizedData.evidenceRefs).toEqual([{tool:"memory",action:"task_get",taskId}]);
       const verbose = await registry.call("memory", scoped, { action: "working_set", details: true });
       expect((verbose.data as { data: Record<string, unknown> }).data).toHaveProperty("managedProcesses");
       const health = await registry.call("memory", scoped, { action: "health" });

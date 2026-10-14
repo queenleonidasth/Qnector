@@ -60,6 +60,30 @@ describe("MemoryV2Store", () => {
     store.close();
   });
 
+  it("checkpoint_is_task_scoped", async () => {
+    const {workspace,file}=await fixture();
+    const store=new MemoryV2Store(workspace,{file});
+    const a=store.createTask({title:"A",taskId:"task_a"});
+    const b=store.createTask({title:"B",taskId:"task_b"});
+    const checkpointA=store.saveTaskCheckpoint(a.id,{currentTask:"A checkpoint",completedSteps:[],pendingSteps:["next A"],criticalContext:"Rule A"},"A checkpoint");
+    const checkpointB=store.saveTaskCheckpoint(b.id,{currentTask:"B checkpoint",completedSteps:[],pendingSteps:["next B"],criticalContext:"Rule B"},"B checkpoint");
+    expect(store.recoveryContext(a.id).checkpoint?.id).toBe(checkpointA);
+    expect(store.recoveryContext(b.id).checkpoint?.id).toBe(checkpointB);
+    store.close();
+  });
+
+  it("ambiguous_resume_returns_candidates_and_exact_ID_wins", async () => {
+    const {workspace,file}=await fixture();
+    const store=new MemoryV2Store(workspace,{file});
+    const a=store.createTask({title:"Duplicate project",taskId:"task_exact_a"});
+    const b=store.createTask({title:"Duplicate project",taskId:"task_exact_b"});
+    const ambiguous=store.resumeTask("Duplicate project");
+    expect(ambiguous.task).toBeNull();
+    expect(ambiguous.candidates?.map(task=>task.id)).toEqual(expect.arrayContaining([a.id,b.id]));
+    expect(store.resumeTask("Duplicate project",b.id).taskId).toBe(b.id);
+    store.close();
+  });
+
   it("detects active task file conflicts and ignores foreign workspace events", async () => {
     const { root, workspace, file } = await fixture();
     const store = new MemoryV2Store(workspace, { file });

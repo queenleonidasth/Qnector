@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type {
   MemoryActiveState,
   MemoryCategory,
@@ -6,6 +5,7 @@ import type {
   ToolResult,
 } from "@qnector/shared";
 import type { MemoryStore } from "@qnector/core";
+import { computeContextRevision } from "@qnector/core";
 import {
   booleanInput,
   getMemoryJournalHealth,
@@ -76,7 +76,7 @@ export const memoryDefinition: ToolDefinition = {
       id: { type: "string" },
       query: { type: "string" },
       details: { type: "boolean", description: "Opt in to verbose working set with process and command history." },
-      sinceRevision: { type: "string", description: "Last working_set revision. Returns a minimal unchanged response if context has not changed." },
+      sinceRevision: { type: "string", description: "Last working_set revision. A delta is returned only in the same known chat context; reconnects receive hydrated context." },
       turnId: { type: "string", description: "Caller-stable ID for explicit conversation turn deduplication." },
       role: { type: "string", enum: ["user", "assistant"] },
       consent: { type: "boolean", description: "Must be true: caller explicitly authorizes storing this excerpt locally." },
@@ -174,7 +174,7 @@ export async function executeMemory(
     if (action === "task_resume") {
       if (!context.memoryV2)
         throw new Error("MEMORY_V2_UNAVAILABLE: task memory is not configured");
-      const resumed = context.memoryV2.resumeTask(stringInput(object, "query"));
+      const resumed = context.memoryV2.resumeTask(stringInput(object, "query"), stringInput(object, "taskId"));
       if (resumed.task && (context.hostChatSessionId || stringInput(object, "sessionId")))
         context.memoryV2.bindSession(
           context.hostChatSessionId ?? stringInput(object, "sessionId")!,
@@ -188,7 +188,7 @@ export async function executeMemory(
           ...resumed,
           ...(resumed.task
             ? { recovery: context.memoryV2.recoveryContext(resumed.task.id) }
-            : {}),
+            : { candidates: resumed.candidates ?? [] }),
           instruction: resumed.task
             ? "Pass the taskId as memoryTaskId on related calls. Read recovery.recentEvents and verify live state before replaying an interrupted operation; successful tool calls are not verified completed steps."
             : "Call memory.task_list and choose a matching task explicitly; start a new task only if none matches. Never guess across concurrent chats.",
@@ -545,6 +545,7 @@ async function compactWorkingSetAction(
   memory: MemoryStore,
   query?: string,
   sinceRevision?: string,
+  sessionId?: string,
 ) {
   const recall = await memory.recall({
     checkpointLimit: 1, factLimit: 6, changeLimit: 2,
@@ -554,14 +555,17 @@ async function compactWorkingSetAction(
     ? context.memoryV2?.getTask(context.memoryTaskId) : null;
   const v2 = context.memoryV2?.snapshot({
     ...(task ? { taskId: task.id } : {}),
-    eventLimit: 3, taskLimit: 1, memoryLimit: 6,
+    eventLimit: 200, taskLimit: 1, memoryLimit: 100,
   });
   const source = task ?? recall.state.active;
+  const taskRecovery = task ? context.memoryV2?.recoveryContext(task.id) : undefined;
+  const criticalContextComplete = source?.criticalContext ?? "";
+  const omitCriticalContext = Buffer.byteLength(criticalContextComplete, "utf8") > 10_000;
   const active = source ? {
     currentTask: briefText(source.currentTask, 230),
     pendingSteps: source.pendingSteps.slice(0, 3).map(x => briefText(x, 150)),
     completedSteps: source.completedSteps.slice(-2).map(x => briefText(x, 140)),
-    criticalContext: briefText(source.criticalContext, 330),
+    criticalContext: omitCriticalContext ? "" : criticalContextComplete,
   } : null;
   const activity = context.activity.list()
     .filter(e => e.status !== "running" && (!task || e.taskId === task.id))
@@ -588,9 +592,9 @@ async function compactWorkingSetAction(
     ...(task ? { taskId: task.id } : {}),
     active,
     relevantFacts,
-    latestCheckpoint: recall.checkpoints[0] ?
-      { id: recall.checkpoints[0].id, createdAt: recall.checkpoints[0].createdAt } : null,
-    recentEvents,
+    latestCheckpoint: taskRecovery?.checkpoint ?? (recall.checkpoints[0] ?
+      { id: recall.checkpoints[0].id, createdAt: recall.checkpoints[0].createdAt } : null),
+    recentEvents: recentEvents.slice(0, 3),
     recentErrors,
     resumeHint: briefText(buildResumeHint(active, recentErrors), 185),
     memoryStatus: {
@@ -599,18 +603,31 @@ async function compactWorkingSetAction(
       capture: "explicit-tool-events-only",
     },
     hint: "Use working_set details=true or memory.task_get / memory.recall for deeper history.",
+    ...(omitCriticalContext ? {truncated:true,requiresHydration:true,
+      evidenceRefs: task ? [{tool:"memory",action:"task_get",taskId:task.id}] : [{tool:"memory",action:"recall"}],
+      criticalContextTruncated:true} : {}),
   };
-  const revision = createHash("sha256").update(JSON.stringify({
-    active: data.active, facts: data.relevantFacts, events: data.recentEvents,
-    errors: data.recentErrors, checkpoint: data.latestCheckpoint,
-  })).digest("hex").slice(0, 16);
-  if (sinceRevision && sinceRevision === revision)
+  const revision = computeContextRevision({
+    workspaceId: context.memoryV2?.currentWorkspaceId ?? context.getConfig().activeWorkspace,
+    taskId: task?.id ?? "workspace-context", revision: String(v2?.revision ?? 0),
+  }, {workspace: context.getConfig().activeWorkspace, task, legacyActive: recall.state.active,
+    facts: v2?.memories ?? recall.state.facts, events: v2?.events ?? [],
+    checkpoint: taskRecovery?.checkpoint ?? data.latestCheckpoint, freshness: v2?.freshness ?? null});
+  const baselineKey = sessionId && task ? `${sessionId}\0${task.id}` : undefined;
+  const knownBaseline = baselineKey ? workingSetBaselines.get(baselineKey) : undefined;
+  if (sinceRevision && sinceRevision === revision && knownBaseline === revision)
     return { summary: "Qnector task context unchanged", data: {
       mode: "delta", revision, unchanged: true, taskId: task?.id ?? null,
       hint: "Reuse previously received task context; no change to hydrate.",
     } };
+  if (baselineKey && !omitCriticalContext) {
+    workingSetBaselines.set(baselineKey, revision);
+    while (workingSetBaselines.size > 300) workingSetBaselines.delete(workingSetBaselines.keys().next().value!);
+  }
   return { summary: "Prepared compact Qnector task working set", data: { ...data, revision } };
 }
+
+const workingSetBaselines = new Map<string, string>();
 
 function briefText(value: string, limit: number): string {
   const safe = value.replace(/\s+/g, " ").trim();
@@ -624,7 +641,8 @@ async function workingSetAction(
   details = false,
   sinceRevision?: string,
 ) {
-  if (!details) return compactWorkingSetAction(context, memory, explicitQuery, sinceRevision);
+  if (!details) return compactWorkingSetAction(context, memory, explicitQuery, sinceRevision,
+    context.hostChatSessionId ?? context.modeSessionId);
   const baseRecall = await memory.recall({
     checkpointLimit: 1,
     factLimit: 8,

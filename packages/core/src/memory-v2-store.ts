@@ -63,6 +63,7 @@ export interface MemoryTaskResumeResult {
   task: MemoryTask | null;
   taskId: string | null;
   score: number;
+  candidates?: MemoryTask[];
 }
 
 export class MemoryV2Store {
@@ -316,15 +317,20 @@ export class MemoryV2Store {
     };
   }
 
-  public resumeTask(query?: string): MemoryTaskResumeResult {
+  public resumeTask(query?: string, exactTaskId?: string): MemoryTaskResumeResult {
     const tasks = this.listTasks(100).filter(
       (task) => task.status !== "completed" && task.id !== this.defaultTaskId,
     );
+    if (exactTaskId?.trim()) {
+      const task = tasks.find(item => item.id === exactTaskId.trim()) ?? null;
+      return {task, taskId: task?.id ?? null, score: task ? Number.MAX_SAFE_INTEGER : 0,
+        ...(!task ? {candidates: tasks} : {})};
+    }
     if (tasks.length === 0) return { task: null, taskId: null, score: 0 };
     const normalizedQuery = normalizeSearch(query ?? "");
     if (!normalizedQuery) {
       // Do not silently resume the wrong chat's task in a shared workspace.
-      if (tasks.length !== 1) return { task: null, taskId: null, score: 0 };
+      if (tasks.length !== 1) return { task: null, taskId: null, score: 0, candidates: tasks };
       const task = tasks[0]!;
       return { task, taskId: task.id, score: 1 };
     }
@@ -337,7 +343,7 @@ export class MemoryV2Store {
       );
     const best = ranked[0]!;
     if (best.score < 8 || (ranked[1] && best.score === ranked[1].score))
-      return { task: null, taskId: null, score: best.score };
+      return { task: null, taskId: null, score: best.score, candidates: ranked.slice(0, 8).map(entry => entry.task) };
     return { task: best.task, taskId: best.task.id, score: best.score };
   }
 

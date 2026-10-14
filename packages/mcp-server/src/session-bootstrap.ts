@@ -23,7 +23,7 @@ export function buildSessionBootstrapInstructions(
   const skillCount = typeof skills === "number" ? skills : skills.length;
   const lines: string[] = [
     "QNECTOR SESSION BOOTSTRAP",
-    "After reconnect: memory.task_resume then memory.task_get; verify live files/process.task_list/git before retry. Never infer completion from a sent command.",
+    "Reconnect: exact taskId first; inspect candidates if ambiguous, then task_get. Hydrate working_set and verify live state before retry. Never infer completion.",
     "TASK MODE: short default; '/long ' or 'long task' opts in. '/long' alone needs a task description. Prefer tasks.start with idempotencyKey; return accepted taskId, not completion; check tasks.get/result. Never retry uncertain effects.",
     "PANEL UX: finish inspection and planning BEFORE plan_panel; ChatGPT questions with Superpowers on every Plan entry, finalize first, show once at end, no lengthy text beneath it.",
     // Plan/Act reminder follows the bounded continuity context when room permits.
