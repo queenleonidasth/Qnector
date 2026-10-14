@@ -8,6 +8,7 @@ import type { ProcessSnapshot } from "@qnector/shared";
 import { executableAvailable as executableOnPath } from "./executable-lookup.js";
 import {
   canUsePersistentPowerShell,
+  hasWarmPersistentPowerShell,
   runPersistentPowerShell,
   shutdownPowerShellWorkers,
   PowerShellWorkerExecutionError,
@@ -290,6 +291,22 @@ export class ProcessManager {
   /** Start only once, return ordinary output for short commands or a tracked
    * process handle after the UI wait budget. The child is not tied to HTTP. */
   public async runOrBackground(options: RunOptions, foregroundMs = 5_000): Promise<EscalatedRun> {
+    const shell = options.shell ?? this.defaultShell;
+    if (
+      process.env.QNECTOR_PROCESS_RUN_WORKER_POOL === "1" &&
+      shell === "powershell" &&
+      hasWarmPersistentPowerShell(powershellExecutable()) &&
+      options.timeoutMs <= foregroundMs &&
+      !options.signal &&
+      canUsePersistentPowerShell(options.command, options.env)
+    ) {
+      const result = await this.run(options);
+      if (result.exitCode === null && result.durationMs >= options.timeoutMs)
+        throw new Error(
+          "PROCESS_OUTCOME_UNKNOWN: pooled PowerShell execution exceeded its deadline; the command was not replayed",
+        );
+      return { background: false, result };
+    }
     const initial = this.start(options, true);
     let snapshot: ProcessSnapshot;
     try {

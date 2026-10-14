@@ -8,11 +8,12 @@ import {
   type ToolContext,
 } from "./tool-result.js";
 import type { ProcessShell, WorkflowStep } from "@qnector/core";
+import { compileRecipe, type RecipeName } from "@qnector/core";
 
 export const processDefinition: ToolDefinition = {
   name: "process",
   description:
-    "Run PowerShell, cmd, direct CLI commands, long-running processes, interactive PTY/ConPTY terminals, and persistent workflow graphs. process.run auto-escalates after 5 seconds: if it returns a processId, poll action=output with cursor and action=task_get until finished; if the response is lost, use action=task_list to recover the running process by command/start time before deciding whether to rerun. Use start/output for known long-running commands and pty_start/pty_read/pty_write for interactive input.",
+    "Run PowerShell, cmd, direct CLI commands, long-running processes, interactive PTY/ConPTY terminals, and persistent workflow graphs. process.run auto-escalates after 5 seconds; use waitAndCollect with the returned processId to combine state and output evidence without resubmitting. Use start/output for known long-running commands and pty_start/pty_read/pty_write for interactive input.",
   inputSchema: {
     type: "object",
     properties: {
@@ -72,6 +73,9 @@ export const processDefinition: ToolDefinition = {
       maxConcurrency: { type: "integer", minimum: 1, maximum: 8 },
       replayInterrupted: { type: "boolean" },
       description: { type: "string" },
+      recipeName: { type: "string", enum: ["inspect_repository", "verify_changes", "inspect_document", "browser_read_check"] },
+      recipeInput: { type: "object" },
+      revision: { type: "string", minLength: 1 },
       steps: { type: "array", items: { type: "object" }, maxItems: 100 },
       documents: { type: "array", items: { type: "object" }, maxItems: 50 },
       cursor: { type: "integer", minimum: 0 },
@@ -108,6 +112,26 @@ export async function executeProcess(
           "UNSUPPORTED_CAPABILITY: workflow engine is not configured in this Qnector runtime",
         );
       const workspace = context.getConfig().activeWorkspace;
+      if (action === "workflow_recipe") {
+        const taskId = context.memoryTaskId;
+        if (!taskId) throw new Error("RECIPE_TASK_CONTEXT_REQUIRED: bind an active memory task before running a recipe");
+        const recipeName = stringInput(object, "recipeName", true)! as RecipeName;
+        const definition = compileRecipe(
+          recipeName,
+          objectInput(object.recipeInput ?? {}),
+          { workspaceId: workspace, taskId, revision: stringInput(object, "revision", true)! },
+        );
+        const run = await context.workflowManager.run(workspace, {
+          name: definition.name,
+          description: definition.description,
+          mode: "sequential",
+          maxConcurrency: 1,
+          steps: definition.steps,
+          memoryTaskId: taskId,
+          ...(stringInput(object, "idempotencyKey") ? { idempotencyKey: stringInput(object, "idempotencyKey") } : {}),
+        });
+        return { summary: `Started read-only ${recipeName} recipe as ${run.runId}`, data: { ...run, recipeName, revision: stringInput(object, "revision") } };
+      }
       if (action === "workflow_save") {
         if (!Array.isArray(object.steps))
           throw new Error("INVALID_INPUT: steps must be an array");

@@ -51,6 +51,8 @@ export function canUsePersistentPowerShell(
   if (/\b(?:exit|read-host|start-transcript|stop-transcript)\b/i.test(command))
     return false;
   if (/\[console\]::(?:read|readline|readkey)/i.test(command)) return false;
+  if (/\$global:|\b(?:set-variable|new-variable|remove-variable|set-alias|new-alias|remove-alias)\b/i.test(command))
+    return false;
   return true;
 }
 
@@ -72,6 +74,12 @@ export async function runPersistentPowerShell(
   return worker.run(input);
 }
 
+/** True only when a live persistent shell is already available. Cold starts
+ * stay on the established one-shot path, whose startup cost is predictable. */
+export function hasWarmPersistentPowerShell(executable: string): boolean {
+  return (workerCache.get(executable.toLowerCase()) ?? []).some((worker) => worker.ready);
+}
+
 export async function shutdownPowerShellWorkers(): Promise<void> {
   const workers = [...workerCache.values()].flat();
   workerCache.clear();
@@ -86,6 +94,10 @@ class PowerShellWorker {
   private stderrTail = "";
   private pending?: PendingRequest;
   private queue: Promise<void> = Promise.resolve();
+
+  public get ready(): boolean {
+    return !this.stopped && this.child !== undefined && this.child.exitCode === null;
+  }
 
   public constructor(private readonly executable: string) {}
 
@@ -321,8 +333,9 @@ class PowerShellWorker {
 }
 
 const WORKER_SCRIPT = String.raw`
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
+$baselineEnvironment = [Environment]::GetEnvironmentVariables()
 while ($true) {
   $line = [Console]::In.ReadLine()
   if ($null -eq $line) { break }
@@ -369,6 +382,15 @@ while ($true) {
     [Console]::Out.Flush()
   } finally {
     Remove-Item -LiteralPath $outFile,$errFile -Force -ErrorAction SilentlyContinue
+    $currentEnvironment = [Environment]::GetEnvironmentVariables()
+    foreach ($key in @($currentEnvironment.Keys)) {
+      if (!$baselineEnvironment.Contains($key)) {
+        [Environment]::SetEnvironmentVariable([string]$key, $null)
+      }
+    }
+    foreach ($key in $baselineEnvironment.Keys) {
+      [Environment]::SetEnvironmentVariable([string]$key, [string]$baselineEnvironment[$key])
+    }
   }
 }
 `;
