@@ -11,7 +11,7 @@ const READ_ONLY_ACTIONS: Record<string, ReadonlySet<string>> = {
     "lsp_references", "lsp_hover", "watch_events", "wait_for_file", "wait_for_change",
   ]),
   process: new Set([
-    "list", "output", "wait_for_exit", "wait_for_output", "wait_for_port",
+    "list", "output", "waitAndCollect", "evidence_read", "wait_for_exit", "wait_for_output", "wait_for_port",
     "pty_read", "pty_list", "task_get", "task_list", "workflow_list",
     "workflow_get", "workflow_wait", "workflow_result", "workflow_status", "workflow_runs",
   ]),
@@ -46,6 +46,8 @@ function inputRecord(input: unknown): Record<string, unknown> {
 export function isPlanSafeAction(tool: string, input: unknown): boolean {
   const object = inputRecord(input);
   const action = object.action;
+  if (tool === "process" && action === "workflow_recipe")
+    return new Set(["inspect_repository", "verify_changes", "inspect_document", "browser_read_check"]).has(String(object.recipeName ?? ""));
   if (typeof action !== "string" || !READ_ONLY_ACTIONS[tool]?.has(action))
     return false;
   // A Git branch listing is safe; creation or deletion is not.

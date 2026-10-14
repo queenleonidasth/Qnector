@@ -20,6 +20,8 @@ export * from "./native-process.js";
 export * from "./release-manager.js";
 export * from "./document-intelligence.js";
 export * from "./workflow-manager.js";
+export * from "./workflow-recipes.js";
+export * from "./result-evidence-store.js";
 export * from "./pty-manager.js";
 export * from "./performance-monitor.js";
 export * from "./context-revision.js";

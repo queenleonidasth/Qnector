@@ -75,6 +75,8 @@ describe("Plan/Act MCP dispatch guard", () => {
     expect(blocked.ok).toBe(false);
     expect(blocked.error?.code).toBe("PLAN_MODE_READ_ONLY");
     expect(isPlanSafeAction("git", {action:"branch", delete:true})).toBe(false);
+    expect(isPlanSafeAction("process", {action:"workflow_recipe", recipeName:"inspect_repository"})).toBe(true);
+    expect(isPlanSafeAction("process", {action:"workflow_recipe", recipeName:"arbitrary"})).toBe(false);
   });
 
   it("does not let missing task scope silently bypass an active Plan Mode", async () => {
