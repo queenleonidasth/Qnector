@@ -23,3 +23,6 @@ apps/desktop/resources/build-provenance.json
 **/src/*.d.ts.map
 .DS_Store
 Thumbs.db
+
+# Local acceptance evidence is generated per run and must not dirty release provenance.
+fixtures/performance/task12-acceptance-report.json

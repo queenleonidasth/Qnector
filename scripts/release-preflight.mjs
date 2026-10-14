@@ -29,7 +29,7 @@ export async function collectReleaseInputs(options = {}) {
   const projectRoot = options.root ?? root;
   const [revision, status, nodeVersion, pnpmVersion, dotnetVersion] = await Promise.all([
     command("git", ["rev-parse", "HEAD"]), command("git", ["status", "--porcelain=v1", "--untracked-files=all"]),
-    command(process.execPath, ["--version"]), command(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["--version"]), command("dotnet", ["--version"]),
+    command(process.execPath, ["--version"]), command(process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "pnpm", process.platform === "win32" ? ["/d", "/s", "/c", "pnpm.cmd --version"] : ["--version"]), command("dotnet", ["--version"]),
   ]);
   const lockfile = path.join(projectRoot, "pnpm-lock.yaml");
   const native = nativeInputs.map((name) => {
