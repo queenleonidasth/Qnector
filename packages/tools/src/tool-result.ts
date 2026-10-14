@@ -20,6 +20,8 @@ import type {
   AgentSkillService,
   ResourceCoordinator,
   ResultEvidenceStore,
+  ResourceBudget,
+  GameActivitySensor,
 } from "@qnector/core";
 import type {
   ActivitySkillTrace,
@@ -64,6 +66,8 @@ export interface ToolContext {
   skillTraceSessionId?: string;
   abortSignal?: AbortSignal;
   resourceCoordinator?: ResourceCoordinator;
+  resourceBudget?: ResourceBudget;
+  gameActivitySensor?: GameActivitySensor;
   resultEvidenceStore?: ResultEvidenceStore;
   resourceOwnerToken?: string;
   platform?: PlatformServices;

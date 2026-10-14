@@ -45,6 +45,8 @@ import {
   WorkflowManager,
   ResultEvidenceStore,
   ResourceCoordinator,
+  ResourceBudget,
+  GameActivitySensor,
   PtyManager,
   AgentSkillService,
   type CodeIntelligenceService,
@@ -136,6 +138,8 @@ export class QnectorRuntime {
   public readonly documentIntelligence: DocumentIntelligenceService;
   public readonly workflowManager: WorkflowManager;
   public readonly resourceCoordinator: ResourceCoordinator;
+  public readonly resourceBudget: ResourceBudget;
+  public readonly gameActivitySensor: GameActivitySensor;
   public readonly ptyManager: PtyManager;
   public readonly agentSkills: AgentSkillService;
   public readonly activity: ActivityLogger;
@@ -204,6 +208,8 @@ export class QnectorRuntime {
     this.releaseManager = services.releaseManager;
     this.documentIntelligence = services.documentIntelligence;
     this.resourceCoordinator = services.resourceCoordinator;
+    this.resourceBudget = services.resourceBudget;
+    this.gameActivitySensor = services.gameActivitySensor;
     this.workflowManager = services.workflowManager;
     this.ptyManager = services.ptyManager;
     this.agentSkills = services.agentSkills;
@@ -270,6 +276,8 @@ export class QnectorRuntime {
       documentIntelligence: this.documentIntelligence,
       workflowManager: this.workflowManager,
       resourceCoordinator: this.resourceCoordinator,
+      resourceBudget: this.resourceBudget,
+      gameActivitySensor: this.gameActivitySensor,
       ptyManager: this.ptyManager,
       agentSkills: this.agentSkills,
       memory: this.memory,

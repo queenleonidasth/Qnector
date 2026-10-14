@@ -90,6 +90,7 @@ export class DocumentIntelligenceService {
     maxChars?: number;
     page?: number;
     sheet?: string;
+    signal?: AbortSignal;
   }): Promise<DocumentTextResult> {
     const absolute = path.resolve(input.path);
     if (detectDocumentKind(absolute) !== "pdf")
@@ -97,11 +98,11 @@ export class DocumentIntelligenceService {
     const data = await readFile(absolute);
     const fingerprint = createHash("sha256").update(data).digest("hex");
     const revision = `${fingerprint}|page=${input.page ?? "all"}|max=${input.maxChars ?? 100_000}`;
-    return withDocumentSession(absolute, revision, () => this.extractTextUncached(input, data));
+    return withDocumentSession(absolute, revision, () => this.extractTextUncached(input, data), input.signal);
   }
 
   private async extractTextUncached(
-    input: { path: string; maxChars?: number; page?: number; sheet?: string },
+    input: { path: string; maxChars?: number; page?: number; sheet?: string; signal?: AbortSignal },
     pdfBytes?: Buffer,
   ): Promise<DocumentTextResult> {
     const absolute = path.resolve(input.path);
@@ -127,6 +128,7 @@ export class DocumentIntelligenceService {
           extra.pageCount = pdf.numPages;
           extra.info = info;
           for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+            if (input.signal?.aborted) throw new Error("DOCUMENT_EXTRACTION_ABORTED");
             const page = await pdf.getPage(pageNumber);
             const content = await page.getTextContent();
             const pageText = content.items

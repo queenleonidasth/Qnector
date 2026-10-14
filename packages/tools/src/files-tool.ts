@@ -122,6 +122,15 @@ export async function executeFiles(
         );
         if (action === "inspect") {
           const result = await context.documentIntelligence.inspect(target);
+          if (result.kind === "pdf" && result.sizeBytes <= 8 * 1024 * 1024 && context.resourceBudget && context.gameActivitySensor?.isGameRunning) {
+            const revision = `${result.sizeBytes}|${result.modifiedAt}`;
+            const key = `pdf-prewarm:${target}:${revision}`;
+            // Scheduling is opt-in inside ResourceBudget; don't delay or change inspect's result.
+            void context.resourceBudget.prewarm(key, Math.min(16 * 1024 * 1024, result.sizeBytes * 4), async (signal) => {
+              if (signal.aborted) throw new Error("prewarm cancelled");
+              return context.documentIntelligence!.extractText({ path: target, maxChars: 100_000, signal });
+            }, { foregroundGame: () => context.gameActivitySensor!.isGameRunning(), pollIntervalMs: 3_000, signal: context.abortSignal }).catch(() => false);
+          }
           return {
             summary: `Inspected ${result.kind} document ${target}`,
             data: result,

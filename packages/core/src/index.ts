@@ -27,3 +27,4 @@ export * from "./performance-monitor.js";
 export * from "./context-revision.js";
 export * from "./agent-skills.js";
 export * from "./resource-coordinator.js";
+export * from "./resource-budget.js";

@@ -22,6 +22,8 @@ import {
   PtyManager,
   AgentSkillService,
   ResultEvidenceStore,
+  runtimeResourceBudget,
+  runtimeGameActivitySensor,
 } from "@qnector/core";
 import type { QnectorConfig } from "@qnector/shared";
 import type { ToolContext } from "@qnector/tools";
@@ -144,6 +146,8 @@ export function createRuntimeServices(input: {
     releaseManager,
     documentIntelligence,
     resourceCoordinator,
+    resourceBudget: runtimeResourceBudget,
+    gameActivitySensor: runtimeGameActivitySensor,
     workflowManager,
     ptyManager,
     agentSkills,
