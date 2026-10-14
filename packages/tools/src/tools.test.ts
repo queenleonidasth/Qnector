@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
+import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
 import AdmZip from "adm-zip";
 import { describe, expect, it, afterEach } from "vitest";
@@ -976,6 +977,22 @@ describe("Qnector grouped tools", () => {
     expect(["ripgrep", "node"]).toContain(
       (grep.data as { data?: { provider?: string } }).data?.provider ?? "",
     );
+  });
+
+  it("stops read_many before opening files beyond its ordered character budget", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-read-many-budget-"));
+    await writeFile(path.join(root, "first.txt"), "x".repeat(1_100));
+    const result = await new ToolRegistry().call(
+      "files",
+      makeContext(defaultConfig(root)),
+      { action: "read_many", paths: ["first.txt", "missing-after-budget.txt"], maxChars: 1_000 },
+    );
+    expect(result.ok).toBe(true);
+    const payload = (result.data as { data: { files: Array<Record<string, unknown>>; omitted: number } }).data;
+    expect(payload.files).toHaveLength(1);
+    expect(payload.files[0]?.truncated).toBe(true);
+    expect(payload.files[0]?.sha256).toBe(createHash("sha256").update("x".repeat(1_100)).digest("hex"));
+    expect(payload.omitted).toBe(2);
   });
 
   it("paginates base64 reads so large binary files stay bounded", async () => {

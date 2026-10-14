@@ -56,7 +56,7 @@ export const filesDefinition: ToolDefinition = {
         ],
       },
       path: { type: "string" },
-      paths: { type: "array", items: { type: "string" } },
+      paths: { type: "array", items: { anyOf: [{ type: "string" }, { type: "object" }] } },
       content: { type: "string" },
       contentBase64: { type: "string" },
       oldText: { type: "string" },
@@ -612,7 +612,7 @@ async function readManyAction(
   if (!Array.isArray(input.paths))
     throw new Error("INVALID_INPUT: paths must be an array");
   const paths = input.paths
-    .filter((entry): entry is string => typeof entry === "string")
+    .filter((entry): entry is string | Record<string, unknown> => typeof entry === "string" || (!!entry && typeof entry === "object" && !Array.isArray(entry)))
     .slice(0, 100);
   const maxChars = Math.max(
     1_000,
@@ -621,31 +621,47 @@ async function readManyAction(
   const files: Array<Record<string, unknown>> = [];
   let used = 0;
   let omitted = 0;
-  for (const value of paths) {
+  const jobs: Array<{ index: number; target: string; offsetLine: number; limitLines: number; allowance: number }> = [];
+  let planned = 0;
+  for (let index = 0; index < paths.length; index += 1) {
+    if (planned >= maxChars) { omitted += 1; continue; }
+    const value = paths[index]!;
     try {
-      const target = context.workspace.resolve(value);
-      const content = await readFile(target, "utf8");
-      const remaining = maxChars - used;
-      if (remaining <= 0) {
-        omitted += 1;
-        continue;
-      }
-      const text = content.slice(0, remaining);
-      used += text.length;
-      files.push({
-        path: target,
-        content: text,
-        sha256: createHash("sha256").update(content, "utf8").digest("hex"),
-        truncated: text.length < content.length,
-      });
-      if (text.length < content.length) omitted += 1;
+      const spec = typeof value === "string" ? { path: value } : value;
+      const target = context.workspace.resolve(String(spec.path ?? ""));
+      const offsetLine = Math.max(1, Math.floor(Number(spec.offsetLine ?? 1)));
+      const limitLines = Math.max(1, Math.min(10_000, Math.floor(Number(spec.limitLines ?? 10_000))));
+      const info = await stat(target);
+      if (!info.isFile()) throw new Error(`NOT_A_FILE: ${target}`);
+      // UTF-8 bytes upper-bound decoded characters. Reserve in request order before parallel reads.
+      const allowance = Math.min(maxChars - planned, Math.max(1, info.size));
+      planned += allowance;
+      jobs.push({ index, target, offsetLine, limitLines, allowance });
     } catch (error) {
-      files.push({
-        path: context.workspace.resolve(value),
-        error: error instanceof Error ? error.message : String(error),
-      });
+      files[index] = { path: context.workspace.resolve(typeof value === "string" ? value : String(value.path ?? "")), error: error instanceof Error ? error.message : String(error) };
     }
   }
+  let next = 0;
+  const workers = Array.from({ length: Math.min(4, jobs.length) }, async () => {
+    while (next < jobs.length) {
+      const job = jobs[next++]!;
+      try {
+        const content = await readFile(job.target, "utf8");
+        const allLines = content.split(/\r?\n/);
+        if (allLines.at(-1) === "") allLines.pop();
+        const selected = allLines.slice(job.offsetLine - 1, job.offsetLine - 1 + job.limitLines);
+        const ranged = selected.join("\n");
+        const text = ranged.slice(0, job.allowance);
+        used += text.length;
+        const truncated = text.length < ranged.length || job.offsetLine - 1 + selected.length < allLines.length;
+        files[job.index] = { path: job.target, content: text, sha256: createHash("sha256").update(content, "utf8").digest("hex"), truncated, totalLines: allLines.length, startLine: selected.length ? job.offsetLine : null, endLine: selected.length ? job.offsetLine + selected.length - 1 : null };
+        if (truncated) omitted += 1;
+      } catch (error) {
+        files[job.index] = { path: job.target, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  });
+  await Promise.all(workers);
   return {
     summary: `Read ${files.length} file(s)`,
     data: {
