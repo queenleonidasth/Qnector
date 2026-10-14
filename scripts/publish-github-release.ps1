@@ -10,6 +10,9 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $projectRoot
 
+& node (Join-Path $PSScriptRoot "release-preflight.mjs") --publish
+if ($LASTEXITCODE -ne 0) { throw "Release publish preflight failed; refusing to publish" }
+
 if (-not $Version) {
   $package = Get-Content -LiteralPath (Join-Path $projectRoot "package.json") -Raw | ConvertFrom-Json
   $Version = [string]$package.version
@@ -84,6 +87,10 @@ function Assert-ReleaseAssets([object]$release) {
     if ([string]$entry.state -ne "uploaded") {
       throw "GitHub release verification failed: $($local.Name) state is $($entry.state)"
     }
+    $localDigest = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ([string]$entry.digest -ne "sha256:$localDigest") {
+      throw "GitHub release verification failed: $($local.Name) digest is absent or differs; inspect the remote asset before recovery"
+    }
   }
 }
 
@@ -123,8 +130,13 @@ foreach ($assetPath in $assets) {
   # can clean up any stale asset with the same name.
   $release = Get-ReleaseByTag
   $existing = @($release.assets | Where-Object { $_.name -eq $file.Name })
-  foreach ($old in $existing) {
-    Invoke-RestMethod -Method Delete -Uri "$repositoryApi/releases/assets/$($old.id)" -Headers $headers | Out-Null
+  if ($existing.Count -gt 0) {
+    $localDigest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($existing.Count -eq 1 -and [string]$existing[0].state -eq "uploaded" -and [string]$existing[0].digest -eq "sha256:$localDigest") {
+      Write-Output "Already verified $($file.Name); skipping immutable matching asset."
+      continue
+    }
+    throw "Remote asset $($file.Name) already exists with a different or unverifiable digest; inspect and resolve it manually before publishing."
   }
 
   $escapedName = [Uri]::EscapeDataString($file.Name)
@@ -136,9 +148,6 @@ foreach ($assetPath in $assets) {
       --http1.1 `
       --fail `
       --show-error `
-      --retry 5 `
-      --retry-all-errors `
-      --retry-delay 2 `
       --connect-timeout 30 `
       --max-time 1800 `
       --request POST `
@@ -149,7 +158,16 @@ foreach ($assetPath in $assets) {
       --data-binary "@$($file.FullName)" `
       --output $responsePath `
       $uploadUrl
-    if ($LASTEXITCODE -ne 0) { throw "GitHub asset upload failed for $($file.Name) with curl exit code $LASTEXITCODE" }
+    if ($LASTEXITCODE -ne 0) {
+      $afterFailure = Get-ReleaseByTag
+      $observed = @($afterFailure.assets | Where-Object { $_.name -eq $file.Name })
+      $localDigest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($observed.Count -eq 1 -and [string]$observed[0].state -eq "uploaded" -and [string]$observed[0].digest -eq "sha256:$localDigest") {
+        Write-Output "Verified $($file.Name) remotely after an uncertain upload response."
+        continue
+      }
+      throw "GitHub asset upload outcome is uncertain for $($file.Name); remote state was inspected and no blind retry was made. Resolve the release asset manually."
+    }
     $uploaded = Get-Content -LiteralPath $responsePath -Raw | ConvertFrom-Json
     if ([string]$uploaded.name -ne $file.Name -or [int64]$uploaded.size -ne [int64]$file.Length) {
       throw "GitHub asset upload response did not match $($file.Name)"

@@ -5,19 +5,32 @@ import { describe, expect, it } from "vitest";
 const projectRoot = path.resolve(import.meta.dirname, "../../../..");
 
 describe("GitHub release pipeline", () => {
-  it("uses resilient curl uploads and exact-size post-upload verification", async () => {
+  it("verifies immutable asset digests and inspects uncertain uploads without replay", async () => {
     const script = await readFile(
       path.join(projectRoot, "scripts", "publish-github-release.ps1"),
       "utf8",
     );
     expect(script).toContain("[switch]$VerifyOnly");
-    expect(script).toContain("--retry 5");
-    expect(script).toContain("--retry-all-errors");
     expect(script).toContain("--connect-timeout 30");
     expect(script).toContain("--max-time 1800");
     expect(script).toMatch(/entry\.size[\s\S]*?local\.Length/);
     expect(script).toContain('state -ne "uploaded"');
+    expect(script).toContain('entry.digest -ne "sha256:$localDigest"');
+    expect(script).toContain("Remote asset");
+    expect(script).toContain("no blind retry was made");
+    expect(script).not.toContain("releases/assets/$($old.id)");
+    expect(script).not.toContain("--retry-all-errors");
     expect(script).toContain("Assert-ReleaseAssets $verified");
+  });
+
+  it("runs release preflight before native packaging and remote publishing", async () => {
+    const [pack, publish] = await Promise.all([
+      readFile(path.join(projectRoot, "scripts", "package-windows.ps1"), "utf8"),
+      readFile(path.join(projectRoot, "scripts", "publish-github-release.ps1"), "utf8"),
+    ]);
+    expect(pack).toContain("release-preflight.mjs");
+    expect(pack).toContain("build-job-host.ps1");
+    expect(publish).toContain("release-preflight.mjs");
   });
 
   it("blocks Windows packaging when desktop UI regression gates fail", async () => {
