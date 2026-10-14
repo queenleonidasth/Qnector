@@ -17,7 +17,7 @@ Task: `task_4e4b23ce-169c-437a-8b60-122147a79517`; approved Act Mode Rev 4.
 - Acceptance-runner issue `spawn EINVAL` on Node 24 Windows solved by fixed trusted `cmd.exe` invocation (never user-interpolated); release-preflight `pnpm.cmd` spawn fixed. Test report after repair: 14 declared gates, **8 PASS / 0 FAIL / 6 UNKNOWN** and `releaseEligible=false`.
 - Package pipeline at clean source commit `3ed229a`: full 169 focused regression tests, 8 external MCP, Plan Panel UI at 435/451/700 px, Native Renderer UI at 420/435/451/700, clean Build, two compiled stdio parity tests, Durable Bundle and Recovery, packaged stdio, Plan Panel, diagnostics, all PASS. Pipeline exited 0.
 - Candidate path `apps/desktop/release/durable-candidate-20261015-013300`. Setup 243651787 bytes SHA-256 `6A7F244C61B984502E9B082A90ECFD9E735D02F6BF4E378FF6DADEE2F4CF78B5`; portable 243322335 bytes SHA-256 `A5C2276CD194A028E38E940656DC61940F55638D046702B43B38522A7866A7F6`. Packaged build-provenance: source commit above, `dirtyTree=false`, pinned lock SHA `e7854df2517908d23957dac9229de627f8b9a98bcc25e013175baa977a26cd67`.
-- Windows Authenticode independently returned `NotSigned` on BOTH candidate EXEs. Do not imply electron-builder's printed signtool attempts produced a signed package.
+- Windows Authenticode independently returned `NotSigned` on BOTH candidate EXEs; the currently installed v0.4.56 `Qnector.exe` is ALSO `NotSigned` (thus no new signature regression). No signing identity/provenance has been established; do not imply electron-builder's printed signtool attempts produced a signed package.
 
 ## Controlled samples (local, not ChatGPT-host timings)
 
