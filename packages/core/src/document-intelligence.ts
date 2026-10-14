@@ -1,10 +1,12 @@
 import * as fs from "node:fs";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import AdmZip from "adm-zip";
 import * as XLSXImport from "xlsx";
+import { withDocumentSession } from "./document-session.js";
 
 const XLSX =
   (XLSXImport as typeof XLSXImport & { default?: typeof XLSXImport }).default ??
@@ -90,32 +92,57 @@ export class DocumentIntelligenceService {
     sheet?: string;
   }): Promise<DocumentTextResult> {
     const absolute = path.resolve(input.path);
-    const inspection = await this.inspect(absolute);
+    if (detectDocumentKind(absolute) !== "pdf")
+      return this.extractTextUncached(input);
+    const data = await readFile(absolute);
+    const fingerprint = createHash("sha256").update(data).digest("hex");
+    const revision = `${fingerprint}|page=${input.page ?? "all"}|max=${input.maxChars ?? 100_000}`;
+    return withDocumentSession(absolute, revision, () => this.extractTextUncached(input, data));
+  }
+
+  private async extractTextUncached(
+    input: { path: string; maxChars?: number; page?: number; sheet?: string },
+    pdfBytes?: Buffer,
+  ): Promise<DocumentTextResult> {
+    const absolute = path.resolve(input.path);
+    const kind = detectDocumentKind(absolute);
+    const inspection = kind === "pdf"
+      ? { path: absolute, kind, extension: path.extname(absolute).toLowerCase(), sizeBytes: 0, modifiedAt: "", metadata: {} }
+      : await this.inspect(absolute);
     const maxChars = clamp(input.maxChars ?? 100_000, 1_000, 1_000_000);
     let text = "";
     const extra: Record<string, unknown> = {};
 
     switch (inspection.kind) {
       case "pdf": {
-        const pdf = await loadPdf(absolute);
-        const requested = input.page;
-        const start = requested ? clamp(requested, 1, pdf.numPages) : 1;
-        const end = requested ? start : pdf.numPages;
-        const chunks: string[] = [];
-        for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
-          const page = await pdf.getPage(pageNumber);
-          const content = await page.getTextContent();
-          const pageText = content.items
-            .map((item) => ("str" in item ? String(item.str) : ""))
-            .filter(Boolean)
-            .join(" ");
-          chunks.push(`[Page ${pageNumber}]\n${pageText}`);
-          if (chunks.join("\n\n").length >= maxChars) break;
+        const pdf = await loadPdf(absolute, pdfBytes);
+        try {
+          const requested = input.page;
+          const start = requested ? clamp(requested, 1, pdf.numPages) : 1;
+          const end = requested ? start : pdf.numPages;
+          const chunks: string[] = [];
+          let chars = 0;
+          let info: unknown = null;
+          try { info = (await pdf.getMetadata()).info; } catch { info = null; }
+          extra.pageCount = pdf.numPages;
+          extra.info = info;
+          for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
+            const page = await pdf.getPage(pageNumber);
+            const content = await page.getTextContent();
+            const pageText = content.items
+              .map((item) => ("str" in item ? String(item.str) : ""))
+              .filter(Boolean)
+              .join(" ");
+            const chunk = `[Page ${pageNumber}]\n${pageText}`;
+            chunks.push(chunk);
+            chars += chunk.length + (chunks.length > 1 ? 2 : 0);
+            if (chars >= maxChars) break;
+          }
+          text = chunks.join("\n\n");
+          if (requested) extra.page = start;
+        } finally {
+          await closePdf(pdf);
         }
-        text = chunks.join("\n\n");
-        extra.pageCount = pdf.numPages;
-        if (requested) extra.page = start;
-        await closePdf(pdf);
         break;
       }
       case "docx": {
@@ -443,9 +470,9 @@ async function closePdf(pdf: unknown): Promise<void> {
   else value.cleanup?.();
 }
 
-async function loadPdf(file: string) {
+async function loadPdf(file: string, bytes?: Uint8Array) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const data = new Uint8Array(await readFile(file));
+  const data = bytes ? new Uint8Array(bytes) : new Uint8Array(await readFile(file));
   return pdfjs.getDocument({ data, useSystemFonts: true }).promise;
 }
 
