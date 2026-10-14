@@ -1,0 +1,42 @@
+﻿{
+  "generatedAt": "2026-10-14T17:36:34.752Z",
+  "source": "synthetic temporary files",
+  "cases": [
+    {
+      "files": 1,
+      "coldMs": 3.016,
+      "warmMs": 0.562,
+      "changedMs": 0.595,
+      "coldReadFiles": 1,
+      "warmReadFiles": 0,
+      "changedReadFiles": 1,
+      "coldMatchDigest": "adb6898675ae819195ceba89539e7183a2de50650c5845e7427d5c9f0d8c1484",
+      "warmMatchDigest": "adb6898675ae819195ceba89539e7183a2de50650c5845e7427d5c9f0d8c1484",
+      "changedObserved": true
+    },
+    {
+      "files": 20,
+      "coldMs": 3.925,
+      "warmMs": 0.717,
+      "changedMs": 0.774,
+      "coldReadFiles": 20,
+      "warmReadFiles": 0,
+      "changedReadFiles": 1,
+      "coldMatchDigest": "184049fa123ccaa6dc1f265d7b382571a4d6f3d1b8428cdd037d3f72c059a9df",
+      "warmMatchDigest": "184049fa123ccaa6dc1f265d7b382571a4d6f3d1b8428cdd037d3f72c059a9df",
+      "changedObserved": true
+    },
+    {
+      "files": 100,
+      "coldMs": 7.172,
+      "warmMs": 1.865,
+      "changedMs": 1.868,
+      "coldReadFiles": 100,
+      "warmReadFiles": 0,
+      "changedReadFiles": 1,
+      "coldMatchDigest": "aa0bd26e5882ea6d9d5cc020759c4d1494d4ec6c3b5c35df21e26f1c6479e2a8",
+      "warmMatchDigest": "aa0bd26e5882ea6d9d5cc020759c4d1494d4ec6c3b5c35df21e26f1c6479e2a8",
+      "changedObserved": true
+    }
+  ]
+}
