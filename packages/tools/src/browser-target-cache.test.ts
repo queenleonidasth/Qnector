@@ -29,4 +29,23 @@ describe("BrowserTargetCache", () => {
     cache.delete("tab-a");
     expect(await resolve({ id: "new-target", live: true })).toMatchObject({ id: "new-target" });
   });
+
+  it("re-resolves a cached tab after it closes and after a reconnect generation", async () => {
+    const cache = new BrowserTargetCache<{ id: string; live: boolean }>();
+    let generation = cache.currentGeneration();
+    let lookups = 0;
+    const resolve = () => cache.resolveTarget("tab-a", generation, async () => {
+      lookups += 1;
+      return { id: `tab-${lookups}`, live: true };
+    }, (target) => target.live);
+    const first = await resolve();
+    expect(first?.id).toBe("tab-1");
+    first!.live = false;
+    expect((await resolve())?.id).toBe("tab-2");
+    expect(lookups).toBe(2);
+    cache.invalidateTargets("browser reconnect");
+    generation = cache.currentGeneration();
+    expect((await resolve())?.id).toBe("tab-3");
+    expect(lookups).toBe(3);
+  });
 });
