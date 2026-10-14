@@ -86,16 +86,16 @@ describe("drawer navigation and content completeness UX", () => {
     expect(mainSource).not.toContain("minHeight: 978");
   });
 
-  it("launches the Workspace terminal through a real Windows terminal window and surfaces failures", () => {
+  it("launches an interactive Workspace shell and surfaces actual launcher failures", () => {
     expect(mainSource).toContain('ipcMain.handle("system:open-terminal"');
     expect(mainSource).toContain("openTerminalWindow(");
-    expect(terminalSource).toContain(
-      'path.join(env.ProgramFiles, "WindowsApps")',
-    );
-    expect(terminalSource).toContain('"WindowsTerminal.exe"');
-    expect(terminalSource).toContain("statSync(executable).size > 0");
-    expect(terminalSource).toContain("buildWindowsTerminalAliasCommand");
-    expect(terminalSource).toContain('child.once("spawn"');
+    expect(terminalSource).toContain("buildWindowsShellLauncherArgs");
+    expect(terminalSource).toContain('"-EncodedCommand"');
+    expect(terminalSource).toContain("Start-Process -FilePath $targetShell");
+    expect(terminalSource).toContain("$terminal.HasExited");
+    expect(terminalSource).toContain('child.once("close"');
+    expect(terminalSource).toContain("windowsHide: true");
+    expect(terminalSource).not.toContain("buildWindowsTerminalAliasCommand");
     expect(terminalSource).toContain("TERMINAL_LAUNCH_FAILED");
     expect(renderer).toContain(".openTerminal(status.activeWorkspace)");
     expect(renderer).toContain(".catch((reason: unknown) =>");
