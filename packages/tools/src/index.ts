@@ -126,6 +126,7 @@ export * from "./browser-tool.js";
 export * from "./computer-tool.js";
 export * from "./mode-tool.js";
 export * from "./plan-guard.js";
+export * from "./action-contracts.js";
 
 function memoryTaskIdFromInput(input: unknown): string | undefined {
   return scopedStringFromInput(input, "memoryTaskId");
