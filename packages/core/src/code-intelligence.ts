@@ -132,6 +132,7 @@ interface LanguageProject {
 
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_RESULTS = 2_000;
+const MAX_CACHED_PROJECTS = 6;
 
 export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
   private readonly diagnosticCache = new Map<string, ProjectCacheEntry>();
@@ -430,7 +431,11 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
   private projectDiagnostics(project: ParsedProject): readonly ts.Diagnostic[] {
     const fingerprint = projectFingerprint(project);
     const cached = this.diagnosticCache.get(project.configPath);
-    if (cached?.fingerprint === fingerprint) return cached.diagnostics;
+    if (cached?.fingerprint === fingerprint) {
+      this.diagnosticCache.delete(project.configPath);
+      this.diagnosticCache.set(project.configPath, cached);
+      return cached.diagnostics;
+    }
 
     const diagnostics: ts.Diagnostic[] = [...project.diagnostics];
     if (project.parsed.fileNames.length > 0) {
@@ -449,7 +454,10 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
       });
       diagnostics.push(...ts.getPreEmitDiagnostics(program));
     }
+    this.diagnosticCache.delete(project.configPath);
     this.diagnosticCache.set(project.configPath, { fingerprint, diagnostics });
+    while (this.diagnosticCache.size > MAX_CACHED_PROJECTS)
+      this.diagnosticCache.delete(this.diagnosticCache.keys().next().value!);
     return diagnostics;
   }
 
@@ -470,7 +478,11 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
     }
     const fingerprint = projectFingerprint(parsedProject);
     const cached = this.languageServiceCache.get(parsedProject.configPath);
-    if (cached?.fingerprint === fingerprint) return cached.project;
+    if (cached?.fingerprint === fingerprint) {
+      this.languageServiceCache.delete(parsedProject.configPath);
+      this.languageServiceCache.set(parsedProject.configPath, cached);
+      return cached.project;
+    }
 
     const options = runtimeCompilerOptions(parsedProject.parsed.options);
     const versions = new Map(
@@ -511,10 +523,18 @@ export class TypeScriptCodeIntelligence implements CodeIntelligenceService {
         ts.createDocumentRegistry(ts.sys.useCaseSensitiveFileNames),
       ),
     };
+    if (cached) cached.project.service.dispose();
+    this.languageServiceCache.delete(parsedProject.configPath);
     this.languageServiceCache.set(parsedProject.configPath, {
       fingerprint,
       project,
     });
+    while (this.languageServiceCache.size > MAX_CACHED_PROJECTS) {
+      const oldest = this.languageServiceCache.keys().next().value!;
+      const replaced = this.languageServiceCache.get(oldest);
+      this.languageServiceCache.delete(oldest);
+      replaced?.project.service.dispose();
+    }
     return project;
   }
 }
