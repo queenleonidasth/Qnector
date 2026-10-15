@@ -1,0 +1,573 @@
+{
+  "schemaVersion": 1,
+  "workload": "document-parser-extraction",
+  "baseline": {
+    "revision": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6"
+  },
+  "candidate": {
+    "revision": "e210bfe2caef2583b0e09e140f3ddb0a47dd2991"
+  },
+  "hostObserved": "UNKNOWN",
+  "trueColdProcessStarts": "UNKNOWN",
+  "warmupRounds": 5,
+  "measuredRunsPerVariant": 30,
+  "coldSessionRunsPerVariant": 10,
+  "environment": {
+    "platform": "win32",
+    "node": "v24.20.0",
+    "cpuCount": 16,
+    "totalMemoryBytes": 34184257536
+  },
+  "limitations": "Actual original/candidate document source modules, same fixture bytes. Cold session clears candidate document result cache; NOT a cold process boot. No installed host/model/network/GUI; scanned empty PDF is not OCR.",
+  "cases": [
+    {
+      "scenario": "pdf-scanned-three-pages",
+      "correctness": "PASS",
+      "outputSha256": "0a5e6ff48f035077c0524624644af5907ea8cbc94154d91d34113fd447c11fde",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 1.25649999999996,
+            "p95Ms": 2.2004000000001724,
+            "p50Confidence95Ms": [
+              1.2118999999997868,
+              1.464799999999741
+            ],
+            "p95Confidence95Ms": [
+              1.595299999999952,
+              2.2224999999998545
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 15000,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ]
+          },
+          "maxRssBytes": 464588800,
+          "outputBytes": [
+            586
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 0.14859999999998763,
+            "p95Ms": 0.3609000000001288,
+            "p50Confidence95Ms": [
+              0.1331000000000131,
+              0.18479999999999563
+            ],
+            "p95Confidence95Ms": [
+              0.2703999999998814,
+              0.9728000000000065
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ]
+          },
+          "maxRssBytes": 464588800,
+          "outputBytes": [
+            586
+          ]
+        }
+      },
+      "coldSession": {
+        "baseline": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 1.274499999999989,
+            "p95Ms": 2.163600000000315,
+            "p50Confidence95Ms": [
+              1.094000000000051,
+              1.6005999999997584
+            ],
+            "p95Confidence95Ms": [
+              1.5097000000000662,
+              2.163600000000315
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ]
+          },
+          "maxRssBytes": 466018304,
+          "outputBytes": [
+            586
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 0.8811999999998079,
+            "p95Ms": 1.4755999999997584,
+            "p50Confidence95Ms": [
+              0.7112999999999374,
+              1.1104999999997744
+            ],
+            "p95Confidence95Ms": [
+              1.1071999999999207,
+              1.4755999999997584
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 31000,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              31000
+            ]
+          },
+          "maxRssBytes": 465166336,
+          "outputBytes": [
+            586
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "xlsx-thai",
+      "correctness": "PASS",
+      "outputSha256": "ffe4c61771d449569b4295441ad1585104284d0c5db25b468d5b1e474690d5bf",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 0.9217000000003281,
+            "p95Ms": 1.337999999999738,
+            "p50Confidence95Ms": [
+              0.892500000000382,
+              0.9470999999998639
+            ],
+            "p95Confidence95Ms": [
+              1.0324999999998,
+              1.8860999999997148
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ]
+          },
+          "maxRssBytes": 484007936,
+          "outputBytes": [
+            457
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 0.24099999999998545,
+            "p95Ms": 0.3764000000001033,
+            "p50Confidence95Ms": [
+              0.20020000000022264,
+              0.26279999999997017
+            ],
+            "p95Confidence95Ms": [
+              0.31510000000025684,
+              0.3827000000001135
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              15000
+            ]
+          },
+          "maxRssBytes": 484204544,
+          "outputBytes": [
+            457
+          ]
+        }
+      },
+      "coldSession": {
+        "baseline": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 0.847400000000107,
+            "p95Ms": 1.1347999999998137,
+            "p50Confidence95Ms": [
+              0.8132999999997992,
+              0.8841999999999643
+            ],
+            "p95Confidence95Ms": [
+              0.8808999999996558,
+              1.1347999999998137
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 15000,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              15000
+            ]
+          },
+          "maxRssBytes": 484605952,
+          "outputBytes": [
+            457
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 1.1359999999999673,
+            "p95Ms": 1.6889999999998508,
+            "p50Confidence95Ms": [
+              0.9889000000002852,
+              1.2730000000001382
+            ],
+            "p95Confidence95Ms": [
+              1.2149999999996908,
+              1.6889999999998508
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 32000,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              32000
+            ]
+          },
+          "maxRssBytes": 484605952,
+          "outputBytes": [
+            457
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "docx-thai",
+      "correctness": "PASS",
+      "outputSha256": "3b7e6c4abae55813d5d6aad4c6d48657371b4bf16b096180074879bb32a16a62",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 0.3285000000000764,
+            "p95Ms": 0.7291000000000167,
+            "p50Confidence95Ms": [
+              0.3125,
+              0.3488999999999578
+            ],
+            "p95Confidence95Ms": [
+              0.43089999999983775,
+              0.7523999999998523
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ]
+          },
+          "maxRssBytes": 484806656,
+          "outputBytes": [
+            273
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 0.17049999999971988,
+            "p95Ms": 0.316899999999805,
+            "p50Confidence95Ms": [
+              0.16030000000000655,
+              0.1902999999997519
+            ],
+            "p95Confidence95Ms": [
+              0.24750000000040018,
+              0.35980000000017753
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              15000
+            ]
+          },
+          "maxRssBytes": 484806656,
+          "outputBytes": [
+            273
+          ]
+        }
+      },
+      "coldSession": {
+        "baseline": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 0.33789999999999054,
+            "p95Ms": 0.44070000000010623,
+            "p50Confidence95Ms": [
+              0.30150000000003274,
+              0.36649999999963256
+            ],
+            "p95Confidence95Ms": [
+              0.3548999999998159,
+              0.44070000000010623
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ]
+          },
+          "maxRssBytes": 485048320,
+          "outputBytes": [
+            273
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 0.39570000000003347,
+            "p95Ms": 0.8550000000000182,
+            "p50Confidence95Ms": [
+              0.31029999999964275,
+              0.5902000000000953
+            ],
+            "p95Confidence95Ms": [
+              0.4588999999996304,
+              0.8550000000000182
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ]
+          },
+          "maxRssBytes": 485044224,
+          "outputBytes": [
+            273
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "zip-thai",
+      "correctness": "PASS",
+      "outputSha256": "064ae42b314320237d9cc77eb4d69817632dfeee27f9c2985f89764f84597656",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 0.608600000000024,
+            "p95Ms": 1.0147999999999229,
+            "p50Confidence95Ms": [
+              0.5792999999998756,
+              0.6808000000000902
+            ],
+            "p95Confidence95Ms": [
+              0.7417999999997846,
+              1.0484999999998763
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              15000
+            ]
+          },
+          "maxRssBytes": 488304640,
+          "outputBytes": [
+            3344
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 30,
+            "p50Ms": 0.203899999999976,
+            "p95Ms": 0.4021000000002459,
+            "p50Confidence95Ms": [
+              0.18129999999973734,
+              0.2426999999997861
+            ],
+            "p95Confidence95Ms": [
+              0.322400000000016,
+              0.40279999999984284
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 30,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ]
+          },
+          "maxRssBytes": 488304640,
+          "outputBytes": [
+            3344
+          ]
+        }
+      },
+      "coldSession": {
+        "baseline": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 0.6039999999998145,
+            "p95Ms": 0.7500999999997475,
+            "p50Confidence95Ms": [
+              0.5520000000001346,
+              0.6455999999998312
+            ],
+            "p95Confidence95Ms": [
+              0.6286000000000058,
+              0.7500999999997475
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 0,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              0
+            ]
+          },
+          "maxRssBytes": 489574400,
+          "outputBytes": [
+            3344
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "count": 10,
+            "p50Ms": 0.7900999999997111,
+            "p95Ms": 1.2210000000000036,
+            "p50Confidence95Ms": [
+              0.6556000000000495,
+              1.1159999999999854
+            ],
+            "p95Confidence95Ms": [
+              0.8697999999999411,
+              1.2210000000000036
+            ]
+          },
+          "cpuMicroseconds": {
+            "count": 10,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ]
+          },
+          "maxRssBytes": 489443328,
+          "outputBytes": [
+            3344
+          ]
+        }
+      }
+    }
+  ],
+  "releaseEligible": false
+}
