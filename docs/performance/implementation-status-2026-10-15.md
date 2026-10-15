@@ -1,40 +1,49 @@
-# QNECTOR End-to-End Performance — acceptance progress (15 October 2026)
+# QNECTOR End-to-End Performance — implementation checkpoint (15 October 2026)
 
-Task: `task_4e4b23ce-169c-437a-8b60-122147a79517`; approved Act Mode Rev 4.
+Task: `task_4e4b23ce-169c-437a-8b60-122147a79517`; approved **Act Mode Revision 4**. User's latest instruction: **continue work; do not shut down the PC**.
 
-## Source, isolation, and feature policy
+## Isolation and production
 
-- Production / original source stays at v0.4.56 commit `e809591d9cceca0140c9cc66fdcf7b4dc62be0f6` and remains installed and unchanged.
-- Candidate source commit at packaged verification: `3ed229ab23dcf289bc4d3dd50ca69f6eca31fd17` in `D:\Projects\Qnector-Performance-20261014-r4`, clean at packaging. Any later benchmark code commit requires a NEW clean package before eligibility.
-- Workspace Scope, approvals, features and existing public actions were not intentionally changed by this acceptance work.
-- Speculative prewarm requires `QNECTOR_SPECULATIVE_PREWARM=1`, defaults OFF, cache hard cap 128 MiB and aborts speculative work for detected game process or pressure; the user-requested work is not aborted.
-- No update to installed production, main, tags, GitHub releases, Windows, GPU/driver settings or games.
+- Stable QNECTOR stays installed at v0.4.56 commit `e809591d9cceca0140c9cc66fdcf7b4dc62be0f6`. Work is on isolated branch `feat/end-to-end-performance-20261014-r4` at `D:\Projects\Qnector-Performance-20261014-r4`.
+- Do not change Workspace Scope, Plan/Act approvals, tool aliases, existing public actions, system/game settings, or running tasks.
+- Speculative prewarming is opt-in (env `QNECTOR_SPECULATIVE_PREWARM=1`), disabled by default. Hard cache cap: 128 MiB; cancel only speculative work for RAM pressure or detected game activity. Not yet canary-verified while a real game is running.
+- No merge, release, tag overwrite, upgrade or shutdown has been performed.
 
-## Proven acceptance runs
+## Verified local code and regression acceptance
 
-- Core `typecheck` PASS; `pnpm test` PASS **437 tests in 95 files**; `pnpm lint` PASS; HTTP MCP smoke PASS; semantic search acceptance PASS; public tool manifest PASS.
-- `pnpm accept:performance` PASS after building `qnector-uia.exe`: PowerShell cold 1674 ms/warm 6 ms, UIA cold 315.62 ms/warm 6.46 ms with same persistent worker and clean shutdown. These are single-run observations, not controlled confidence intervals.
-- Acceptance-runner issue `spawn EINVAL` on Node 24 Windows solved by fixed trusted `cmd.exe` invocation (never user-interpolated); release-preflight `pnpm.cmd` spawn fixed. Test report after repair: 14 declared gates, **8 PASS / 0 FAIL / 6 UNKNOWN** and `releaseEligible=false`.
-- Package pipeline at clean source commit `3ed229a`: full 169 focused regression tests, 8 external MCP, Plan Panel UI at 435/451/700 px, Native Renderer UI at 420/435/451/700, clean Build, two compiled stdio parity tests, Durable Bundle and Recovery, packaged stdio, Plan Panel, diagnostics, all PASS. Pipeline exited 0.
-- Candidate path `apps/desktop/release/durable-candidate-20261015-013300`. Setup 243651787 bytes SHA-256 `6A7F244C61B984502E9B082A90ECFD9E735D02F6BF4E378FF6DADEE2F4CF78B5`; portable 243322335 bytes SHA-256 `A5C2276CD194A028E38E940656DC61940F55638D046702B43B38522A7866A7F6`. Packaged build-provenance: source commit above, `dirtyTree=false`, pinned lock SHA `e7854df2517908d23957dac9229de627f8b9a98bcc25e013175baa977a26cd67`.
-- Windows Authenticode independently returned `NotSigned` on BOTH candidate EXEs; the currently installed v0.4.56 `Qnector.exe` is ALSO `NotSigned` (thus no new signature regression). No signing identity/provenance has been established; do not imply electron-builder's printed signtool attempts produced a signed package.
+- Full `typecheck`, `lint` and `pnpm test`: **446/446 tests across 96 test files PASS** on `2728833`. Later `46e4ec3` cache-clear fix passed targeted typecheck, lint and ContentCache tests, but full suite has not yet been rerun on that exact latest commit.
+- `read_many` streaming SHA-256: legacy string calls remain byte-compatible; added tests for ordered budgets, range reads, Thai Unicode, BOM, symlinks, empty and out-of-range files, and changed source between stat/read. Added stat identity matching (`ino` and `dev`) on large files, tested deterministic stale-source rejection. Commits `b3469c0`, `3340886`.
+- Workflow recipes: new integration tests compare actual standalone git status/diff results against the persisted recipe step results; errors propagate, dependent steps remain skipped, invalid revisions are rejected before effects, and lost submission responses can be retried with the same idempotency key without duplicate runs. Generic WorkflowManager suites cover cancellation and unknown outcomes. Commits `f9f72fb`, `2728833`.
+- ContentCache stale-result correction: `clear()` now invalidates in-flight reads even if no previous generation existed for the path; new negative regression test proves old results cannot repopulate cache. Commit `46e4ec3`. This correctness fix does **not** by itself prove LSP cache integration.
+- Public API golden contracts, HTTP MCP smoke, semantic search, typed recipes, result hydration, GPU/UI tests and Plan/Act tests previously passed in full-suite acceptance.
 
-## Controlled samples (local, not ChatGPT-host timings)
+## Built and attested artifact — NOTE: older exact commit
 
-- `scripts/bench-process-pool.mts`, process.run PowerShell fixture, warm 30 samples each: baseline median **1191 ms**, p95 **1206 ms**; opt-in pooled median **2 ms**, p95 **3 ms**; stdout marker and exit code matched. Cold 10 samples each: median 1190 ms baseline and 1191 ms pooled. This proves benefit for eligible warmed shell calls only.
-- `scripts/bench-search-abba.mts`: original `e809591` vs R4 candidate, actual read-only LocalSemanticSearchService on equal synthetic Thai/English files, ABBA 5 warmup rounds/30 samples per variant, 10 fresh-service cold-index samples per variant, equality by stable output SHA-256, CPU/RSS, p50/p95 with bootstrap confidence. Reports retained in `fixtures/performance/controlled-search-abba-20261015.json`. Warm search improvements were small and run-to-run p95 noise was evident; no unconditional speedup claim.
-- `fixtures/performance/controlled-process-pool-20261015.json` stores the corresponding process-pool fixture summary.
-- `scripts/bench-e2e.mts` is a telemetry-only microbenchmark; this is NOT a full user-to-verified-workload comparison.
+Last independently verified clean-build artifact is **9d1d94e** (before later code changes), at
+`apps/desktop/release/durable-candidate-20261015-094030`.
 
-## Release blockers — do not bypass
+- `package-acceptance.json` includes verified exact source revision, lockfile, SHA-256 of both EXEs and all key native resources, compiled stdio smoke, recovery smoke, Plan Panel UX and native TypeScript diagnostics.
+- Setup SHA-256: `22A6F1556DC12746258625E2D813BF0AEE1522B4ADAFD5A999A94FF7C03DE662`.
+- Portable SHA-256: `92C15957F97913A176445998D5E4DD3C24A3720EE79CCA26F1A7760735F83ABF`.
+- Both EXEs were `NotSigned` (same unsigned state as installed v0.4.56); do not assert signing provenance from builder output.
+- **This artifact is NOT equivalent to the latest code**. A fresh clean package from the intended final HEAD is required before installation/release eligibility.
 
-1. **Unsigned executables**: an authentic release signing identity/certificate is unavailable. Both generated binaries are NotSigned. Treat any package signing requirements as unfulfilled.
-2. **True end-to-end benchmarks incomplete**: ChatGPT host/model time, browsers/GUI target cache, document OCR/render/export, memory/Plan/context, build/release/recovery, full client-observed latency, and 10 cold-process boot samples remain unmeasured at the required ABBA sample depth. Unknown is not zero or PASS.
-3. **Runtime acceptance incomplete**: authenticate and verify the real tunnel, actual packaged interactive app and installed upgrade continuity, user confirmation behavior, game foreground/resource budget canary, and rollback with preserved running task receipts.
-4. **Additional Task 05-11 checklist conditions** are implemented partly but lack exact requirements/negative test and feature parity evidence. Do not mark them complete without independent validation.
-5. **Version provenance**: built artifacts are still named 0.4.56 despite a different commit. A future eligible release requires version sync/bump, rebuilding clean exact commit, new tag, remote checksum verification and safe install. Never replace the existing v0.4.56 tag.
-6. A copy of dev guidance `D:\Projects\devq.md` could not be found during inspection; do not invent guidance.
+## Controlled performance evidence (local, synthetic)
 
-## Decision
+- ABBA `read_many` comparison to original `e809591`: fixtures with 1 large, 20 small and 100 small files; 5 warmup rounds, 30 measured samples/variant and 10 fresh-registry samples/variant; equality via SHA-256 and CPU/RSS/p50/p95/CI in `fixtures/performance/controlled-read-many-abba-20261015.json`, refreshed on candidate `46e4ec3`.
+- 1 large file warm p50 baseline **3.472ms**, candidate **2.444ms**; p95 **6.433ms** vs **3.034ms**.
+- 20 small files warm p50 **1.847ms** vs **1.461ms**, p95 **2.988ms** vs **2.553ms**.
+- 100 small files warm p50 **7.949ms** vs **5.508ms**, p95 **9.052ms** vs **6.166ms**.
+- Semantic Search ABBA on 20/100 Thai and English test files: stable output hashes with 30 warm/10 cold-index service samples and 95% bootstrap CI, in `fixtures/performance/controlled-search-abba-20261015.json`. 20-file p95 sometimes regressed by ~0.18ms (~sub-ms noise/overlapping CI), so no unconditional speedup claim.
+- Opt-in warm PowerShell pool previously measured baseline median **1191ms**, pooled median **2ms** for safe reusable commands; cold ~1190ms in both conditions. This is a narrow fixture, not all commands.
+- The above does **not** measure a user's ChatGPT wall-clock/model/network time, fresh process cold boot, document OCR/render/export, real CDP/UIA interactions, resource consumption while gaming or full cross-provider fallback.
 
-**NO RELEASE, NO PRODUCTION UPDATE**. Preserve the tested candidate, the installed stable version and all task evidence. Report unverified gates as unresolved. Resume ONLY by satisfying all gates, then publish and verify remote assets and installed version. This document is a checkpoint, not certification that Tasks 01–12 are finished.
+## Release blockers and mandatory next gates
+
+1. Latest Acceptance Runner on packaged `9d1d94e`: **10 PASS / 0 FAIL / 4 UNKNOWN**, releaseEligible=false. The UNKNOWN gates are **tunnel, electron-gui, chatgpt-host and controlled-performance-suite**. Newer source commits require a new package and rerun.
+2. Act Checklist after verification of Task07 edge cases and Task05 failure/equivalence: **24 of 43 complete**; 19 remain. Unverified steps must stay unchecked.
+3. A controlled full-workload ABBA suite still needs browser/UIA, documents, recipes, memory/context, process/waits, startup/build/release, flags/canary; 10 truly cold process starts and observed host timing remain missing. No regression claims based on overlapping sub-ms noise.
+4. Real candidate tunnel and ChatGPT host tools-list exposure, interactive Electron GUI acceptance, game foreground/RAM pressure, migration/old-task recovery and rollback need verified evidence. Never bypass user approvals.
+5. For any eligible release: choose new version (do not replace tag `v0.4.56`), clean exact source build and provenance, signing policy, GitHub remote asset size/digest verification, installed upgrade continuity and rollback readiness. Do not deploy with UNKNOWN gates.
+
+**Decision: NO RELEASE / NO INSTALLED UPDATE / NO SHUTDOWN** until all required gates and all approved checklist steps are verified. The working branch and baseline evidence are preserved.
