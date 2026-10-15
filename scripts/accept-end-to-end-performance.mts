@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { findVerifiedPackage } from "./package-evidence.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,12 +52,18 @@ for (const [gate, script] of [
 
 const gitDiff = await commandResult("git", ["diff", "--check"]);
 results.push({ gate: "git-diff-check", status: gitDiff.code === 0 ? "PASS" : "FAIL", evidence: gitDiff.output || (gitDiff.code === 0 ? "clean" : "git diff --check failed") });
-results.push({ gate: "stdio-packaged", status: "UNKNOWN", evidence: "Requires clean production build and packaged artifact; execute scripts/package-windows.ps1 for compiled/package acceptance." });
+const expectedCommit = (await commandResult("git", ["rev-parse", "HEAD"])).output.trim();
+const packageEvidence = findVerifiedPackage(expectedCommit);
+results.push({ gate: "stdio-packaged", status: packageEvidence?.smokeVerified ? "PASS" : "UNKNOWN",
+  evidence: packageEvidence ? `Verified exact-commit package with compiled stdio smoke, SHA256 resources and binaries: ${packageEvidence.packageDirectory}`
+    : "No verified, exact-commit clean packaged artifact with stdio smoke; run scripts/package-windows.ps1." });
 results.push({ gate: "tunnel", status: "UNKNOWN", evidence: "No authenticated tunnel endpoint supplied; no tunnel exposure can be inferred from local tests." });
 results.push({ gate: "electron-gui", status: "UNKNOWN", evidence: "GUI/interactive acceptance must be recorded on an available desktop session." });
 results.push({ gate: "chatgpt-host", status: "UNKNOWN", evidence: "Client tool refresh/exposure and client-observed timings are not observable from this local runtime; host gap remains UNKNOWN." });
 results.push({ gate: "controlled-performance-suite", status: "UNKNOWN", evidence: "Existing checked-in benchmark fixtures cover telemetry and read_many only. Full baseline/candidate ABBA suite (5 warmups, 30 samples per workload and 10 cold starts with resource sampling) is not yet evidenced." });
-results.push({ gate: "native-build", status: "UNKNOWN", evidence: "Job Host source exists, but packaged Windows Job Host/UIA artifacts must be built and validated by the Windows package gate." });
+results.push({ gate: "native-build", status: packageEvidence?.nativeBuildVerified ? "PASS" : "UNKNOWN",
+  evidence: packageEvidence ? "Exact-commit UIA and Job Host binary hashes matched package evidence; packaged durable-recovery smoke passed."
+    : "Native UIA and Job Host must be built, packaged and validated by scripts/package-windows.ps1." });
 
 const report = {
   schemaVersion: 1,

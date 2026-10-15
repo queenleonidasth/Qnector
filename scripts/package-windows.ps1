@@ -145,3 +145,8 @@ try {
   $env:QNECTOR_SMOKE_EXECUTABLE = $previousExecutable
   $env:QNECTOR_SMOKE_STDIO_CLI = $previousStdioCli
 }
+
+# The evidence is created only after every package and smoke gate succeeds.
+# It binds SHA-256 of EXEs/resources to a clean exact source commit.
+& node (Join-Path $PSScriptRoot "package-evidence.mjs") record $releaseDir
+if ($LASTEXITCODE -ne 0) { throw "Package evidence attestation failed; refusing release" }
