@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "workload": "real-uia-native-helper-list-windows",
+  "baselineCodeRevision": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6",
+  "candidateCodeRevision": "30d50eb9cc80b94df9fd2dfa80152bc0a8679153",
+  "candidatePackagedHelperRevision": "7466deccb16e9579a7230c405ea1e3f8da1d1d6e",
+  "baselineHelper": "C:\\Program Files\\Qnector\\resources\\uia-helper\\qnector-uia.exe",
+  "candidateHelper": "D:\\Projects\\Qnector-Performance-20261014-r4\\apps\\desktop\\release\\durable-candidate-20261015-104030\\win-unpacked\\resources\\uia-helper\\qnector-uia.exe",
+  "countWindowsQuery": 50,
+  "warmupRounds": 5,
+  "measuredPerVariant": 30,
+  "coldHelperProcessPerVariant": 10,
+  "identitySha256": "a2e6430a0e78b0f0b44c20453428c919c308dad658478efd82ebaeb29f0b45e0",
+  "identityProcessId": 10296,
+  "correctness": "PASS",
+  "warm": {
+    "baseline": {
+      "elapsedMs": {
+        "n": 30,
+        "p50": 26.235000000000127,
+        "p95": 29.006399999999985,
+        "p50Confidence95": [
+          25.25330000000008,
+          27.045900000000074
+        ],
+        "p95Confidence95": [
+          28.665900000000192,
+          31.559900000000198
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 30,
+        "p50": 0,
+        "p95": 0,
+        "p50Confidence95": [
+          0,
+          0
+        ],
+        "p95Confidence95": [
+          0,
+          15000
+        ]
+      },
+      "responseBytes": {
+        "n": 30,
+        "p50": 1356,
+        "p95": 1356,
+        "p50Confidence95": [
+          1356,
+          1356
+        ],
+        "p95Confidence95": [
+          1356,
+          1356
+        ]
+      },
+      "peakRssBytes": 82632704
+    },
+    "candidate": {
+      "elapsedMs": {
+        "n": 30,
+        "p50": 25.689300000000003,
+        "p95": 28.30289999999968,
+        "p50Confidence95": [
+          24.72070000000008,
+          26.56710000000021
+        ],
+        "p95Confidence95": [
+          27.41989999999987,
+          28.345800000000054
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 30,
+        "p50": 0,
+        "p95": 15000,
+        "p50Confidence95": [
+          0,
+          0
+        ],
+        "p95Confidence95": [
+          0,
+          16000
+        ]
+      },
+      "responseBytes": {
+        "n": 30,
+        "p50": 1356,
+        "p95": 1356,
+        "p50Confidence95": [
+          1356,
+          1356
+        ],
+        "p95Confidence95": [
+          1356,
+          1356
+        ]
+      },
+      "peakRssBytes": 82632704
+    }
+  },
+  "coldHelper": {
+    "baseline": {
+      "elapsedMs": {
+        "n": 10,
+        "p50": 271.90729999999985,
+        "p95": 283.13599999999997,
+        "p50Confidence95": [
+          268.0513000000001,
+          277.72809999999936
+        ],
+        "p95Confidence95": [
+          277.72809999999936,
+          283.13599999999997
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 10,
+        "p50": 0,
+        "p95": 171000,
+        "p50Confidence95": [
+          0,
+          0
+        ],
+        "p95Confidence95": [
+          0,
+          171000
+        ]
+      },
+      "responseBytes": {
+        "n": 10,
+        "p50": 1356,
+        "p95": 1356,
+        "p50Confidence95": [
+          1356,
+          1356
+        ],
+        "p95Confidence95": [
+          1356,
+          1356
+        ]
+      },
+      "peakRssBytes": 83427328
+    },
+    "candidate": {
+      "elapsedMs": {
+        "n": 10,
+        "p50": 275.3820999999998,
+        "p95": 283.3901999999998,
+        "p50Confidence95": [
+          272.6441999999997,
+          280.2669000000001
+        ],
+        "p95Confidence95": [
+          279.27130000000034,
+          283.3901999999998
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 10,
+        "p50": 0,
+        "p95": 32000,
+        "p50Confidence95": [
+          0,
+          0
+        ],
+        "p95Confidence95": [
+          0,
+          32000
+        ]
+      },
+      "responseBytes": {
+        "n": 10,
+        "p50": 1356,
+        "p95": 1356,
+        "p50Confidence95": [
+          1356,
+          1356
+        ],
+        "p95Confidence95": [
+          1356,
+          1356
+        ]
+      },
+      "peakRssBytes": 83775488
+    }
+  },
+  "releaseEligible": false,
+  "limitations": "Actual UIA native helper against running installed QNECTOR window, read-only and no interaction. Candidate helper from exact-commit package, source from current branch. Does not verify candidate Electron GUI controls, ChatGPT host or true cold Windows reboot."
+}

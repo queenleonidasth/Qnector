@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "workload": "real-headless-chromium-cdp-read",
+  "baselineRevision": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6",
+  "candidateRevision": "30d50eb9cc80b94df9fd2dfa80152bc0a8679153",
+  "browser": "Chromium 141.0.7390.37 / CDP loopback",
+  "localhostPort": 9222,
+  "sampleTargetUrl": "http://127.0.0.1:48341/qc",
+  "sampleSelector": "#delayed",
+  "outputSha256": "f24d423064e5abf29b3c3eae1fa0ff7950215d1e0b4c00df37353f110e012f03",
+  "warmupRounds": 5,
+  "measuredPerVariant": 30,
+  "lateReadSamplesPerVariant": 10,
+  "correctness": "PASS",
+  "warm": {
+    "baseline": {
+      "elapsedMs": {
+        "n": 30,
+        "p50": 16.727800000000116,
+        "p95": 18.471100000000206,
+        "p50Confidence95": [
+          15.944700000000012,
+          17.208800000000338
+        ],
+        "p95Confidence95": [
+          17.644600000000082,
+          18.586599999999635
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 30,
+        "p50": 0,
+        "p95": 16000,
+        "p50Confidence95": [
+          0,
+          15000
+        ],
+        "p95Confidence95": [
+          15000,
+          32000
+        ]
+      },
+      "payloadBytes": {
+        "n": 30,
+        "p50": 414,
+        "p95": 414,
+        "p50Confidence95": [
+          414,
+          414
+        ],
+        "p95Confidence95": [
+          414,
+          414
+        ]
+      },
+      "maxRssBytes": 447954944
+    },
+    "candidate": {
+      "elapsedMs": {
+        "n": 30,
+        "p50": 14.496700000000146,
+        "p95": 16.484899999999925,
+        "p50Confidence95": [
+          13.308700000000044,
+          14.766899999999623
+        ],
+        "p95Confidence95": [
+          15.115500000000338,
+          17.1882999999998
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 30,
+        "p50": 0,
+        "p95": 32000,
+        "p50Confidence95": [
+          0,
+          16000
+        ],
+        "p95Confidence95": [
+          16000,
+          32000
+        ]
+      },
+      "payloadBytes": {
+        "n": 30,
+        "p50": 414,
+        "p95": 414,
+        "p50Confidence95": [
+          414,
+          414
+        ],
+        "p95Confidence95": [
+          414,
+          414
+        ]
+      },
+      "maxRssBytes": 447963136
+    }
+  },
+  "lateRead": {
+    "baseline": {
+      "elapsedMs": {
+        "n": 10,
+        "p50": 16.709100000000035,
+        "p95": 17.62900000000036,
+        "p50Confidence95": [
+          15.55580000000009,
+          17.0295000000001
+        ],
+        "p95Confidence95": [
+          17.0295000000001,
+          17.62900000000036
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 10,
+        "p50": 0,
+        "p95": 0,
+        "p50Confidence95": [
+          0,
+          0
+        ],
+        "p95Confidence95": [
+          0,
+          0
+        ]
+      },
+      "payloadBytes": {
+        "n": 10,
+        "p50": 414,
+        "p95": 414,
+        "p50Confidence95": [
+          414,
+          414
+        ],
+        "p95Confidence95": [
+          414,
+          414
+        ]
+      },
+      "maxRssBytes": 446930944
+    },
+    "candidate": {
+      "elapsedMs": {
+        "n": 10,
+        "p50": 14.716699999999946,
+        "p95": 16.018099999999777,
+        "p50Confidence95": [
+          14.177200000000084,
+          15.942199999999957
+        ],
+        "p95Confidence95": [
+          15.935100000000148,
+          16.018099999999777
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 10,
+        "p50": 0,
+        "p95": 0,
+        "p50Confidence95": [
+          0,
+          0
+        ],
+        "p95Confidence95": [
+          0,
+          0
+        ]
+      },
+      "payloadBytes": {
+        "n": 10,
+        "p50": 414,
+        "p95": 414,
+        "p50Confidence95": [
+          414,
+          414
+        ],
+        "p95Confidence95": [
+          414,
+          414
+        ]
+      },
+      "maxRssBytes": 446423040
+    }
+  },
+  "releaseEligible": false,
+  "limitations": "Real local headless CDP against isolated QNECTOR test page, not ChatGPT host or candidate Electron. Late reads are not cold browser/OS process boots. Browser target identity and text hashes verified on every request; no user browser data accessed."
+}
