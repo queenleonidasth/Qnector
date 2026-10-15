@@ -93,7 +93,19 @@ export class DocumentIntelligenceService {
     signal?: AbortSignal;
   }): Promise<DocumentTextResult> {
     const absolute = path.resolve(input.path);
-    if (detectDocumentKind(absolute) !== "pdf")
+    const documentKind = detectDocumentKind(absolute);
+    if (documentKind === "xlsx" || documentKind === "docx" || documentKind === "zip") {
+      const info = await stat(absolute);
+      if (!info.isFile()) throw new Error("NOT_A_FILE: " + absolute);
+      if (info.size <= 16 * 1024 * 1024) {
+        const bytes = await readFile(absolute);
+        const hash = createHash("sha256").update(bytes).digest("hex");
+        const revision = documentKind + "|" + hash + "|sheet=" + (input.sheet ?? "*") + "|max=" + (input.maxChars ?? 100_000);
+        return withDocumentSession(absolute, revision,
+          () => this.extractTextUncached(input, bytes), input.signal);
+      }
+    }
+    if (documentKind !== "pdf")
       return this.extractTextUncached(input);
     const data = await readFile(absolute);
     const fingerprint = createHash("sha256").update(data).digest("hex");
@@ -103,20 +115,24 @@ export class DocumentIntelligenceService {
 
   private async extractTextUncached(
     input: { path: string; maxChars?: number; page?: number; sheet?: string; signal?: AbortSignal },
-    pdfBytes?: Buffer,
+    sourceBytes?: Buffer,
   ): Promise<DocumentTextResult> {
     const absolute = path.resolve(input.path);
     const kind = detectDocumentKind(absolute);
     const inspection = kind === "pdf"
       ? { path: absolute, kind, extension: path.extname(absolute).toLowerCase(), sizeBytes: 0, modifiedAt: "", metadata: {} }
-      : await this.inspect(absolute);
+      : sourceBytes
+        ? { path: absolute, kind, extension: path.extname(absolute).toLowerCase(),
+          sizeBytes: sourceBytes.length, modifiedAt: "",
+          metadata: await this.metadata(absolute, kind, sourceBytes) }
+        : await this.inspect(absolute);
     const maxChars = clamp(input.maxChars ?? 100_000, 1_000, 1_000_000);
     let text = "";
     const extra: Record<string, unknown> = {};
 
     switch (inspection.kind) {
       case "pdf": {
-        const pdf = await loadPdf(absolute, pdfBytes);
+        const pdf = await loadPdf(absolute, sourceBytes);
         try {
           const requested = input.page;
           const start = requested ? clamp(requested, 1, pdf.numPages) : 1;
@@ -148,7 +164,7 @@ export class DocumentIntelligenceService {
         break;
       }
       case "docx": {
-        const zip = new AdmZip(absolute);
+        const zip = new AdmZip(sourceBytes ?? absolute);
         const documentXml = zip
           .getEntry("word/document.xml")
           ?.getData()
@@ -166,7 +182,9 @@ export class DocumentIntelligenceService {
         break;
       }
       case "xlsx": {
-        const workbook = XLSX.readFile(absolute, { cellDates: true });
+        const workbook = sourceBytes
+          ? XLSX.read(sourceBytes, { type: "buffer", cellDates: true })
+          : XLSX.readFile(absolute, { cellDates: true });
         const selected = input.sheet
           ? workbook.SheetNames.filter((name) => name === input.sheet)
           : workbook.SheetNames;
@@ -193,7 +211,7 @@ export class DocumentIntelligenceService {
         break;
       }
       case "zip": {
-        const zip = new AdmZip(absolute);
+        const zip = new AdmZip(sourceBytes ?? absolute);
         const entries = zip.getEntries();
         text = entries
           .slice(0, 10_000)
@@ -253,42 +271,45 @@ export class DocumentIntelligenceService {
         "UNSUPPORTED_DOCUMENT_RENDER: files.render currently renders PDF pages; use files.preview for images and files.extract_text for other documents",
       );
     const pdf = await loadPdf(absolute);
-    const pageNumber = clamp(input.page ?? 1, 1, pdf.numPages);
-    const page = await pdf.getPage(pageNumber);
-    const base = page.getViewport({ scale: 1 });
-    const maxWidth = clamp(input.maxWidth ?? 2048, 320, 4096);
-    const scale = Math.min(4, maxWidth / Math.max(1, base.width));
-    const viewport = page.getViewport({ scale });
-    const { createCanvas } = await import("@napi-rs/canvas");
-    const canvas = createCanvas(
-      Math.max(1, Math.ceil(viewport.width)),
-      Math.max(1, Math.ceil(viewport.height)),
-    );
-    const context = canvas.getContext("2d");
-    await page.render({ canvasContext: context as never, viewport } as never)
-      .promise;
-    const format = input.format ?? "png";
-    const buffer =
-      format === "jpeg"
-        ? canvas.toBuffer("image/jpeg")
-        : canvas.toBuffer("image/png");
-    const attachment: ToolAttachment = {
-      type: "image",
-      mimeType: format === "jpeg" ? "image/jpeg" : "image/png",
-      dataBase64: buffer.toString("base64"),
-      width: canvas.width,
-      height: canvas.height,
-      sizeBytes: buffer.length,
-    };
-    const result = {
-      path: absolute,
-      kind,
-      page: pageNumber,
-      pageCount: pdf.numPages,
-      attachment,
-    } satisfies DocumentRenderResult;
-    await closePdf(pdf);
-    return result;
+    try {
+      const pageNumber = clamp(input.page ?? 1, 1, pdf.numPages);
+      const page = await pdf.getPage(pageNumber);
+      const base = page.getViewport({ scale: 1 });
+      const maxWidth = clamp(input.maxWidth ?? 2048, 320, 4096);
+      const scale = Math.min(4, maxWidth / Math.max(1, base.width));
+      const viewport = page.getViewport({ scale });
+      const { createCanvas } = await import("@napi-rs/canvas");
+      const canvas = createCanvas(
+        Math.max(1, Math.ceil(viewport.width)),
+        Math.max(1, Math.ceil(viewport.height)),
+      );
+      const context = canvas.getContext("2d");
+      await page.render({ canvasContext: context as never, viewport } as never)
+        .promise;
+      const format = input.format ?? "png";
+      const buffer =
+        format === "jpeg"
+          ? canvas.toBuffer("image/jpeg")
+          : canvas.toBuffer("image/png");
+      const attachment: ToolAttachment = {
+        type: "image",
+        mimeType: format === "jpeg" ? "image/jpeg" : "image/png",
+        dataBase64: buffer.toString("base64"),
+        width: canvas.width,
+        height: canvas.height,
+        sizeBytes: buffer.length,
+      };
+      return {
+        path: absolute,
+        kind,
+        page: pageNumber,
+        pageCount: pdf.numPages,
+        attachment,
+      } satisfies DocumentRenderResult;
+    } finally {
+      // Always release the PDF parser even when page load or canvas rendering fails.
+      await closePdf(pdf);
+    }
   }
 
   public async query(input: {
@@ -321,6 +342,7 @@ export class DocumentIntelligenceService {
   private async metadata(
     file: string,
     kind: DocumentKind,
+    sourceBytes?: Buffer,
   ): Promise<Record<string, unknown>> {
     if (kind === "pdf") {
       const pdf = await loadPdf(file);
@@ -335,7 +357,9 @@ export class DocumentIntelligenceService {
       return result;
     }
     if (kind === "xlsx") {
-      const workbook = XLSX.readFile(file, {
+      const workbook = sourceBytes ? XLSX.read(sourceBytes, {
+        type: "buffer", bookSheets: true, bookProps: true,
+      }) : XLSX.readFile(file, {
         bookSheets: true,
         bookProps: true,
       });
@@ -345,7 +369,7 @@ export class DocumentIntelligenceService {
       };
     }
     if (kind === "docx" || kind === "zip") {
-      const zip = new AdmZip(file);
+      const zip = new AdmZip(sourceBytes ?? file);
       const entries = zip.getEntries();
       const result: Record<string, unknown> = {
         entryCount: entries.length,

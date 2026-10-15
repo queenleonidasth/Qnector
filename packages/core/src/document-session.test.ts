@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { clearDocumentSessions, withDocumentSession } from "./document-session.js";
+import { clearDocumentSessions, invalidateDocumentSession, withDocumentSession } from "./document-session.js";
 import { DocumentIntelligenceService } from "./document-intelligence.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,7 +12,7 @@ async function createPdfFixture(pages: number): Promise<Uint8Array> {
   return pdf.save();
 }
 
-const parser = vi.hoisted(() => ({ opens: 0, closes: 0, pages: 1, fail: false }));
+const parser = vi.hoisted(() => ({ opens: 0, closes: 0, pages: 1, fail: false, pageFails: false }));
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   getDocument: () => {
     parser.opens += 1;
@@ -20,7 +20,10 @@ vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
     return { promise: Promise.resolve({
       numPages: parser.pages,
       getMetadata: async () => ({ info: { Title: "Thai report" } }),
-      getPage: async (pageNumber: number) => ({ getTextContent: async () => ({ items: [{ str: pageNumber === 2 || parser.pages === 1 ? "ภาษาไทย" : `Page ${pageNumber}` }] }) }),
+      getPage: async (pageNumber: number) => {
+        if (parser.pageFails) throw new Error("PDF_PAGE_LOAD_FAILED");
+        return { getTextContent: async () => ({ items: [{ str: pageNumber === 2 || parser.pages === 1 ? "ภาษาไทย" : `Page ${pageNumber}` }] }) };
+      },
       destroy: async () => { parser.closes += 1; },
     }) };
   },
@@ -39,6 +42,28 @@ describe("document sessions", () => {
     expect(loads).toBe(1);
     expect((await withDocumentSession("/a.pdf", "sha-b|page=1", loader)).text).toBe("สวัสดี");
     expect(loads).toBe(2);
+  });
+
+  it("does not cache a loader detached by invalidation or by clear", async () => {
+    for (const reset of ["invalidate", "clear"] as const) {
+      clearDocumentSessions();
+      const file = "/detached-document.pdf";
+      const revision = "sha-v1|page=1";
+      let finish!: (text: string) => void;
+      const pending = withDocumentSession(file, revision, () =>
+        new Promise<{ text: string }>((resolve) => { finish = (text) => resolve({ text }); }),
+      );
+      if (reset === "invalidate") invalidateDocumentSession(file);
+      else clearDocumentSessions();
+      finish("stale old text");
+      expect((await pending).text).toBe("stale old text");
+      let loads = 0;
+      const fresh = () => { loads += 1; return Promise.resolve({ text: "fresh Thai ภาษาไทย" }); };
+      expect((await withDocumentSession(file, revision, fresh)).text).toBe("fresh Thai ภาษาไทย");
+      expect((await withDocumentSession(file, revision, fresh)).text).toBe("fresh Thai ภาษาไทย");
+      expect(loads).toBe(1);
+    }
+    clearDocumentSessions();
   });
 
   it("extracts Thai PDF text with metadata from one parser and reuses its unchanged result", async () => {
@@ -88,6 +113,26 @@ describe("document sessions", () => {
       expect(parser.closes).toBe(2);
     } finally {
       parser.pages = 1;
+      await rm(root, { recursive: true, force: true });
+      clearDocumentSessions();
+    }
+  });
+
+  it("closes a PDF parser after a failed page render without leaking resources", async () => {
+    clearDocumentSessions();
+    parser.opens = 0;
+    parser.closes = 0;
+    parser.pageFails = true;
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-pdf-render-fail-"));
+    try {
+      const file = path.join(root, "render.pdf");
+      await writeFile(file, await createPdfFixture(1));
+      const service = new DocumentIntelligenceService();
+      await expect(service.render({ path: file })).rejects.toThrow("PDF_PAGE_LOAD_FAILED");
+      expect(parser.opens).toBe(1);
+      expect(parser.closes).toBe(1);
+    } finally {
+      parser.pageFails = false;
       await rm(root, { recursive: true, force: true });
       clearDocumentSessions();
     }

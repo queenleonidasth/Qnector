@@ -25,7 +25,9 @@ export async function withDocumentSession<T>(
   const current = inFlight.get(key);
   if (current) return current as Promise<T>;
   const pending = fn().then((value) => {
-    if (signal?.aborted) return value;
+    // The source may have been invalidated/cleared while the loader ran.
+    // A detached in-flight parse must never resurrect stale cached output.
+    if (signal?.aborted || inFlight.get(key) !== pending) return value;
     let bytes = 0;
     try {
       bytes = Buffer.byteLength(JSON.stringify(value), "utf8");
