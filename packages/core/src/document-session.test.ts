@@ -12,11 +12,15 @@ async function createPdfFixture(pages: number): Promise<Uint8Array> {
   return pdf.save();
 }
 
-const parser = vi.hoisted(() => ({ opens: 0, closes: 0, pages: 1, fail: false, pageFails: false }));
+const parser = vi.hoisted(() => ({ opens: 0, closes: 0, pages: 1, fail: false, pageFails: false, passwordFails: false }));
 vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
   getDocument: () => {
     parser.opens += 1;
     if (parser.fail) return { promise: Promise.reject(new Error("Invalid PDF structure")) };
+    if (parser.passwordFails) {
+      const error = Object.assign(new Error("No password given"), { name: "PasswordException", code: 1 });
+      return { promise: Promise.reject(error) };
+    }
     return { promise: Promise.resolve({
       numPages: parser.pages,
       getMetadata: async () => ({ info: { Title: "Thai report" } }),
@@ -133,6 +137,31 @@ describe("document sessions", () => {
       expect(parser.closes).toBe(1);
     } finally {
       parser.pageFails = false;
+      await rm(root, { recursive: true, force: true });
+      clearDocumentSessions();
+    }
+  });
+
+  it("propagates a password-protected PDF parser error without caching a fake success", async () => {
+    clearDocumentSessions();
+    parser.opens = 0;
+    parser.closes = 0;
+    parser.passwordFails = true;
+    const root = await mkdtemp(path.join(tmpdir(), "qnector-pdf-password-"));
+    try {
+      const file = path.join(root, "protected.pdf");
+      await writeFile(file, await createPdfFixture(1));
+      const service = new DocumentIntelligenceService();
+      for (let i = 0; i < 2; i++) {
+        await expect(service.extractText({ path: file })).rejects.toMatchObject({
+          name: "PasswordException",
+          message: "No password given",
+        });
+      }
+      expect(parser.opens).toBe(2);
+      expect(parser.closes).toBe(0);
+    } finally {
+      parser.passwordFails = false;
       await rm(root, { recursive: true, force: true });
       clearDocumentSessions();
     }
