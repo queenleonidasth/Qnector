@@ -308,6 +308,15 @@ describe("Qnector grouped tools", () => {
     const waited = await workflowManager.wait(root, run!, 10_000);
     expect(waited.run.state).toBe("succeeded");
     expect(waited.run.memoryTaskId).toBe("recipe-task-1");
+    // A lost submission response must be recovered by the stable key without
+    // dispatching a second read-only workflow or changing its results.
+    const recovered = await registry.call("process", context, {
+      action: "workflow_recipe", recipeName: "inspect_repository",
+      recipeInput: { cwd: root }, revision, idempotencyKey: "recipe-run-1",
+    });
+    expect(recovered.ok).toBe(true);
+    expect((recovered.data as { data: { runId: string } }).data.runId).toBe(run);
+    expect(await workflowManager.listRuns(root)).toHaveLength(1);
     // Same exact inputs/outcomes as separate public tool calls, not merely the
     // same number of DAG nodes or a successful workflow state.
     for (const action of ["status", "diff"] as const) {
