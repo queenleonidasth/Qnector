@@ -2,7 +2,7 @@ import {
   mkdir,
   appendFile,
   mkdtemp,
-  open,
+  stat,
   readFile,
   rm,
   symlink,
@@ -16,7 +16,7 @@ import { createServer, type Server } from "node:http";
 import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
 import AdmZip from "adm-zip";
-import { describe, expect, it, afterEach, vi } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import { ActivityLogger } from "../../core/src/activity-log.js";
 import { AgentSkillService } from "../../core/src/agent-skills.js";
 import { TypeScriptCodeIntelligence } from "../../core/src/code-intelligence.js";
@@ -38,6 +38,7 @@ import { WorkflowManager } from "../../core/src/workflow-manager.js";
 import { ResultEvidenceStore } from "../../core/src/result-evidence-store.js";
 import { WorkspaceState } from "../../core/src/workspace-state.js";
 import { ToolRegistry, type ToolContext } from "./index.js";
+import { streamBatchRead } from "./files-tool.js";
 
 describe("Qnector grouped tools", () => {
   let root: string | undefined;
@@ -1083,6 +1084,45 @@ describe("Qnector grouped tools", () => {
     expect(payload.truncated).toBe(true);
     expect(payload.sha256).toBe(createHash("sha256").update(bomContent).digest("hex"));
     expect(payload.selectedSha256).toBe(createHash("sha256").update(String(payload.content)).digest("hex"));
+  });
+
+  it("rejects a concurrent source revision instead of mixing a stale full-file checksum", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-read-many-race-"));
+    const target = path.join(root, "race.txt");
+    await writeFile(target, "x".repeat(1_050_000), "utf8");
+    const before = await stat(target);
+    const job = {
+      index: 0, target, offsetLine: 1, limitLines: 1, allowance: 1_000,
+      size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs,
+      ino: before.ino, dev: before.dev, legacy: false,
+    };
+    const initial = await streamBatchRead(job);
+    expect(initial.sha256).toBe(createHash("sha256").update("x".repeat(1_050_000)).digest("hex"));
+    await appendFile(target, "different revision");
+    await expect(streamBatchRead(job)).rejects.toThrow("FILE_CHANGED_DURING_READ");
+    await expect(streamBatchRead({ ...job, legacy: true })).rejects.toThrow("FILE_CHANGED_DURING_READ");
+  });
+
+  it("keeps empty files, out-of-range selection and file-order errors distinguishable", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-batch-empty-"));
+    await writeFile(path.join(root, "empty.txt"), "");
+    await writeFile(path.join(root, "nonempty.txt"), "first\nsecond\n");
+    const result = await new ToolRegistry().call("files", makeContext(defaultConfig(root)), {
+      action: "read_many", maxChars: 1_000,
+      paths: [
+        { path: "empty.txt", offsetLine: 1, limitLines: 1 },
+        { path: "nonempty.txt", offsetLine: 99, limitLines: 1 },
+        { path: "does-not-exist.txt", offsetLine: 1, limitLines: 1 },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    const data = (result.data as { data: { files: Array<Record<string, unknown>> } }).data;
+    expect(data.files.map(item => path.basename(String(item.path)))).toEqual([
+      "empty.txt", "nonempty.txt", "does-not-exist.txt",
+    ]);
+    expect(data.files[0]).toMatchObject({content: "", totalLines: 0, startLine: null, endLine: null, truncated: false});
+    expect(data.files[1]).toMatchObject({content: "", totalLines: 2, startLine: null, endLine: null});
+    expect(data.files[2]?.error).toBeTruthy();
   });
 
   it("paginates base64 reads so large binary files stay bounded", async () => {

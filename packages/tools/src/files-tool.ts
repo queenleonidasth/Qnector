@@ -630,7 +630,7 @@ async function readManyAction(
   const files: Array<Record<string, unknown>> = [];
   let used = 0;
   let omitted = 0;
-  const jobs: Array<{ index: number; target: string; offsetLine: number; limitLines: number; allowance: number; size: number; mtimeMs: number; ctimeMs: number; legacy: boolean }> = [];
+  const jobs: Array<{ index: number; target: string; offsetLine: number; limitLines: number; allowance: number; size: number; mtimeMs: number; ctimeMs: number; ino: number; dev: number; legacy: boolean }> = [];
   let planned = 0;
   for (let index = 0; index < paths.length; index += 1) {
     if (planned >= maxChars) { omitted += 1; continue; }
@@ -645,7 +645,7 @@ async function readManyAction(
       // UTF-8 bytes upper-bound decoded characters. Reserve in request order before parallel reads.
       const allowance = Math.min(maxChars - planned, Math.max(1, info.size));
       planned += allowance;
-      jobs.push({ index, target, offsetLine, limitLines, allowance, size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs, legacy: typeof value === "string" });
+      jobs.push({ index, target, offsetLine, limitLines, allowance, size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs, ino: info.ino, dev: info.dev, legacy: typeof value === "string" });
     } catch (error) {
       files[index] = { path: context.workspace.resolve(typeof value === "string" ? value : String(value.path ?? "")), error: error instanceof Error ? error.message : String(error) };
     }
@@ -692,6 +692,8 @@ type BatchReadJob = {
   size: number;
   mtimeMs: number;
   ctimeMs: number;
+  ino: number;
+  dev: number;
   legacy: boolean;
 };
 type BatchReadOutput = {
@@ -775,7 +777,8 @@ async function streamLegacyBatchRead(job: BatchReadJob): Promise<BatchReadOutput
     const current = await handle.stat();
     if (current.size !== job.size ||
         current.mtimeMs !== job.mtimeMs ||
-        current.ctimeMs !== job.ctimeMs) {
+        current.ctimeMs !== job.ctimeMs ||
+        current.ino !== job.ino || current.dev !== job.dev) {
       throw new Error("FILE_CHANGED_DURING_READ: retry read_many on the current revision");
     }
     const totalLines = chars === 0 ? 0 : newlines + (endsWithLf ? 0 : 1);
@@ -794,7 +797,7 @@ async function streamLegacyBatchRead(job: BatchReadJob): Promise<BatchReadOutput
   }
 }
 
-async function streamBatchRead(job: BatchReadJob): Promise<BatchReadOutput> {
+export async function streamBatchRead(job: BatchReadJob): Promise<BatchReadOutput> {
   if (job.legacy) return streamLegacyBatchRead(job);
   const handle = await open(job.target, "r");
   const hash = createHash("sha256");
@@ -863,7 +866,8 @@ async function streamBatchRead(job: BatchReadJob): Promise<BatchReadOutput> {
     const current = await handle.stat();
     if (current.size !== job.size ||
         current.mtimeMs !== job.mtimeMs ||
-        current.ctimeMs !== job.ctimeMs) {
+        current.ctimeMs !== job.ctimeMs ||
+        current.ino !== job.ino || current.dev !== job.dev) {
       throw new Error("FILE_CHANGED_DURING_READ: retry read_many on the current revision");
     }
     const totalLines = position === 0 ? 0 : endedWithLf ? lineNo - 1 : lineNo;
