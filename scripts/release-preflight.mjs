@@ -12,24 +12,25 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nativeInputs = ["packages/execution/job-host/Qnector.JobHost.csproj", "packages/execution/job-host/Program.cs", "tools/uia-helper/Qnector.UiaHelper.csproj"];
 const secretAvailability = ["GH_TOKEN", "GITHUB_TOKEN", "QNECTOR_SIGNING_CERTIFICATE"];
 const hash = (value) => createHash("sha256").update(value).digest("hex");
-function hasGitHubCredential() {
+function hasGitHubCredential(cwd = root) {
   if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) return true;
   try {
-    const result = spawnSync("git", ["credential", "fill"], { cwd: root, input: "protocol=https\nhost=github.com\n\n", encoding: "utf8", windowsHide: true, timeout: 5_000 });
+    const result = spawnSync("git", ["credential", "fill"], { cwd, input: "protocol=https\nhost=github.com\n\n", encoding: "utf8", windowsHide: true, timeout: 5_000 });
     return result.status === 0 && /^password=.+$/m.test(result.stdout ?? "");
   } catch { return false; }
 }
 
-async function command(file, args) {
-  try { const { stdout } = await execFileAsync(file, args, { cwd: root, windowsHide: true, timeout: 15_000 }); return { ok: true, value: stdout.trim() }; }
+async function command(file, args, cwd = root) {
+  try { const { stdout } = await execFileAsync(file, args, { cwd, windowsHide: true, timeout: 15_000 }); return { ok: true, value: stdout.trim() }; }
   catch (error) { return { ok: false, value: error?.code === "ENOENT" ? "missing" : "unavailable" }; }
 }
 
 export async function collectReleaseInputs(options = {}) {
   const projectRoot = options.root ?? root;
+  const scopedCommand = (file, args) => command(file, args, projectRoot);
   const [revision, status, nodeVersion, pnpmVersion, dotnetVersion] = await Promise.all([
-    command("git", ["rev-parse", "HEAD"]), command("git", ["status", "--porcelain=v1", "--untracked-files=all"]),
-    command(process.execPath, ["--version"]), command(process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "pnpm", process.platform === "win32" ? ["/d", "/s", "/c", "pnpm.cmd --version"] : ["--version"]), command("dotnet", ["--version"]),
+    scopedCommand("git", ["rev-parse", "HEAD"]), scopedCommand("git", ["status", "--porcelain=v1", "--untracked-files=all"]),
+    scopedCommand(process.execPath, ["--version"]), scopedCommand(process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "pnpm", process.platform === "win32" ? ["/d", "/s", "/c", "pnpm.cmd --version"] : ["--version"]), scopedCommand("dotnet", ["--version"]),
   ]);
   const lockfile = path.join(projectRoot, "pnpm-lock.yaml");
   const native = nativeInputs.map((name) => {
@@ -59,7 +60,7 @@ export async function collectReleaseInputs(options = {}) {
     { name: "signing-credential-available", ok: Boolean(process.env.QNECTOR_SIGNING_CERTIFICATE), required: false },
   ];
   const publishMode = options.requirePublishingCredentials ?? false;
-  checks.push({ name: "github-credential-available", ok: hasGitHubCredential(), required: publishMode });
+  checks.push({ name: "github-credential-available", ok: hasGitHubCredential(projectRoot), required: publishMode });
   return { inputs, fingerprint, checks, ready: checks.every((item) => item.ok || item.required === false) };
 }
 
