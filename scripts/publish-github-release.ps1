@@ -25,6 +25,12 @@ if ($LASTEXITCODE -ne 0) {
   throw "Git tag $tag does not exist. Commit, tag, and push the release before publishing assets."
 }
 
+$tagRevision = (& git rev-parse "refs/tags/$tag^{}").Trim()
+$headRevision = (& git rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $tagRevision -ne $headRevision) {
+  throw "RELEASE_TAG_CONFLICT: tag $tag must point to the exact clean packaged HEAD; remote publish was not attempted"
+}
+
 $releaseRoot = Join-Path $projectRoot "apps\desktop\release"
 if (-not $ReleaseDir) {
   $portable = Get-ChildItem -LiteralPath $releaseRoot -Recurse -File -Filter "Qnector-$Version-win-x64-portable.exe" |
@@ -34,6 +40,11 @@ if (-not $ReleaseDir) {
   $ReleaseDir = $portable.DirectoryName
 }
 $ReleaseDir = [IO.Path]::GetFullPath($ReleaseDir)
+if (-not $VerifyOnly) {
+  # Reject dirty sources, mismatched locks, stale binaries and missing packaged smokes before any network write.
+  & node (Join-Path $PSScriptRoot "package-evidence.mjs") verify $ReleaseDir
+  if ($LASTEXITCODE -ne 0) { throw "RELEASE_PACKAGE_ATTESTATION_FAILED: refusing remote publish" }
+}
 
 $assets = @(
   (Join-Path $ReleaseDir "Qnector-$Version-win-x64-setup.exe")
