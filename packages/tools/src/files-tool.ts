@@ -630,7 +630,7 @@ async function readManyAction(
   const files: Array<Record<string, unknown>> = [];
   let used = 0;
   let omitted = 0;
-  const jobs: Array<{ index: number; target: string; offsetLine: number; limitLines: number; allowance: number }> = [];
+  const jobs: Array<{ index: number; target: string; offsetLine: number; limitLines: number; allowance: number; size: number; mtimeMs: number; ctimeMs: number; legacy: boolean }> = [];
   let planned = 0;
   for (let index = 0; index < paths.length; index += 1) {
     if (planned >= maxChars) { omitted += 1; continue; }
@@ -645,7 +645,7 @@ async function readManyAction(
       // UTF-8 bytes upper-bound decoded characters. Reserve in request order before parallel reads.
       const allowance = Math.min(maxChars - planned, Math.max(1, info.size));
       planned += allowance;
-      jobs.push({ index, target, offsetLine, limitLines, allowance });
+      jobs.push({ index, target, offsetLine, limitLines, allowance, size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs, legacy: typeof value === "string" });
     } catch (error) {
       files[index] = { path: context.workspace.resolve(typeof value === "string" ? value : String(value.path ?? "")), error: error instanceof Error ? error.message : String(error) };
     }
@@ -655,16 +655,12 @@ async function readManyAction(
     while (next < jobs.length) {
       const job = jobs[next++]!;
       try {
-        const content = await readFile(job.target, "utf8");
-        const allLines = content.split(/\r?\n/);
-        if (allLines.at(-1) === "") allLines.pop();
-        const selected = allLines.slice(job.offsetLine - 1, job.offsetLine - 1 + job.limitLines);
-        const ranged = selected.join("\n");
-        const text = ranged.slice(0, job.allowance);
-        used += text.length;
-        const truncated = text.length < ranged.length || job.offsetLine - 1 + selected.length < allLines.length;
-        files[job.index] = { path: job.target, content: text, sha256: createHash("sha256").update(content, "utf8").digest("hex"), truncated, totalLines: allLines.length, startLine: selected.length ? job.offsetLine : null, endLine: selected.length ? job.offsetLine + selected.length - 1 : null };
-        if (truncated) omitted += 1;
+        const output = job.size >= 1024 * 1024
+          ? await streamBatchRead(job)
+          : await smallBatchRead(job);
+        used += output.content.length;
+        files[job.index] = { path: job.target, ...output };
+        if (output.truncated) omitted += 1;
       } catch (error) {
         files[job.index] = { path: job.target, error: error instanceof Error ? error.message : String(error) };
       }
@@ -686,6 +682,206 @@ async function readManyAction(
   };
 }
 
+
+type BatchReadJob = {
+  index: number;
+  target: string;
+  offsetLine: number;
+  limitLines: number;
+  allowance: number;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  legacy: boolean;
+};
+type BatchReadOutput = {
+  content: string;
+  sha256: string;
+  sha256Scope: "full-file";
+  selectedSha256: string;
+  truncated: boolean;
+  totalLines: number;
+  startLine: number | null;
+  endLine: number | null;
+};
+
+async function smallBatchRead(job: BatchReadJob): Promise<BatchReadOutput> {
+  const content = await readFile(job.target, "utf8");
+  if (job.legacy) {
+    // Keep the original string-path contract byte-for-byte, including the
+    // trailing newline. Range normalization applies only to object paths.
+    const text = content.slice(0, job.allowance);
+    const lines = content.split(/\r?\n/);
+    if (lines.at(-1) === "") lines.pop();
+    return {
+      content: text,
+      sha256: createHash("sha256").update(content, "utf8").digest("hex"),
+      sha256Scope: "full-file",
+      selectedSha256: createHash("sha256").update(text, "utf8").digest("hex"),
+      truncated: text.length < content.length,
+      totalLines: lines.length,
+      startLine: lines.length ? 1 : null,
+      endLine: lines.length || null,
+    };
+  }
+  const allLines = content.split(/\r?\n/);
+  if (allLines.at(-1) === "") allLines.pop();
+  const selected = allLines.slice(job.offsetLine - 1, job.offsetLine - 1 + job.limitLines);
+  const ranged = selected.join("\n");
+  const text = ranged.slice(0, job.allowance);
+  return {
+    content: text,
+    sha256: createHash("sha256").update(content, "utf8").digest("hex"),
+    sha256Scope: "full-file",
+    selectedSha256: createHash("sha256").update(text, "utf8").digest("hex"),
+    truncated: text.length < ranged.length || job.offsetLine - 1 + selected.length < allLines.length,
+    totalLines: allLines.length,
+    startLine: selected.length ? job.offsetLine : null,
+    endLine: selected.length ? job.offsetLine + selected.length - 1 : null,
+  };
+}
+
+/** Read large files in 64 KiB chunks. Never cache raw full-file text to obtain
+ * a full-file checksum, and never mistake a partial-range checksum for one. */
+async function streamLegacyBatchRead(job: BatchReadJob): Promise<BatchReadOutput> {
+  const handle = await open(job.target, "r");
+  const hash = createHash("sha256");
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let position = 0;
+  let chars = 0;
+  let newlines = 0;
+  let endsWithLf = false;
+  let result = "";
+  const consume = (text: string) => {
+    if (!text) return;
+    chars += text.length;
+    newlines += (text.match(/\n/g) ?? []).length;
+    endsWithLf = text.endsWith("\n");
+    if (result.length < job.allowance) {
+      result += text.slice(0, job.allowance - result.length);
+    }
+  };
+  try {
+    while (true) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+      if (!bytesRead) break;
+      position += bytesRead;
+      const bytes = buffer.subarray(0, bytesRead);
+      hash.update(bytes);
+      consume(decoder.decode(bytes, { stream: true }));
+    }
+    consume(decoder.decode());
+    const current = await handle.stat();
+    if (current.size !== job.size ||
+        current.mtimeMs !== job.mtimeMs ||
+        current.ctimeMs !== job.ctimeMs) {
+      throw new Error("FILE_CHANGED_DURING_READ: retry read_many on the current revision");
+    }
+    const totalLines = chars === 0 ? 0 : newlines + (endsWithLf ? 0 : 1);
+    return {
+      content: result,
+      sha256: hash.digest("hex"),
+      sha256Scope: "full-file",
+      selectedSha256: createHash("sha256").update(result, "utf8").digest("hex"),
+      truncated: chars > result.length,
+      totalLines,
+      startLine: totalLines ? 1 : null,
+      endLine: totalLines || null,
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+async function streamBatchRead(job: BatchReadJob): Promise<BatchReadOutput> {
+  if (job.legacy) return streamLegacyBatchRead(job);
+  const handle = await open(job.target, "r");
+  const hash = createHash("sha256");
+  const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let lineNo = 1;
+  let selectedLines = 0;
+  let returned = "";
+  let selectedSourceChars = 0;
+  let currentPrefix = "";
+  let currentChars = 0;
+  let lastChar = "";
+  let endedWithLf = false;
+  const selected = () => lineNo >= job.offsetLine && lineNo < job.offsetLine + job.limitLines;
+  const add = (part: string): void => {
+    if (!selected() || !part.length) return;
+    currentChars += part.length;
+    lastChar = part.at(-1)!;
+    const room = Math.max(0, job.allowance + 1 - returned.length - currentPrefix.length);
+    if (room) currentPrefix += part.slice(0, room);
+  };
+  const finishLine = (): void => {
+    if (selected()) {
+      if (selectedLines > 0) {
+        selectedSourceChars += 1;
+        if (returned.length < job.allowance) returned += "\n";
+      }
+      const trimmed = lastChar === "\r" ? 1 : 0;
+      selectedSourceChars += Math.max(0, currentChars - trimmed);
+      const preview = trimmed && currentPrefix.length === currentChars
+        ? currentPrefix.slice(0, -1)
+        : currentPrefix;
+      if (returned.length < job.allowance) {
+        returned += preview.slice(0, job.allowance - returned.length);
+      }
+      selectedLines += 1;
+    }
+    currentPrefix = "";
+    currentChars = 0;
+    lastChar = "";
+  };
+  const consume = (decoded: string): void => {
+    if (!decoded) return;
+    endedWithLf = decoded.endsWith("\n");
+    const parts = decoded.split("\n");
+    for (let index = 0; index < parts.length; index++) {
+      add(parts[index]!);
+      if (index < parts.length - 1) {
+        finishLine();
+        lineNo += 1;
+      }
+    }
+  };
+  try {
+    let position = 0;
+    while (true) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+      if (bytesRead === 0) break;
+      position += bytesRead;
+      const bytes = buffer.subarray(0, bytesRead);
+      hash.update(bytes);
+      consume(decoder.decode(bytes, { stream: true }));
+    }
+    consume(decoder.decode());
+    if (position > 0 && !endedWithLf) finishLine();
+    const current = await handle.stat();
+    if (current.size !== job.size ||
+        current.mtimeMs !== job.mtimeMs ||
+        current.ctimeMs !== job.ctimeMs) {
+      throw new Error("FILE_CHANGED_DURING_READ: retry read_many on the current revision");
+    }
+    const totalLines = position === 0 ? 0 : endedWithLf ? lineNo - 1 : lineNo;
+    return {
+      content: returned,
+      sha256: hash.digest("hex"),
+      sha256Scope: "full-file",
+      selectedSha256: createHash("sha256").update(returned, "utf8").digest("hex"),
+      truncated: selectedSourceChars > returned.length ||
+        job.offsetLine - 1 + selectedLines < totalLines,
+      totalLines,
+      startLine: selectedLines ? job.offsetLine : null,
+      endLine: selectedLines ? job.offsetLine + selectedLines - 1 : null,
+    };
+  } finally {
+    await handle.close();
+  }
+}
 async function documentReplaceTextAction(
   context: ToolContext,
   input: Record<string, unknown>,

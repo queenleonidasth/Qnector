@@ -1,0 +1,465 @@
+{
+  "schemaVersion": 1,
+  "workload": "read_many",
+  "baseline": {
+    "revision": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6",
+    "root": "D:\\Projects\\Qnector-PlanMode2"
+  },
+  "candidate": {
+    "revision": "ed2fda3a04274fe686fed0743ec5c45f9662e7fb",
+    "root": "D:\\Projects\\Qnector-Performance-20261014-r4"
+  },
+  "node": "v24.20.0",
+  "arch": "x64",
+  "environment": {
+    "cpuCount": 16,
+    "totalMemory": 34184257536
+  },
+  "warmupRounds": 5,
+  "measuredEach": 30,
+  "hostObserved": "UNKNOWN",
+  "coldProcessStarts": "UNKNOWN",
+  "limitations": "Actual baseline/candidate Qnector tools on same local synthetic fixtures. Fresh registry is not a cold process boot. Host/model/network and interactive GUI are unmeasured.",
+  "cases": [
+    {
+      "scenario": "one-large",
+      "files": 1,
+      "outcomeSha256": "b901cdc8ad20e34a116b301f265a69e272eed19a4493062a2a6719e1e7573fd2",
+      "correctness": "PASS",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 3.5920000000000982,
+            "p95Ms": 6.377600000000257,
+            "meanMs": 3.8704266666666323,
+            "p50Confidence95Ms": [
+              3.498199999999997,
+              3.687800000000152
+            ],
+            "p95Confidence95Ms": [
+              4.095599999999649,
+              8.203700000000026
+            ]
+          },
+          "cpuUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "meanMs": 3633.3333333333335,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              15000,
+              31000
+            ]
+          },
+          "maxRssBytes": 510857216,
+          "outputBytes": [
+            5360
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 2.382300000000214,
+            "p95Ms": 2.8000999999999294,
+            "meanMs": 2.390766666666635,
+            "p50Confidence95Ms": [
+              2.209200000000237,
+              2.544600000000173
+            ],
+            "p95Confidence95Ms": [
+              2.630999999999858,
+              2.8622999999997774
+            ]
+          },
+          "cpuUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "meanMs": 3133.3333333333335,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              32000
+            ]
+          },
+          "maxRssBytes": 510857216,
+          "outputBytes": [
+            5511
+          ]
+        }
+      },
+      "freshRegistry": {
+        "baseline": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 3.5523000000002867,
+            "p95Ms": 6.625800000000254,
+            "meanMs": 3.8582500000000435,
+            "p50Confidence95Ms": [
+              3.4139000000000124,
+              3.6721000000002277
+            ],
+            "p95Confidence95Ms": [
+              3.670100000000275,
+              6.625800000000254
+            ]
+          },
+          "cpuUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "meanMs": 1600,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ]
+          },
+          "maxRssBytes": 512241664,
+          "outputBytes": [
+            5360
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 2.342999999999847,
+            "p95Ms": 3.548700000000281,
+            "meanMs": 2.5269699999999373,
+            "p50Confidence95Ms": [
+              2.2490999999999985,
+              2.7403999999996813
+            ],
+            "p95Confidence95Ms": [
+              2.5951999999997497,
+              3.548700000000281
+            ]
+          },
+          "cpuUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "meanMs": 4700,
+            "p50Confidence95Ms": [
+              0,
+              15000
+            ],
+            "p95Confidence95Ms": [
+              0,
+              16000
+            ]
+          },
+          "maxRssBytes": 512253952,
+          "outputBytes": [
+            5511
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "twenty-small",
+      "files": 20,
+      "outcomeSha256": "3abe1582d9fdb3f7781102f221906dd82610ffe140a1d757d960416f20a07f8f",
+      "correctness": "PASS",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 1.8138999999996486,
+            "p95Ms": 2.4589999999998327,
+            "meanMs": 1.8915766666666363,
+            "p50Confidence95Ms": [
+              1.6779999999998836,
+              1.9187000000001717
+            ],
+            "p95Confidence95Ms": [
+              2.2188999999998487,
+              2.474899999999707
+            ]
+          },
+          "cpuUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 31000,
+            "meanMs": 3633.3333333333335,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              47000
+            ]
+          },
+          "maxRssBytes": 442531840,
+          "outputBytes": [
+            7764
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 1.3963999999996304,
+            "p95Ms": 2.3211999999998625,
+            "meanMs": 1.6285833333333206,
+            "p50Confidence95Ms": [
+              1.3187000000002627,
+              1.6365000000000691
+            ],
+            "p95Confidence95Ms": [
+              2.202299999999923,
+              2.848399999999856
+            ]
+          },
+          "cpuUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 16000,
+            "meanMs": 2100,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              31000
+            ]
+          },
+          "maxRssBytes": 443187200,
+          "outputBytes": [
+            10784
+          ]
+        }
+      },
+      "freshRegistry": {
+        "baseline": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 1.649199999999837,
+            "p95Ms": 2.279199999999946,
+            "meanMs": 1.7079499999999825,
+            "p50Confidence95Ms": [
+              1.50649999999996,
+              1.67450000000008
+            ],
+            "p95Confidence95Ms": [
+              1.672399999999925,
+              2.279199999999946
+            ]
+          },
+          "cpuUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 47000,
+            "meanMs": 4700,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              47000
+            ]
+          },
+          "maxRssBytes": 456753152,
+          "outputBytes": [
+            7764
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 1.4358999999999469,
+            "p95Ms": 2.2409999999999854,
+            "meanMs": 1.5487099999999372,
+            "p50Confidence95Ms": [
+              1.2294999999999163,
+              1.7152000000000953
+            ],
+            "p95Confidence95Ms": [
+              1.568199999999706,
+              2.2409999999999854
+            ]
+          },
+          "cpuUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 31000,
+            "meanMs": 3100,
+            "p50Confidence95Ms": [
+              0,
+              0
+            ],
+            "p95Confidence95Ms": [
+              0,
+              31000
+            ]
+          },
+          "maxRssBytes": 456753152,
+          "outputBytes": [
+            10784
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "hundred-small",
+      "files": 100,
+      "outcomeSha256": "1ba5d4399468ab5f610752b5e138ad518b4e679e5b7f4ed3733c72e745fa7da5",
+      "correctness": "PASS",
+      "warm": {
+        "baseline": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 7.305599999999686,
+            "p95Ms": 8.440300000000207,
+            "meanMs": 7.4301733333333235,
+            "p50Confidence95Ms": [
+              7.246200000000044,
+              7.402799999999843
+            ],
+            "p95Confidence95Ms": [
+              7.54549999999972,
+              9.793099999999868
+            ]
+          },
+          "cpuUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 32000,
+            "meanMs": 11533.333333333334,
+            "p50Confidence95Ms": [
+              0,
+              16000
+            ],
+            "p95Confidence95Ms": [
+              31000,
+              47000
+            ]
+          },
+          "maxRssBytes": 463896576,
+          "outputBytes": [
+            38327
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 30,
+            "p50Ms": 5.327299999999923,
+            "p95Ms": 6.1664999999998145,
+            "meanMs": 5.355436666666674,
+            "p50Confidence95Ms": [
+              5.155799999999999,
+              5.591100000000097
+            ],
+            "p95Confidence95Ms": [
+              5.7905000000000655,
+              7.093499999999949
+            ]
+          },
+          "cpuUs": {
+            "n": 30,
+            "p50Ms": 0,
+            "p95Ms": 63000,
+            "meanMs": 14533.333333333334,
+            "p50Confidence95Ms": [
+              0,
+              15000
+            ],
+            "p95Confidence95Ms": [
+              47000,
+              63000
+            ]
+          },
+          "maxRssBytes": 463761408,
+          "outputBytes": [
+            53427
+          ]
+        }
+      },
+      "freshRegistry": {
+        "baseline": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 7.001500000000306,
+            "p95Ms": 7.453899999999976,
+            "meanMs": 7.0790700000000015,
+            "p50Confidence95Ms": [
+              6.934999999999945,
+              7.146200000000135
+            ],
+            "p95Confidence95Ms": [
+              7.089999999999691,
+              7.453899999999976
+            ]
+          },
+          "cpuUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 32000,
+            "meanMs": 9500,
+            "p50Confidence95Ms": [
+              0,
+              16000
+            ],
+            "p95Confidence95Ms": [
+              16000,
+              32000
+            ]
+          },
+          "maxRssBytes": 464285696,
+          "outputBytes": [
+            38327
+          ]
+        },
+        "candidate": {
+          "elapsed": {
+            "n": 10,
+            "p50Ms": 4.990800000000036,
+            "p95Ms": 6.516200000000026,
+            "meanMs": 5.175430000000051,
+            "p50Confidence95Ms": [
+              4.73090000000002,
+              5.485000000000127
+            ],
+            "p95Confidence95Ms": [
+              5.3604999999997744,
+              6.516200000000026
+            ]
+          },
+          "cpuUs": {
+            "n": 10,
+            "p50Ms": 0,
+            "p95Ms": 31000,
+            "meanMs": 7700,
+            "p50Confidence95Ms": [
+              0,
+              15000
+            ],
+            "p95Confidence95Ms": [
+              0,
+              31000
+            ]
+          },
+          "maxRssBytes": 465408000,
+          "outputBytes": [
+            53427
+          ]
+        }
+      }
+    }
+  ],
+  "releaseEligible": false,
+  "note": "Subset benchmark only. No full-host or all-format evidence; release remains blocked."
+}

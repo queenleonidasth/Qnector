@@ -1,8 +1,11 @@
 import {
   mkdir,
+  appendFile,
   mkdtemp,
+  open,
   readFile,
   rm,
+  symlink,
   truncate,
   writeFile,
 } from "node:fs/promises";
@@ -13,7 +16,7 @@ import { createServer, type Server } from "node:http";
 import { createHash } from "node:crypto";
 import { WebSocketServer } from "ws";
 import AdmZip from "adm-zip";
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach, vi } from "vitest";
 import { ActivityLogger } from "../../core/src/activity-log.js";
 import { AgentSkillService } from "../../core/src/agent-skills.js";
 import { TypeScriptCodeIntelligence } from "../../core/src/code-intelligence.js";
@@ -993,6 +996,71 @@ describe("Qnector grouped tools", () => {
     expect(payload.files[0]?.truncated).toBe(true);
     expect(payload.files[0]?.sha256).toBe(createHash("sha256").update("x".repeat(1_100)).digest("hex"));
     expect(payload.omitted).toBe(2);
+  });
+
+  it("keeps requested order, Thai UTF-8 per-file line ranges and full-file hashes", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-read-many-range-"));
+    const a = "first\nภาษาไทย\nthird\n";
+    const b = "alpha\nbeta\ngamma\n";
+    await writeFile(path.join(root, "a.txt"), a);
+    await writeFile(path.join(root, "b.txt"), b);
+    const result = await new ToolRegistry().call(
+      "files", makeContext(defaultConfig(root)),
+      { action: "read_many",
+        paths: [
+          { path: "b.txt", offsetLine: 2, limitLines: 1 },
+          { path: "a.txt", offsetLine: 2, limitLines: 2 },
+          { path: "missing.txt", offsetLine: 1, limitLines: 1 },
+        ], maxChars: 10_000 },
+    );
+    expect(result.ok).toBe(true);
+    const payload = (result.data as { data: { files: Array<Record<string, unknown>>; requested: number } }).data;
+    expect(payload.requested).toBe(3);
+    expect(payload.files.map((x) => path.basename(String(x.path)))).toEqual(["b.txt", "a.txt", "missing.txt"]);
+    expect(payload.files[0]).toMatchObject({ content: "beta", startLine: 2, endLine: 2, totalLines: 3, truncated: true });
+    expect(payload.files[1]).toMatchObject({ content: "ภาษาไทย\nthird", startLine: 2, endLine: 3, totalLines: 3, truncated: false });
+    expect(payload.files[2]?.error).toBeTruthy();
+    expect(payload.files[0]?.sha256).toBe(createHash("sha256").update(b).digest("hex"));
+    expect(payload.files[1]?.sha256).toBe(createHash("sha256").update(a).digest("hex"));
+  });
+
+  it("streams large Unicode CRLF files with bounded output and exact full and selected SHA-256", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-batch-stream-"));
+    const full = "x".repeat(1_050_000) + "\r\n" + "ภาษาไทย😀" + "\r\n" + "final\n";
+    await writeFile(path.join(root, "large.txt"), full, "utf8");
+    const result = await new ToolRegistry().call("files", makeContext(defaultConfig(root)), {
+      action: "read_many",
+      paths: [{ path: "large.txt", offsetLine: 2, limitLines: 2 }],
+      maxChars: 4_000,
+    });
+    expect(result.ok).toBe(true);
+    const payload = (result.data as {data:{files:Array<Record<string,unknown>>}}).data.files[0]!;
+    expect(payload.content).toBe("ภาษาไทย😀\nfinal");
+    expect(payload.totalLines).toBe(3);
+    expect(payload.startLine).toBe(2);
+    expect(payload.endLine).toBe(3);
+    expect(payload.truncated).toBe(false);
+    expect(payload.sha256Scope).toBe("full-file");
+    expect(payload.sha256).toBe(createHash("sha256").update(full,"utf8").digest("hex"));
+    expect(payload.selectedSha256).toBe(createHash("sha256").update("ภาษาไทย😀\nfinal","utf8").digest("hex"));
+  });
+
+  it("preserves UTF-8 BOM through streaming and resolves symlinks with exact hashes", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-batch-link-"));
+    const bomContent = "\ufeff" + "ภาษาไทย " + "x".repeat(1_050_000) + "\n";
+    const target = path.join(root, "data.txt");
+    const linked = path.join(root, "link.txt");
+    await writeFile(target, bomContent, "utf8");
+    await symlink(target, linked, "file");
+    const result = await new ToolRegistry().call("files", makeContext(defaultConfig(root)), {
+      action: "read_many", paths: [{path:"link.txt",offsetLine:1,limitLines:1}], maxChars:1_000,
+    });
+    expect(result.ok).toBe(true);
+    const payload = (result.data as {data:{files:Array<Record<string,unknown>>}}).data.files[0]!;
+    expect(String(payload.content).startsWith("\ufeffภาษาไทย")).toBe(true);
+    expect(payload.truncated).toBe(true);
+    expect(payload.sha256).toBe(createHash("sha256").update(bomContent).digest("hex"));
+    expect(payload.selectedSha256).toBe(createHash("sha256").update(String(payload.content)).digest("hex"));
   });
 
   it("paginates base64 reads so large binary files stay bounded", async () => {
