@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "workload": "inspect_repository_recipe-vs-legacy-standalone",
+  "baseline": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6",
+  "candidate": "7466deccb16e9579a7230c405ea1e3f8da1d1d6e",
+  "warmupRounds": 5,
+  "measuredPerVariant": 30,
+  "freshServiceRounds": 10,
+  "platform": "win32",
+  "node": "v24.20.0",
+  "cpus": 16,
+  "hostLatency": "UNKNOWN",
+  "limitations": "Measures client-side registry+workflow executor only, not ChatGPT model/network/tool-call overhead. Fresh-service resets service, not OS process cold boot. Source fixture identical, no remote GitHub or user modifications.",
+  "oracleSha256": "7e9fe8ff291cc770bd45cf97b8400a5d16a17968675ae2d7b218ffade79ed68c",
+  "correctness": "PASS",
+  "warm": {
+    "baseline": {
+      "usefulMs": {
+        "n": 30,
+        "p50": 81.76139999999941,
+        "p95": 83.72489999999925,
+        "p50Confidence95": [
+          81.20739999999932,
+          82.0681999999997
+        ],
+        "p95Confidence95": [
+          82.90770000000157,
+          95.45809999999983
+        ]
+      },
+      "verifiedMs": {
+        "n": 30,
+        "p50": 162.3722000000016,
+        "p95": 164.72830000000067,
+        "p50Confidence95": [
+          161.6882999999998,
+          163.0613999999996
+        ],
+        "p95Confidence95": [
+          163.90959999999905,
+          176.23550000000068
+        ]
+      },
+      "payloadBytes": {
+        "n": 30,
+        "p50": 1057,
+        "p95": 1057,
+        "p50Confidence95": [
+          1057,
+          1057
+        ],
+        "p95Confidence95": [
+          1057,
+          1057
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 30,
+        "p50": 0,
+        "p95": 31000,
+        "p50Confidence95": [
+          0,
+          16000
+        ],
+        "p95Confidence95": [
+          16000,
+          110000
+        ]
+      },
+      "peakRssBytes": 445161472
+    },
+    "candidate": {
+      "usefulMs": {
+        "n": 30,
+        "p50": 86,
+        "p95": 89,
+        "p50Confidence95": [
+          85,
+          86
+        ],
+        "p95Confidence95": [
+          87,
+          90
+        ]
+      },
+      "verifiedMs": {
+        "n": 30,
+        "p50": 170.04650000000038,
+        "p95": 176.3069000000005,
+        "p50Confidence95": [
+          169.1936999999998,
+          172.02800000000025
+        ],
+        "p95Confidence95": [
+          172.8772000000008,
+          177.65210000000116
+        ]
+      },
+      "payloadBytes": {
+        "n": 30,
+        "p50": 3635,
+        "p95": 3659,
+        "p50Confidence95": [
+          3635,
+          3635
+        ],
+        "p95Confidence95": [
+          3635,
+          3659
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 30,
+        "p50": 16000,
+        "p95": 63000,
+        "p50Confidence95": [
+          16000,
+          30000
+        ],
+        "p95Confidence95": [
+          46000,
+          140000
+        ]
+      },
+      "peakRssBytes": 445263872
+    }
+  },
+  "freshService": {
+    "baseline": {
+      "usefulMs": {
+        "n": 10,
+        "p50": 81.31039999999848,
+        "p95": 82.79579999999987,
+        "p50Confidence95": [
+          80.43189999999959,
+          81.87459999999919
+        ],
+        "p95Confidence95": [
+          81.87459999999919,
+          82.79579999999987
+        ]
+      },
+      "verifiedMs": {
+        "n": 10,
+        "p50": 161.98530000000028,
+        "p95": 165.8149999999987,
+        "p50Confidence95": [
+          160.6164000000026,
+          163.57359999999971
+        ],
+        "p95Confidence95": [
+          162.90970000000016,
+          165.8149999999987
+        ]
+      },
+      "payloadBytes": {
+        "n": 10,
+        "p50": 1057,
+        "p95": 1057,
+        "p50Confidence95": [
+          1057,
+          1057
+        ],
+        "p95Confidence95": [
+          1057,
+          1057
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 10,
+        "p50": 0,
+        "p95": 32000,
+        "p50Confidence95": [
+          0,
+          16000
+        ],
+        "p95Confidence95": [
+          15000,
+          32000
+        ]
+      },
+      "peakRssBytes": 325099520
+    },
+    "candidate": {
+      "usefulMs": {
+        "n": 10,
+        "p50": 85,
+        "p95": 86,
+        "p50Confidence95": [
+          84,
+          85
+        ],
+        "p95Confidence95": [
+          85,
+          86
+        ]
+      },
+      "verifiedMs": {
+        "n": 10,
+        "p50": 168.9860000000008,
+        "p95": 169.81820000000153,
+        "p50Confidence95": [
+          168.0025999999998,
+          169.5720999999976
+        ],
+        "p95Confidence95": [
+          169.26729999999952,
+          169.81820000000153
+        ]
+      },
+      "payloadBytes": {
+        "n": 10,
+        "p50": 3635,
+        "p95": 3659,
+        "p50Confidence95": [
+          3635,
+          3659
+        ],
+        "p95Confidence95": [
+          3659,
+          3659
+        ]
+      },
+      "cpuMicroseconds": {
+        "n": 10,
+        "p50": 16000,
+        "p95": 31000,
+        "p50Confidence95": [
+          0,
+          16000
+        ],
+        "p95Confidence95": [
+          16000,
+          31000
+        ]
+      },
+      "peakRssBytes": 325095424
+    }
+  },
+  "releaseEligible": false
+}
