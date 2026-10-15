@@ -308,6 +308,56 @@ describe("Qnector grouped tools", () => {
     const waited = await workflowManager.wait(root, run!, 10_000);
     expect(waited.run.state).toBe("succeeded");
     expect(waited.run.memoryTaskId).toBe("recipe-task-1");
+    // Same exact inputs/outcomes as separate public tool calls, not merely the
+    // same number of DAG nodes or a successful workflow state.
+    for (const action of ["status", "diff"] as const) {
+      const standalone = await registry.call("git", context, { action, cwd: root });
+      const stored = await workflowManager.result(root, run!, action) as {
+        tool?: { result: { ok: boolean; data?: { data?: { stdout: string; exitCode: number } } } };
+      };
+      const direct = standalone.data as { data?: { stdout: string; exitCode: number } };
+      expect(stored.tool?.result.ok).toBe(standalone.ok);
+      expect(stored.tool?.result.data?.data?.stdout).toBe(direct.data?.stdout);
+      expect(stored.tool?.result.data?.data?.exitCode).toBe(direct.data?.exitCode);
+    }
+
+    await workflowManager.shutdown();
+    await base.processManager.stopAll();
+  });
+
+  it("propagates recipe substep errors and blocks dependent reads after failure", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-recipe-fail-"));
+    const registry = new ToolRegistry();
+    const base = makeContext(defaultConfig(root));
+    const fileWatch = new FileWatchService();
+    let context!: ToolContext;
+    let unexpectedDiffExecutions = 0;
+    const workflowManager = new WorkflowManager(base.processManager, fileWatch, {
+      executeTool: async (_tool, input) => {
+        if (input.action === "status") {
+          return { ok: false, summary: "simulated repository failure",
+            error: { code: "GIT_COMMAND_FAILED", message: "fixture" } };
+        }
+        unexpectedDiffExecutions += 1;
+        return { ok: true, summary: "must not run" };
+      },
+    });
+    context = { ...base, memoryTaskId: "recipe-failed-1", workflowManager, fileWatch };
+    const workingSet = await registry.call("memory", context, { action: "working_set" });
+    const revision = (workingSet.data as { data: { revision: string } }).data.revision;
+    const started = await registry.call("process", context, {
+      action: "workflow_recipe", recipeName: "inspect_repository", recipeInput: { cwd: root },
+      revision, idempotencyKey: "recipe-error-test",
+    });
+    expect(started.ok).toBe(true);
+    const runId = (started.data as { data: { runId: string } }).data.runId;
+    const final = await workflowManager.wait(root, runId, 10_000);
+    expect(final.run.state).toBe("failed");
+    expect(final.run.steps.find(step => step.id === "status")?.state).toBe("failed");
+    expect(final.run.steps.find(step => step.id === "diff")?.state).toBe("skipped");
+    expect(unexpectedDiffExecutions).toBe(0);
+    expect(JSON.stringify(await workflowManager.result(root, runId, "status")))
+      .toContain("GIT_COMMAND_FAILED");
     await workflowManager.shutdown();
     await base.processManager.stopAll();
   });
