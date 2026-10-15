@@ -224,6 +224,28 @@ describe("Qnector grouped tools", () => {
     await context.processManager.stopAll();
   });
 
+  it("never certifies an unsuccessful command as verified completion", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-failed-collect-"));
+    const context = makeContext(defaultConfig(root));
+    context.processManager = new ProcessManager("direct");
+    context.resultEvidenceStore = new ResultEvidenceStore(path.join(root, "evidence"));
+    const snapshot = context.processManager.start({
+      command: `"${process.execPath}" -e "process.exit(5)"`,
+      cwd: root, shell: "direct", timeoutMs: 5_000,
+    });
+    await context.processManager.waitForExit(snapshot.id, 4_000);
+    const collected = await new ToolRegistry().call("process", context, {
+      action: "waitAndCollect", processId: snapshot.id,
+      evidenceBudgetBytes: 10_000, waitBudgetMs: 0,
+    });
+    expect(collected.ok).toBe(true);
+    const data = (collected.data as {data: Record<string, unknown>}).data;
+    expect(data.state).toBe("failed");
+    expect(data.exitCode).toBe(5);
+    expect(data.verified).toBe(false);
+    await context.processManager.stopAll();
+  });
+
   it("waitAndCollect preserves an unknown state for a lost or unavailable job", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-unknown-job-"));
     const context = makeContext(defaultConfig(root));

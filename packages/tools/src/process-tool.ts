@@ -694,7 +694,7 @@ async function waitAndCollect(
     ok: true,
     summary: running ? `Execution ${jobId} is still running` : `Execution ${jobId} is ${state}`,
     data: {
-      jobId, state, verified: !running && !output.truncated && verifiedEvidence.length === evidence.length,
+      jobId, state, verified: succeeded && !output.truncated && verifiedEvidence.length === evidence.length,
       exitCode: terminal ? snapshot.exitCode : null,
       evidence, verifiedEvidence, truncated: output.truncated,
       ...(output.truncated ? { outputUnavailableReason: "Complete output is not retained in the bounded process buffer; this response contains only the available page." } : {}),
