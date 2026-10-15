@@ -13,6 +13,7 @@ export class ContentCache {
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly generations = new Map<string, number>();
   private bytes = 0;
+  private clearRevision = 0;
 
   public constructor(
     private readonly maxEntries = 128,
@@ -31,11 +32,13 @@ export class ContentCache {
     const active = this.pending.get(id);
     if (active) return active as Promise<T>;
     const generation = this.generations.get(pathKey) ?? 0;
+    const clearRevision = this.clearRevision;
     const work = loader().then((value) => {
       let bytes: number;
       try { bytes = Buffer.byteLength(JSON.stringify(value), "utf8"); }
       catch { return value; }
-      if (bytes > this.maxBytes || (this.generations.get(pathKey) ?? 0) !== generation) return value;
+      if (bytes > this.maxBytes || (this.generations.get(pathKey) ?? 0) !== generation ||
+        this.clearRevision !== clearRevision) return value;
       this.entries.set(id, { value: structuredClone(value), bytes });
       this.bytes += bytes;
       while (this.entries.size > this.maxEntries || this.bytes > this.maxBytes) {
@@ -65,6 +68,7 @@ export class ContentCache {
   }
 
   public clear(): void {
+    this.clearRevision += 1;
     for (const key of this.generations.keys()) this.generations.set(key, this.generations.get(key)! + 1);
     this.entries.clear();
     this.pending.clear();

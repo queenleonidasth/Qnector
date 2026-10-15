@@ -16,6 +16,21 @@ describe("ContentCache", () => {
     expect(loads).toBe(4);
   });
 
+  it("clear invalidates an initial pending read and forbids stale result resurrection", async () => {
+    const cache = new ContentCache();
+    const key = { path: "./pending.txt", fingerprint: "sha-1", schemaVersion: "1" };
+    let finish!: (value: string) => void;
+    const started = cache.getOrCompute(key, () => new Promise<string>(resolve => { finish = resolve; }));
+    cache.clear();
+    finish("old data");
+    expect(await started).toBe("old data");
+    let freshCalls = 0;
+    expect(await cache.getOrCompute(key, async () => { freshCalls++; return "new data"; })).toBe("new data");
+    expect(freshCalls).toBe(1);
+    expect(await cache.getOrCompute(key, async () => { freshCalls++; return "WRONG"; })).toBe("new data");
+    expect(freshCalls).toBe(1);
+  });
+
   it("invalidates on rename/write events and does not publish an in-flight stale value", async () => {
     const cache = new ContentCache();
     let finish!: (value: string) => void;
