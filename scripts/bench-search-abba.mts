@@ -49,7 +49,7 @@ const out:Record<string,unknown> = {
   hostClientGap:"UNKNOWN",coldProcessStarts:"UNKNOWN",limitations:
     "Same-process source-module comparison of actual semantic search under synthetic local read-only fixtures. Cold index means a fresh search service, NOT cold process or OS disk cache. No host/model/network, interactive UI, documents or package performance is inferred."};
 const cases:unknown[]=[];
-for (const count of [20,100]) {
+for (const count of [1,20,100]) {
   const dir=await mkdtemp(path.join(os.tmpdir(),"qnector-e2e-search-abba-"));
   try {
     await Promise.all(Array.from({length:count},(_,i)=>writeFile(path.join(dir,`document-${String(i).padStart(3,"0")}.ts`),
