@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "workload": "isolated-hidden-packaged-electron-process-startup",
+  "baselineRevision": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6",
+  "candidatePackageRevision": "7466deccb16e9579a7230c405ea1e3f8da1d1d6e",
+  "candidateCodeHeadAtRun": "70a0a8f0a3d7b34943d1f785107ea4b6b2a2af6a",
+  "warmupRounds": 5,
+  "measuredPerVariant": 30,
+  "coldProcessStartsPerVariant": 10,
+  "realProcessStarts": true,
+  "isolatedProfile": true,
+  "environment": {
+    "os": "win32",
+    "node": "v24.20.0",
+    "cpuCount": 16,
+    "freeMemoryBytes": 22132822016
+  },
+  "measures": {
+    "baseline": {
+      "wall": {
+        "n": 30,
+        "p50Ms": 2948.5390000000043,
+        "p95Ms": 2963.1929999999993,
+        "p50Confidence95Ms": [
+          2947.3275999999896,
+          2952.759300000005
+        ],
+        "p95Confidence95Ms": [
+          2961.1970999999903,
+          2964.419099999999
+        ]
+      },
+      "rendererReady": {
+        "n": 30,
+        "p50Ms": 326.53,
+        "p95Ms": 333.74,
+        "p50Confidence95Ms": [
+          323.15,
+          329.23
+        ],
+        "p95Confidence95Ms": [
+          331.83,
+          345.07
+        ]
+      },
+      "rendererLoaded": {
+        "n": 30,
+        "p50Ms": 184.77,
+        "p95Ms": 188.19,
+        "p50Confidence95Ms": [
+          184.03,
+          185.42
+        ],
+        "p95Confidence95Ms": [
+          186.81,
+          189.26
+        ]
+      },
+      "windowCreated": {
+        "n": 30,
+        "p50Ms": 147.54,
+        "p95Ms": 150.42,
+        "p50Confidence95Ms": [
+          146.8,
+          148.03
+        ],
+        "p95Confidence95Ms": [
+          149.47,
+          150.44
+        ]
+      },
+      "stageHashes": [
+        "2cbe053ed7ac4e12b738e05d7933e66febe3df20a68fbfe244d59d25648588f7"
+      ]
+    },
+    "candidate": {
+      "wall": {
+        "n": 30,
+        "p50Ms": 2960.7065000000002,
+        "p95Ms": 2991.8690999999963,
+        "p50Confidence95Ms": [
+          2954.2427000000025,
+          2966.5892999999924
+        ],
+        "p95Confidence95Ms": [
+          2981.339500000002,
+          3004.2978000000003
+        ]
+      },
+      "rendererReady": {
+        "n": 30,
+        "p50Ms": 328.35,
+        "p95Ms": 353.17,
+        "p50Confidence95Ms": [
+          324.63,
+          330.86
+        ],
+        "p95Confidence95Ms": [
+          344.34,
+          356.97
+        ]
+      },
+      "rendererLoaded": {
+        "n": 30,
+        "p50Ms": 189.13,
+        "p95Ms": 198.41,
+        "p50Confidence95Ms": [
+          187.53,
+          191.54
+        ],
+        "p95Confidence95Ms": [
+          194.5,
+          202.88
+        ]
+      },
+      "windowCreated": {
+        "n": 30,
+        "p50Ms": 151.77,
+        "p95Ms": 160.38,
+        "p50Confidence95Ms": [
+          150.48,
+          153.08
+        ],
+        "p95Confidence95Ms": [
+          155.33,
+          161.75
+        ]
+      },
+      "stageHashes": [
+        "2cbe053ed7ac4e12b738e05d7933e66febe3df20a68fbfe244d59d25648588f7"
+      ]
+    }
+  },
+  "coldStarts": {
+    "baseline": {
+      "wall": {
+        "n": 10,
+        "p50Ms": 2955.966800000024,
+        "p95Ms": 2977.230799999961,
+        "p50Confidence95Ms": [
+          2953.598399999959,
+          2963.109599999996
+        ],
+        "p95Confidence95Ms": [
+          2960.7415000000037,
+          2977.230799999961
+        ]
+      },
+      "rendererReady": {
+        "n": 10,
+        "p50Ms": 325.6,
+        "p95Ms": 332.75,
+        "p50Confidence95Ms": [
+          321.62,
+          330.27
+        ],
+        "p95Confidence95Ms": [
+          329.25,
+          332.75
+        ]
+      },
+      "rendererLoaded": {
+        "n": 10,
+        "p50Ms": 184.92,
+        "p95Ms": 192.66,
+        "p50Confidence95Ms": [
+          182.52,
+          186.72
+        ],
+        "p95Confidence95Ms": [
+          185.56,
+          192.66
+        ]
+      },
+      "windowCreated": {
+        "n": 10,
+        "p50Ms": 148.77,
+        "p95Ms": 152.43,
+        "p50Confidence95Ms": [
+          147.79,
+          149.83
+        ],
+        "p95Confidence95Ms": [
+          149.34,
+          152.43
+        ]
+      },
+      "stageHashes": [
+        "2cbe053ed7ac4e12b738e05d7933e66febe3df20a68fbfe244d59d25648588f7"
+      ]
+    },
+    "candidate": {
+      "wall": {
+        "n": 10,
+        "p50Ms": 2966.5754000000015,
+        "p95Ms": 2985.0658000000403,
+        "p50Confidence95Ms": [
+          2957.8607000000193,
+          2969.5997000000207
+        ],
+        "p95Confidence95Ms": [
+          2969.5102999999945,
+          2985.0658000000403
+        ]
+      },
+      "rendererReady": {
+        "n": 10,
+        "p50Ms": 328.12,
+        "p95Ms": 342.61,
+        "p50Confidence95Ms": [
+          325.59,
+          333.5
+        ],
+        "p95Confidence95Ms": [
+          333.5,
+          342.61
+        ]
+      },
+      "rendererLoaded": {
+        "n": 10,
+        "p50Ms": 189.53,
+        "p95Ms": 195.51,
+        "p50Confidence95Ms": [
+          187.28,
+          191.01
+        ],
+        "p95Confidence95Ms": [
+          190.95,
+          195.51
+        ]
+      },
+      "windowCreated": {
+        "n": 10,
+        "p50Ms": 149.81,
+        "p95Ms": 155.27,
+        "p50Confidence95Ms": [
+          149.48,
+          152.91
+        ],
+        "p95Confidence95Ms": [
+          151.73,
+          155.27
+        ]
+      },
+      "stageHashes": [
+        "2cbe053ed7ac4e12b738e05d7933e66febe3df20a68fbfe244d59d25648588f7"
+      ]
+    }
+  },
+  "correctness": "PASS",
+  "releaseEligible": false,
+  "limitations": "Hidden startup probe renders the packaged Electron UI but skips live MCP/tunnel, tray and user workflow. Isolated APPDATA and LOCALAPPDATA; no update/install. Does not verify production launch/game frame-time/interactive host tool exposure."
+}
