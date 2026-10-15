@@ -143,6 +143,14 @@ async function main(){
    const tab=await evaluate(keyboard,"Tab",false);
    assert.equal(tab.activeInside,true,"Tab not trapped in Runtime modal");
    data.tabTrapped=true;
+    if(width===451){
+     win.showInactive();
+     await delay(120);
+     const screenshot=await win.webContents.capturePage();
+     fs.writeFileSync(path.join(output,"candidate-runtime-451x978.png"),screenshot.toPNG());
+     win.hide();
+     data.screenshot="candidate-runtime-451x978.png";
+    }
    const escape=await evaluate(keyboard,"Escape",false);
    assert.equal(escape.prevented,true,"Escape not consumed by modal");
    await delay(120);
