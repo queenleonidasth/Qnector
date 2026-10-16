@@ -356,6 +356,7 @@ export class QnectorRuntime {
     this.fileWatch.stopAll();
     await Promise.all([
       this.browserRuntime.close().catch(() => undefined),
+      this.genericLsp.close().catch(() => undefined),
       Promise.resolve(this.uiAutomation.close?.()).catch(() => undefined),
     ]);
     await this.processManager.stopAll();

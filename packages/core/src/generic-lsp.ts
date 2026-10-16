@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   spawn,
   spawnSync,
@@ -65,7 +66,30 @@ const ADAPTERS: LspAdapter[] = [
   },
 ];
 
+interface CachedLspSession {
+  readonly key: string;
+  readonly client: Promise<JsonRpcStdioClient>;
+  readonly revisions: Map<string, { sha256: string; version: number }>;
+  queue: Promise<void>;
+  users: number;
+  retired: boolean;
+  closing?: Promise<void>;
+  idleTimer?: NodeJS.Timeout;
+}
+
+/** Reuse on-demand, read-only LSP servers briefly; never prewarm or cross workspace roots.
+ * Serializing operations per server preserves document version ordering and prevents
+ * concurrent requests from observing a half-updated document. */
 export class GenericLspService {
+  readonly #sessions = new Map<string, CachedLspSession>();
+  readonly #idleMs: number;
+  readonly #maxSessions: number;
+
+  public constructor(options: { idleMs?: number; maxSessions?: number } = {}) {
+    this.#idleMs = Math.max(100, options.idleMs ?? 25_000);
+    this.#maxSessions = Math.max(1, Math.min(4, options.maxSessions ?? 2));
+  }
+
   public status(): GenericLspStatusEntry[] {
     return ADAPTERS.map((adapter) => {
       const resolvedPath = resolveCommand(adapter.command);
@@ -103,34 +127,42 @@ export class GenericLspService {
         : resolveCommand(adapter.command);
     if (!resolved)
       throw new Error(
-        `LSP_SERVER_UNAVAILABLE: ${adapter.command} is not installed or not in PATH`,
+        "LSP_SERVER_UNAVAILABLE: " + adapter.command + " is not installed or not in PATH",
       );
     if (input.action !== "workspace_symbols" && !sourcePath)
-      throw new Error(`INVALID_INPUT: path is required for ${input.action}`);
-    const client = new JsonRpcStdioClient(
-      resolved,
-      adapter.args,
-      workspaceRoot,
-    );
-    await client.start();
-    try {
-      await client.initialize();
-      if (sourcePath) await client.openDocument(sourcePath, adapter.language);
-      const maxResults = clamp(input.maxResults ?? 100, 1, 1_000);
+      throw new Error("INVALID_INPUT: path is required for " + input.action);
+    const maxResults = clamp(input.maxResults ?? 100, 1, 1_000);
+    // Do not start a language server for invalid positions.
+    const position = input.action === "definition" || input.action === "references" || input.action === "hover"
+      ? { line: positivePosition(input.line, "line") - 1, character: positivePosition(input.column, "column") - 1 }
+      : undefined;
+    const key = JSON.stringify([resolved, adapter.args, workspaceRoot]);
+    const session = this.#acquire(key, resolved, adapter.args, workspaceRoot);
+    const work = session.queue.then(async () => {
+      const client = await session.client;
+      if (sourcePath) {
+        // Fresh content fingerprint on every request: a stale LSP document is never reused.
+        const text = await readFile(sourcePath, "utf8");
+        const uri = pathToFileURL(sourcePath).href;
+        const sha256 = createHash("sha256").update(text).digest("hex");
+        const previous = session.revisions.get(uri);
+        if (!previous) {
+          await client.openDocument(sourcePath, adapter.language, text);
+          session.revisions.set(uri, { sha256, version: 1 });
+        } else if (previous.sha256 !== sha256) {
+          const version = previous.version + 1;
+          client.changeDocument(sourcePath, text, version);
+          session.revisions.set(uri, { sha256, version });
+        }
+      }
       let result: unknown;
       if (input.action === "document_symbols") {
         result = await client.request("textDocument/documentSymbol", {
           textDocument: { uri: pathToFileURL(sourcePath!).href },
         });
       } else if (input.action === "workspace_symbols") {
-        result = await client.request("workspace/symbol", {
-          query: input.query ?? "",
-        });
+        result = await client.request("workspace/symbol", { query: input.query ?? "" });
       } else {
-        const position = {
-          line: positivePosition(input.line, "line") - 1,
-          character: positivePosition(input.column, "column") - 1,
-        };
         const params: Record<string, unknown> = {
           textDocument: { uri: pathToFileURL(sourcePath!).href },
           position,
@@ -148,15 +180,92 @@ export class GenericLspService {
       }
       const bounded = boundResult(result, maxResults);
       return {
-        language: adapter.language,
-        server: resolved,
-        action: input.action,
-        result: bounded.value,
-        truncated: bounded.truncated,
+        language: adapter.language, server: resolved, action: input.action,
+        result: bounded.value, truncated: bounded.truncated,
       };
-    } finally {
-      await client.close();
+    });
+    session.queue = work.then(() => undefined, () => undefined);
+    return work.then(
+      (value) => { this.#release(session); return value; },
+      (error: unknown) => { this.#retire(session); this.#release(session); throw error; },
+    );
+  }
+
+  public async close(): Promise<void> {
+    const entries = [...this.#sessions.values()];
+    this.#sessions.clear();
+    for (const entry of entries) this.#retire(entry);
+    await Promise.all(entries.map(async (entry) => {
+      await entry.queue;
+      await this.#closeSession(entry);
+    }));
+  }
+
+  #acquire(key: string, command: string, args: string[], workspace: string): CachedLspSession {
+    let session = this.#sessions.get(key);
+    if (session) {
+      this.#sessions.delete(key);
+      this.#sessions.set(key, session); // LRU order
+    } else {
+      if (this.#sessions.size >= this.#maxSessions) {
+        const idle = [...this.#sessions.values()].find((entry) => entry.users === 0);
+        if (idle) this.#retire(idle);
+      }
+      const client = new JsonRpcStdioClient(command, args, workspace);
+      const startup = (async () => {
+        try {
+          await client.start();
+          await client.initialize();
+          return client;
+        } catch (error) {
+          await client.close().catch(() => undefined);
+          throw error;
+        }
+      })();
+      session = {
+        key, client: startup, revisions: new Map(), queue: Promise.resolve(),
+        users: 0, retired: this.#sessions.size >= this.#maxSessions,
+      };
+      if (!session.retired) this.#sessions.set(key, session);
     }
+    if (session.idleTimer) {
+      clearTimeout(session.idleTimer);
+      session.idleTimer = undefined;
+    }
+    session.users++;
+    return session;
+  }
+
+  #release(session: CachedLspSession): void {
+    session.users = Math.max(0, session.users - 1);
+    if (session.users !== 0) return;
+    if (session.retired) {
+      void this.#closeSession(session);
+      return;
+    }
+    session.idleTimer = setTimeout(() => this.#retire(session), this.#idleMs);
+    session.idleTimer.unref?.();
+  }
+
+  #retire(session: CachedLspSession): void {
+    session.retired = true;
+    if (this.#sessions.get(session.key) === session)
+      this.#sessions.delete(session.key);
+    if (session.idleTimer) {
+      clearTimeout(session.idleTimer);
+      session.idleTimer = undefined;
+    }
+    if (session.users === 0) void this.#closeSession(session);
+  }
+
+  #closeSession(session: CachedLspSession): Promise<void> {
+    if (!session.closing) {
+      session.closing = session.queue
+        .then(() => session.client)
+        .then((client) => client.close())
+        .catch(() => undefined);
+    }
+    return session.closing;
   }
 }
 
@@ -194,6 +303,7 @@ class JsonRpcStdioClient {
     this.child = child;
     child.stdout.on("data", (chunk: Buffer) => this.onData(chunk));
     child.stderr.on("data", () => undefined);
+    child.stdin.on("error", (error) => this.rejectAll(new Error("LSP_SERVER_FAILED: stdin " + error.message)));
     child.once("exit", () =>
       this.rejectAll(new Error("LSP_SERVER_EXITED: language server exited")),
     );
@@ -230,15 +340,17 @@ class JsonRpcStdioClient {
     this.notify("initialized", {});
   }
 
-  public async openDocument(file: string, languageId: string): Promise<void> {
-    const text = await readFile(file, "utf8");
+  public async openDocument(file: string, languageId: string, content?: string): Promise<void> {
+    const text = content ?? await readFile(file, "utf8");
     this.notify("textDocument/didOpen", {
-      textDocument: {
-        uri: pathToFileURL(file).href,
-        languageId,
-        version: 1,
-        text,
-      },
+      textDocument: { uri: pathToFileURL(file).href, languageId, version: 1, text },
+    });
+  }
+
+  public changeDocument(file: string, text: string, version: number): void {
+    this.notify("textDocument/didChange", {
+      textDocument: { uri: pathToFileURL(file).href, version },
+      contentChanges: [{ text }],
     });
   }
 
@@ -276,11 +388,16 @@ class JsonRpcStdioClient {
     } catch {
       // Shutdown is best-effort.
     }
-    if (child.exitCode === null) child.kill();
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) return resolve();
+        child.once("close", () => resolve());
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
+    ]);
     this.child = undefined;
-    this.rejectAll(
-      new Error("LSP_CLIENT_CLOSED: language server client closed"),
-    );
+    this.rejectAll(new Error("LSP_CLIENT_CLOSED: language server client closed"));
   }
 
   private send(message: unknown): void {
