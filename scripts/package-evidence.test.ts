@@ -38,8 +38,8 @@ describe("package evidence exact-commit and integrity guards",()=>{
       await mkdir(path.dirname(filepath),{recursive:true});
       await writeFile(filepath,"release integrity fixture "+name);
     }
-    const setup=path.join(candidate,"Qnector-0.4.56-win-x64-setup.exe");
-    const portable=path.join(candidate,"Qnector-0.4.56-win-x64-portable.exe");
+    const setup=path.join(candidate,"Qnector-0.4.57-win-x64-setup.exe");
+    const portable=path.join(candidate,"Qnector-0.4.57-win-x64-portable.exe");
     await writeFile(setup,"fixture setup");
     await writeFile(portable,"fixture portable");
     const report=writePackageEvidence(candidate);
