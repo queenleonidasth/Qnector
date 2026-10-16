@@ -15,6 +15,21 @@
 9. Mockup is demonstrative and offline; interactions are simulated, not connected to MCP, file deletion, tunnel, updater or real settings. Never mistake mockup for shipped implementation.
 10. Record every implementation checkpoint, test outcomes, evidence, defects, mitigations, and revisions in the progress section at the end of this file.
 
+## 0A. Approved V2 visual authority — Liquid Glass + Queen Orb + Silk Aurora (2026-10-16)
+
+**This is the most recent visual direction.** If earlier sections mention preserving Gold Matrix Rain or the old crown-only Orb, treat those statements as historical baseline, **not future design requirements**. Keep the AR-01..AR-48 IDs stable; production implementation remains pending.
+
+- **Design target:** the user's most recently approved QNECTOR dark-and-gold visual reference, with much stronger **Liquid Glass** materials throughout all menus, cards, search, popup, drawer, buttons, toolbar and dock. Refracted edges, layered translucency, anisotropic highlights, restraint for legibility.
+- **Brand:** use the exact user's PNG at \`C:\Users\QUEEN\Downloads\icon-256_square.png\` as QNECTOR header and central Orb mark, preserving its aspect ratio and colors. It is a gold Queen portrait, not a crown-only surrogate. The new HTML demo embeds the actual PNG data URI and works standalone.
+- **Orb:** a layered glass energy sphere with a dynamic flowing light field, caustic arcs, precision concentric rings, subtle chrome reflection and a centered Queen-mark glass tile. Avoid a tiny idle dot or progress artifact above Orb.
+- **Hold interaction:** the existing long-hold-to-disconnect requires **3 seconds**; the progress ring MUST be fully hidden in the idle state (no zero-length cap dot, no waiting track). Only reveal track + active progress after a real pointer/keyboard hold begins; release or cancel immediately hides and resets. After completion show true disconnected demo state and **suppress the synthetic release click** so reconnect does not happen accidentally.
+- **Background:** retire falling Matrix text/glyph rain from the **target UI**. Replace with non-text animated **Liquid Silk Ribbon / Aurora Light Field / glass caustic waves / restrained suspended particles**, rendered in a single budgeted Canvas. Dark-dim foreground glass panels keep data legible. Quality profiles Full/Balanced/Eco/Off; pause while hidden/minimized; respect reduced motion.
+- **Scope:** visual + animation rework only, do not modify Memory capture, tunnel, MCP, workspaces, update workflow, Plan Mode removal or operational permissions.
+- **Latest interactive visual prototype:** \`docs/design/qnector-liquid-glass-motion-v2.html\`; stand-alone HTML/CSS/JS, actual icon embedded, zero external dependencies; interactive Dashboard/Orb/Activity, Workspace, Memory, Skills, Settings, Runtime, Command palette, Motion Lab, focus handling, quality profile and responsive screen.
+- **Verified mockup test:** \`docs/design/qnector-liquid-glass-v2-qc.cjs\` (headless Chrome); actual pointer hold, cancel and reconnect, 30 rapid tab switches, real image, motion settings, focus/keyboard, quality/reduced, 420px screen; screenshots in \`docs/design/qnector-liquid-v2-*.png\`. Passing this **does not complete any production AR task**.
+- **UX skill guidance:** QNECTOR Agent Skills \`ui-ux-pro-max\` and \`impeccable\` installed 2026-10-16. Their hierarchy, contrast, focus, motion, animation and performance guidance was applied; their decorative-style warnings are subordinated to the user-approved deliberate glass/gold-glow art direction.
+- **Rendering architecture:** CSS layers for refractive materials and simple micro-interactions, single rAF/Canvas driver for animated ribbons and Orb fluid, explicit hold timer as independent source of truth, no external GSAP/WebGL requirement for prototype. Production must measure perf before assuming its budget fits.
+
 ## 1. Source-of-truth baseline
 
 | Item | Verified at audit (2026-10-16) |
@@ -55,7 +70,7 @@
 
 ### 2.1 Visual hierarchy
 1. **Hero / focal motion:** Central Orb only: subtle Float, Rim Glow, connected state and a single Connection Success energy ring.
-2. **Supporting ambient:** Gold Matrix with sparse gold particles and extremely subtle Aurora; never increase contrast around text-heavy panels.
+2. **Supporting ambient (V2 override):** Replace Gold Matrix falling letters with Liquid Silk Ribbon / Aurora / non-text light particles; constrain contrast underneath text-heavy glass panels, and pause/adapt rendering by visibility and quality.
 3. **Interactive motion:** fast, crisp, precise; create a tactile response, not an animation waiting room.
 4. **Information motion:** short one-time entrance and clear state transitions; no flicker or scramble on task IDs, Memory facts or error messages.
 5. **Celebration:** use radial flash/check-draw once on verified success; no confetti or whole-window shake by default.
@@ -251,7 +266,7 @@ State → Motion Controller (tokens + priority + concurrency + quality + visibil
 
 ## 5. Detailed mockup contract
 **File:** docs/design/animation-rework-mockup.html (standalone offline HTML + embedded CSS/JS; no dependency; clearly marked prototype only).
-**Preview states:** Connected/connecting/disconnected, hold-to-disconnect with 3s preservation, background Matrix vs static/reduced, activity enqueue, tooltip/toast, four-position dock and opening drawer, Workspace, Memory, Skills, Settings, Runtime, Setup wizard, updater simulation, Motion Lab showcase.
+**Preview states (V1 archive and V2 current):** Connected/connecting/disconnected, 3-second hold-to-disconnect and early release, V2 Liquid Silk Aurora background (no falling Matrix glyphs) with Full/Balanced/Eco/Off/Reduced, live activity simulation, Toast, Liquid Glass Dock/Drawer, Workspace, Memory, Skills, Settings, Runtime, Search palette and Motion Lab. The older V1 prototype remains for historical comparison.
 **Visual objective:** reproduce QNECTOR header + hero + Activity + floating bottom dock composition, not reinvent the product IA; rich dark gold glass; orbital rings, glyph rain, quiet aurora.
 **Interaction requirements:** Click Orb to connect if disconnected; press/hold 3 seconds to simulate disconnect; open drawer from dock; toggle simulated skill and settings; choose Full/Balanced/Eco/Off; demo buttons trigger state-change and toast; all controls keyboard-accessible and status legible.
 **Safety:** all buttons in prototype modify only in-page demo state. Labels must say Mockup / Demo and never claim real MCP connectivity, real updates or stored preferences.
@@ -289,11 +304,11 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 - [ ] **AR-12** — Add opt-in QC instrumentation for frame time, dropped frames and animation counts; production disabled by default. **Evidence:** _pending_
 
 ### Phase 2 — Ambient & Brand Motion
-- [ ] **AR-13** — Refactor GoldMatrixRain Canvas scheduling to adaptive frequency/density with DPR and resize safeguards. **Evidence:** _pending_
-- [ ] **AR-14** — Build quiet Aurora/particles/background shimmer as one budgeted ambient system; remove duplicative loops. **Evidence:** _pending_
-- [ ] **AR-15** — Rework Header, Crest, Logo and Dashboard initial entrances; never replay on mere data updates. **Evidence:** _pending_
-- [ ] **AR-16** — Rework Orb connected/idle visuals: Float, gradient ring, single breathe/rim light and sparse orbit. **Evidence:** _pending_
-- [ ] **AR-17** — Rework connecting, hold-to-disconnect (original 3s), release cancel, disconnected transition and verified success burst. **Evidence:** _pending_
+- [ ] **AR-13** — Retire **falling Matrix text** from production background and replace with **Liquid Silk Ribbon / Aurora Canvas**, adaptive frame scheduling, DPR bounds and resize/visibility safeguards; retain old Matrix implementation only for reference and rollback if needed. **Evidence:** _pending_
+- [ ] **AR-14** — Implement coordinated refracted waves, glass caustic glow, suspended particles and layered ambient lighting as one GPU/CPU-budgeted system; no duplicated loops and no text rain. **Evidence:** _pending_
+- [ ] **AR-15** — Rework Header, Logo and Dashboard entrances with the user's actual `icon-256_square.png` Queen brand mark (no crown-only placeholder); glass material consistency across menus. **Evidence:** _pending_
+- [ ] **AR-16** — Rework Orb as premium multi-layer liquid glass with living light filaments and internal caustics, outer orbit, Queen-logo tile, smooth idle state and connection-specific intensity. **Evidence:** _pending_
+- [ ] **AR-17** — Implement 3-second hold-to-disconnect with **zero visible track/dot when idle**, a real hold-only visible radial progress ring, early-release/pointer-cancel reset, keyboard hold, synthetic click suppression, accurate disconnect/reconnect and verified success burst. **Evidence:** _pending_
 - [ ] **AR-18** — Benchmark full/balanced/eco/off ambient quality and tune budgets to protect gaming performance. **Evidence:** _pending_
 
 ### Phase 3 — Navigation & Layout
@@ -364,6 +379,8 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 |---|---|---|---|---|
 | 2026-10-16 | Specification only, 0/48 | Source inventory and Motion Reference catalog cross-check; NO production code changes | animation-rework.md + docs/design/animation-rework-mockup.html | UI design mockup and spec created; next: AR-01 baseline before implementation |
 | 2026-10-16 | Mockup finalized, 0/48 implementation tasks | Chrome CDP passed: 10 screenshots, navigation stress (30 switches), drawer keyboard focus/Escape, early and full Orb hold, responsive 420px, Memory/Skills, four quality modes, updater/setup simulations, zero JS exceptions | docs/design/animation-rework-mockup-qc.cjs and docs/design/animation-rework-*-preview.png | Begin AR-01 before modifying QNECTOR runtime; full Electron performance testing still pending |
+
+| 2026-10-16 | Liquid Glass V2 design prototype, **0/48 production tasks** | Chrome CDP PASS: Queen logo embedded in standalone HTML; no Matrix glyph rain; hold progress hidden when idle; early cancel and full 3-second hold; reconnect; 30 rapid navigations, focus trap, quality/reduced controls, 420px viewport, zero JS exceptions; 9 Chrome screenshots | `docs/design/qnector-liquid-glass-motion-v2.html`, `qnector-liquid-glass-v2-qc.cjs`, `qnector-liquid-v2-*.png` | Begin AR-01 production baseline; do not mistake HTML prototype for completed Electron implementation |
 
 ## 10. Sign-off definition
 - [ ] All 48 task IDs finished and supported by evidence.
