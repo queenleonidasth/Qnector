@@ -17,7 +17,7 @@ if (process.argv[2] === "--probe") {
   const service = new TypeScriptCodeIntelligence();
   const diagnostics = await service.diagnostics({
     workspaceRoot: workspace,
-    path: "packages/core/src/plan-act-store.ts",
+    path: "packages/core/src/workflow-recipes.ts",
     tsconfig: "packages/core/tsconfig.json",
     maxResults: 6,
   });
@@ -28,7 +28,7 @@ if (process.argv[2] === "--probe") {
     );
   const symbols = await service.documentSymbols({
     workspaceRoot: workspace,
-    path: "packages/core/src/plan-act-store.ts",
+    path: "packages/core/src/workflow-recipes.ts",
     tsconfig: "packages/core/tsconfig.json",
     maxResults: 6,
   });

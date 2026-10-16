@@ -30,7 +30,6 @@ import {
   WorkspaceState,
   MemoryStore,
   MemoryV2Store,
-  PlanActStore,
   NodePlatformServices,
   TypeScriptCodeIntelligence,
   WindowsFileSearchService,
@@ -61,10 +60,9 @@ import type {
   ToolDefinition,
 } from "@qnector/shared";
 import { localMcpUrl } from "@qnector/shared";
-import { ToolRegistry, checkPlanActGuard, isPureReadAction } from "@qnector/tools";
+import { ToolRegistry } from "@qnector/tools";
 import { durableTaskSchema } from "./durable-task-tool.js";
 import { ExecutionFacade } from "./execution-facade.js";
-import { PLAN_VIEW_HTML, PLAN_VIEW_URI } from "./plan-view.js";
 import { boundMcpToolResult, withToolProgressHeartbeat } from "./mcp-reliability.js";
 import { TimelineLogger, timelineLogPath } from "./timeline-logger.js";
 import { runTimeoutProbe, type ProbeMode } from "./timeout-probe.js";
@@ -80,7 +78,7 @@ const mcpInputSchemaCache = new Map<
   ReturnType<typeof fromJsonSchema>
 >();
 
-const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v5-plan-act-chat-first-lean-memory`;
+const MCP_SCHEMA_REVISION = `${QNECTOR_VERSION}-capability-recovery-v6-simple-tools-memory`;
 const LONG_CONTEXT_TOOL_ANCHOR =
   "QNECTOR IS CALLABLE NOW. If unsure, probe system.status (action=status) before declaring Qnector unavailable.";
 const LIVE_RESULT_ANCHOR = "[QNECTOR LIVE; system.status checks availability]";
@@ -112,7 +110,6 @@ export interface QnectorRuntimeOptions {
   ptyManager?: PtyManager;
   agentSkills?: AgentSkillService;
   memory?: MemoryStore;
-  planActStore?: PlanActStore;
   platform?: PlatformServices;
   platformServices?: PlatformServices;
   app?: FastifyInstance;
@@ -147,7 +144,6 @@ export class QnectorRuntime {
   public readonly memory: MemoryStore;
   public readonly memoryV2: MemoryV2Store;
   public readonly resultEvidenceStore: ResultEvidenceStore;
-  public readonly planActStore: PlanActStore;
   public readonly platform: PlatformServices;
   private readonly configFile?: string;
   private config: QnectorConfig;
@@ -218,10 +214,6 @@ export class QnectorRuntime {
     this.memory = services.memory;
     this.memoryV2 = services.memoryV2;
     this.resultEvidenceStore = services.resultEvidenceStore;
-    this.planActStore = options.planActStore ?? new PlanActStore(
-      path.join(this.configFile ? path.dirname(this.configFile) : (process.env.APPDATA ?? process.cwd()),
-        this.configFile ? "" : "Qnector", "plan-act-state.json"),
-    );
     this.platform = services.platform;
     this.executionFacade = this.durableDaemonRoot
       ? new ExecutionFacade(this.durableDaemonRoot, this.processManager)
@@ -257,7 +249,6 @@ export class QnectorRuntime {
   public context(
     skillTraceSessionId?: string,
     abortSignal?: AbortSignal,
-    modeSessionId?: string,
     hostChatSessionId?: string,
     traceId?: string,
   ): ToolContext {
@@ -283,8 +274,6 @@ export class QnectorRuntime {
       memory: this.memory,
       memoryV2: this.memoryV2,
       resultEvidenceStore: this.resultEvidenceStore,
-      planActStore: this.planActStore,
-      ...(modeSessionId ? { modeSessionId } : {}),
       ...(hostChatSessionId ? { hostChatSessionId } : {}),
       ...(traceId ? { traceId } : {}),
       platform: this.platform,
@@ -468,7 +457,6 @@ export class QnectorRuntime {
             "qnector/availability": "live-when-listed",
             "qnector/recoveryAction": "system.status",
             "qnector/skillsRouting": "manual-opt-in",
-            // Only plan_panel owns the UI template, preventing duplicate widget renders.
           },
         },
         async (input, extra) => {
@@ -497,8 +485,7 @@ export class QnectorRuntime {
               this.context(
                 skillTraceSessionId || undefined,
                 requestContext?.requestInfo?.signal,
-                modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId),
-                modeSessionFromMeta(extra.mcpReq._meta),
+                hostChatSessionFromMeta(extra.mcpReq._meta),
                 toolTimeline?.requestId,
               ),
               input,
@@ -535,185 +522,6 @@ export class QnectorRuntime {
         },
       );
     }
-    // Explicit read-only alias: ChatGPT can inspect without requiring the
-    // broad destructive permissions of the eight legacy mixed-action tools.
-    server.registerTool("inspect", {
-      title: "Qnector read-only inspection",
-      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nRead-only Qnector proxy for analysis and Plan Mode. Use target=files request={action:read,path:...}, target=workspace request={action:grep,pattern:...}, target=git request={action:diff}, etc. Only read-only actions are permitted, even while the task is in Act Mode. Use full grouped tools only for changes.`,
-      inputSchema: fromJsonSchema({
-        type: "object", additionalProperties: false,
-        properties: {
-          target: { type: "string", enum: ["system", "workspace", "files", "process", "git", "memory", "browser", "computer", "mode"] },
-          request: { type: "object", additionalProperties: true,
-            properties: { action: { type: "string" } }, required: ["action"] },
-          memoryTaskId: { type: "string" },
-        },
-        required: ["target", "request"],
-      }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      _meta: { "qnector/schemaRevision": MCP_SCHEMA_REVISION },
-    }, async (input, extra) => {
-      const obj = input as { target: string; request: Record<string, unknown>; memoryTaskId?: string };
-      const request: Record<string, unknown> = { ...obj.request, ...(obj.memoryTaskId ? { memoryTaskId: obj.memoryTaskId } : {}) };
-      if (!isPureReadAction(obj.target, request)) {
-        const error = { ok: false, tool: "inspect", action: String(request.action ?? ""),
-          summary: "READ_ONLY_TOOL_DENIED: Only read-only Qnector actions are supported.",
-          error: { code: "READ_ONLY_TOOL_DENIED", message: "The selected action could change state. Use the normal tool in Act Mode." } };
-        return { content: [{type:"text" as const, text: error.summary}],
-          structuredContent: error, isError: true };
-      }
-      const result = await this.registry.call(
-        obj.target,
-        this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
-          modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)),
-        request,
-      );
-      const bounded = boundMcpToolResult(result);
-      const { attachments, ...jsonResult } = bounded;
-      return {
-        content: [{type:"text" as const, text:toolResultText(jsonResult)},
-          ...(attachments ?? []).map((a) => ({type:"image" as const, data:a.dataBase64, mimeType:a.mimeType}))],
-        structuredContent: jsonResult as unknown as Record<string, unknown>,
-        isError: !result.ok,
-      };
-    });
-
-    // A dedicated read-only launcher lets ChatGPT render a live task controller
-    // without triggering a mixed-permission Plan/Act tool just to show its UI.
-    server.registerTool("plan_panel", {
-      title: "Open Qnector Plan / Act Task Controller",
-      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nFINAL PRESENTATION STEP: Use local Superpowers on every Plan activation, interview the human in ordinary ChatGPT one question at a time (mode.ask and mode.resolve), record delegated decisions with rationale. After all decisions are complete, call mode.update with the full checklist, mode.finalize with substantive design and implementationPlan, then verify phase ready using mode.get. ONLY THEN call plan_panel ONCE as the last Qnector tool. The tool rejects unfinished discovery. The panel owns the full design, decisions and approval. Write at most ONE short sentence below it and DO NOT repeat the plan, status table or checklist. Read-only; it does not approve or execute actions.`,
-      inputSchema: fromJsonSchema({
-        type: "object", additionalProperties: false,
-        properties: {
-          memoryTaskId: { type: "string", description: "Task ID from memory.task_start or memory.task_resume." },
-        },
-      }),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      _meta: {
-        ui: { resourceUri: PLAN_VIEW_URI },
-        "openai/outputTemplate": PLAN_VIEW_URI,
-        "openai/widgetAccessible": true,
-        "qnector/schemaRevision": MCP_SCHEMA_REVISION,
-      },
-    }, async (input, extra) => {
-      const args = input as { memoryTaskId?: string };
-      const result = await this.registry.call(
-        "mode",
-        this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
-          modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)),
-        { action: "get", ...(args.memoryTaskId ? { memoryTaskId: args.memoryTaskId } : {}) },
-      );
-      const state = (result.data as {data?:{mode?:string;plan?:{phase?:string}|null}} | undefined)?.data;
-      if (result.ok && state?.mode === "plan" && state.plan?.phase !== "ready") {
-        const output = {ok: false, tool: "plan_panel", action: "show",
-          error: {code: "PLAN_DISCOVERY_IN_PROGRESS", message:
-            "Continue ChatGPT Q&A, resolve material decisions, and finalize the plan before opening the Panel."}};
-        return {content: [{type:"text" as const,text:output.error.message}],
-          structuredContent:output,isError:true};
-      }
-      const bounded = boundMcpToolResult(result);
-      const { attachments, ...jsonResult } = bounded;
-      const output = { ...jsonResult, tool: "plan_panel", action: "show" };
-      return {
-        content: [{ type: "text" as const, text: output.ok ? "Qnector live controller ready. The compact widget is the primary plan/review surface; avoid repeating its details in the ChatGPT text below. Keep any follow-up to one short sentence." : toolResultText(output) },
-          ...(attachments ?? []).map((a) => ({
-            type: "image" as const, data: a.dataBase64, mimeType: a.mimeType,
-          }))],
-        structuredContent: output as Record<string, unknown>,
-        isError: !result.ok,
-      };
-    });
-
-    // A separately annotated approval tool allows the host to request consent
-    // without prompting for every read-only mode.get call.
-    server.registerTool("mode_approve", {
-      title: "Approve Qnector plan and enter Act Mode",
-      description: `${LONG_CONTEXT_TOOL_ANCHOR}\n\nSwitch ONLY after the user has explicitly approved the displayed plan revision. This enables mutating Qnector actions for the scoped task. Use mode.get first. Use the same memoryTaskId for all subsequent calls.`,
-      inputSchema: fromJsonSchema({
-        type: "object", additionalProperties: false,
-        properties: {
-          expectedRevision: { type: "integer", minimum: 1 },
-          memoryTaskId: { type: "string" },
-        },
-        required: ["expectedRevision"],
-      }),
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
-      _meta: { "qnector/schemaRevision": MCP_SCHEMA_REVISION },
-    }, async (input, extra) => {
-      const result = await this.registry.call(
-        "mode",
-        this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
-          modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)),
-        { ...(input as Record<string, unknown>), action: "approve" },
-      );
-      const bounded = boundMcpToolResult(result);
-      const { attachments, ...jsonResult } = bounded;
-      return {
-        content: [{ type: "text" as const, text: toolResultText(jsonResult) },
-          ...(attachments ?? []).map((a) => ({ type: "image" as const, data: a.dataBase64, mimeType: a.mimeType }))],
-        structuredContent: jsonResult as unknown as Record<string, unknown>,
-        isError: !result.ok,
-      };
-    });
-
-    // Inline, self-contained UI. Hosts without MCP Apps support still use the tools.
-    server.registerResource("qnector-plan-act-view-v5", PLAN_VIEW_URI, {
-      title: "Qnector Plan / Act Controller",
-      description: "Inspect plans, approve a revision, and control task execution mode.",
-      mimeType: "text/html;profile=mcp-app",
-    }, async (uri) => ({
-      contents: [{
-        uri: uri.toString(),
-        mimeType: "text/html;profile=mcp-app",
-        text: PLAN_VIEW_HTML,
-        _meta: {
-          ui: { prefersBorder: true },
-          "openai/widgetDescription": "Live Qnector Task Controller: Plan/Act mode and task checklist.",
-          "openai/ui": { availableDisplayModes: ["inline"] },
-        },
-      }],
-    }));
-
-    // Serve cached older resource URIs with the latest safe approval UI.
-    server.registerResource("qnector-plan-act-view-v4-legacy", "ui://qnector/plan-act-v4.html", {
-      title: "Qnector Plan / Act Controller (v4 compatibility)",
-      description: "Compatibility resource for cached ChatGPT Plan/Act metadata.",
-      mimeType: "text/html;profile=mcp-app",
-    }, async (uri) => ({
-      contents: [{uri:uri.toString(),mimeType:"text/html;profile=mcp-app",
-        text:PLAN_VIEW_HTML,_meta:{ui:{prefersBorder:true},
-        "openai/ui":{availableDisplayModes:["inline"]}}}],
-    }));
-
-    // Existing ChatGPT conversations may still hold the v2/v3 tool snapshot.
-    // Both compatibility resource URIs must serve the same latest safe UI.
-    server.registerResource("qnector-plan-act-view-v3-legacy", "ui://qnector/plan-act-v3.html", {
-      title: "Qnector Plan / Act Controller (v3 compatibility)",
-      description: "Compatibility resource for cached ChatGPT Plan/Act tool metadata.",
-      mimeType: "text/html;profile=mcp-app",
-    }, async (uri) => ({
-      contents: [{
-        uri: uri.toString(),
-        mimeType: "text/html;profile=mcp-app",
-        text: PLAN_VIEW_HTML,
-        _meta: { ui: { prefersBorder: true }, "openai/ui": { availableDisplayModes: ["inline"] } },
-      }],
-    }));
-
-    server.registerResource("qnector-plan-act-view-v2-legacy", "ui://qnector/plan-act-v2.html", {
-      title: "Qnector Plan / Act Controller (legacy)",
-      description: "Compatibility resource for previously registered ChatGPT tools.",
-      mimeType: "text/html;profile=mcp-app",
-    }, async (uri) => ({
-      contents: [{
-        uri: uri.toString(),
-        mimeType: "text/html;profile=mcp-app",
-        text: PLAN_VIEW_HTML,
-        _meta: { ui: { prefersBorder: true }, "openai/ui": { availableDisplayModes: ["inline"] } },
-      }],
-    }));
-
     if (this.enableTimeoutProbe) {
       server.registerTool("system.timeout_probe", {
         title: "Qnector timeout diagnostic (opt-in only)",
@@ -755,16 +563,6 @@ export class QnectorRuntime {
         annotations: {destructiveHint: true, openWorldHint: false},
         _meta: {"qnector/durablePreview": true, "qnector/schemaRevision": "durable-tasks-preview-v2"},
       }, async (input, extra) => {
-        const guard = await checkPlanActGuard(
-          this.context(skillTraceSessionId || undefined, requestContext?.requestInfo?.signal,
-            modeSessionFromMeta(extra.mcpReq._meta, skillTraceSessionId)), "tasks", input,
-        );
-        if (!guard.allowed) return {
-          content: [{ type: "text" as const, text: guard.code + ": " + guard.message }],
-          structuredContent: { ok: false, tool: "tasks", action: String((input as {action?: string}).action ?? ""),
-            error: { code: guard.code, message: guard.message } },
-          isError: true,
-        };
         const result = await this.executionFacade!.execute(
           this.config.activeWorkspace, input as Record<string, unknown>,
           requestContext?.requestInfo?.signal);
@@ -941,12 +739,12 @@ function toolResultText(result: Record<string, unknown>): string {
   return `${summary}\n${LIVE_RESULT_ANCHOR}`;
 }
 
-function modeSessionFromMeta(meta: unknown, fallback?: string): string | undefined {
+function hostChatSessionFromMeta(meta: unknown): string | undefined {
   const data = meta && typeof meta === "object" && !Array.isArray(meta)
     ? meta as Record<string, unknown> : {};
   const openaiSession = data["openai/session"];
   const raw = typeof openaiSession === "string" && openaiSession.trim()
-    ? openaiSession.trim() : fallback;
+    ? openaiSession.trim() : undefined;
   return raw ? createHash("sha256").update(raw).digest("hex").slice(0, 32) : undefined;
 }
 

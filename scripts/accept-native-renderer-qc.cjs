@@ -3,7 +3,7 @@ const fs=require("node:fs");
 const path=require("node:path");
 const assert=require("node:assert/strict");
 const root=process.cwd();
-const output=path.join(root,"apps","desktop","release","qc-plan-panel-ux");
+const output=path.join(root,"apps","desktop","release","qc-native-renderer");
 const preload=path.join(root,"scripts","native-renderer-qc-preload.cjs");
 fs.mkdirSync(output,{recursive:true});
 app.disableHardwareAcceleration();

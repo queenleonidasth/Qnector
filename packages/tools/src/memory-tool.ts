@@ -642,7 +642,7 @@ async function workingSetAction(
   sinceRevision?: string,
 ) {
   if (!details) return compactWorkingSetAction(context, memory, explicitQuery, sinceRevision,
-    context.hostChatSessionId ?? context.modeSessionId);
+    context.hostChatSessionId);
   const baseRecall = await memory.recall({
     checkpointLimit: 1,
     factLimit: 8,

@@ -1,5 +1,7 @@
 # QNECTOR End-to-End Performance — implementation checkpoint (15 October 2026)
 
+> Historical record: on 16 October 2026, the user separately authorized removal of Plan Mode, its approval guard and public aliases in isolated branch `refactor/remove-plan-mode-20261016`. The 15 October preservation rules below describe the prior scope, not the revised feature set.
+
 Task: `task_4e4b23ce-169c-437a-8b60-122147a79517`; approved **Act Mode Revision 4**. User's latest instruction: **continue work; do not shut down the PC**.
 
 ## Isolation and production

@@ -36,10 +36,6 @@ try {
     "memory",
     "browser",
     "computer",
-    "mode",
-    "inspect",
-    "plan_panel",
-    "mode_approve",
   ];
   assert(
     tools.length === expectedTools.length &&

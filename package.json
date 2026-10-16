@@ -38,7 +38,6 @@
     "accept:startup": "tsx scripts/accept-startup.ts",
     "accept:browser": "tsx scripts/accept-browser-automation.ts",
     "accept:ui-layout": "powershell -ExecutionPolicy Bypass -File scripts/accept-skill-layout.ps1",
-    "accept:plan-ux": "powershell -ExecutionPolicy Bypass -File scripts/accept-plan-panel-ux.ps1",
     "accept:native-ui": "electron scripts/accept-native-renderer-qc.cjs",
     "test:plus": "tsx scripts/test-plus-compatibility.ts",
     "package:windows": "powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1",

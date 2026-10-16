@@ -70,10 +70,6 @@ if ($LASTEXITCODE -ne 0) { throw "Desktop release regression gate failed; refusi
 if ($LASTEXITCODE -ne 0) { throw "External MCP integration gate failed; refusing to package" }
 & (Join-Path $PSScriptRoot "accept-skill-layout.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Skill discovery layout gate failed; refusing to package" }
-& $pnpm vitest run packages/mcp-server/src/plan-view.test.ts packages/mcp-server/src/mcp-plan-act.test.ts --maxWorkers=1
-if ($LASTEXITCODE -ne 0) { throw "Plan/Act MCP UI contract gate failed; refusing to package" }
-& (Join-Path $PSScriptRoot "accept-plan-panel-ux.ps1")
-if ($LASTEXITCODE -ne 0) { throw "Plan/Act UX layout and interaction gate failed; refusing to package" }
 & $pnpm accept:native-ui
 if ($LASTEXITCODE -ne 0) { throw "Native renderer UX and accessibility gate failed; refusing to package" }
 & $pnpm build:clean

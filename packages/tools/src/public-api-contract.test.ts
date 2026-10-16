@@ -22,8 +22,7 @@ describe("baseline public API golden manifest", () => {
       expect(definition.annotations, definition.name).toEqual(golden.permissionHints);
       expect(golden.legacyCallShape).toBe("{action,...action-specific fields}");
     }
-    expect(manifest.hostAliases.map(item=>item.name).sort()).toEqual(["inspect","mode_approve","plan_panel","system.timeout_probe","tasks"].sort());
-    expect(manifest.hostAliases.find(item=>item.name==="mode_approve")?.required).toContain("expectedRevision");
-    expect(manifest.hostAliases.find(item=>item.name==="inspect")?.permissionHints).toMatchObject({readOnlyHint:true,destructiveHint:false});
+    expect(manifest.hostAliases.map(item=>item.name).sort()).toEqual(["system.timeout_probe","tasks"].sort());
+    expect(manifest.tools.some(item=>item.name==="mode")).toBe(false);
   });
 });

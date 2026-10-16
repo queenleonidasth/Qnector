@@ -152,8 +152,10 @@ describe("P4 HTTP and stdio share one durable execution backend", () => {
     expect(stdioTools?.map(tool=>({name:tool.name,inputSchema:tool.inputSchema}))).toEqual(
       httpTools?.map(tool=>({name:tool.name,inputSchema:tool.inputSchema})),
     );
-    const modeSchema = httpTools?.find(tool=>tool.name==="mode")?.inputSchema as {properties?:{action?:{enum?:string[]}}} | undefined;
-    expect(modeSchema?.properties?.action?.enum).toEqual(expect.arrayContaining(["ask","resolve","finalize"]));
+    for (const tool of ["mode", "plan_panel", "mode_approve", "inspect"]) {
+      expect(httpTools?.some(item => item.name === tool)).toBe(false);
+      expect(stdioTools?.some(item => item.name === tool)).toBe(false);
+    }
     expect(
       stdioTools?.find((tool) => tool.name === "tasks")?.inputSchema,
     ).toEqual(httpTools?.find((tool) => tool.name === "tasks")?.inputSchema);

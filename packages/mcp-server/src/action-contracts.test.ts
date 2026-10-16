@@ -1,34 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { diagnoseActionCompatibility, getActionContract } from "../../tools/src/action-contracts.js";
-import { isPureReadAction, isPlanSafeAction } from "../../tools/src/plan-guard.js";
+import { isReadOnlyAction } from "../../tools/src/tool-effects.js";
 import { toolDefinitions } from "../../tools/src/index.js";
 
-describe("finite action contracts", () => {
-  it("rejects_unknown_actions_and_reports_stale_host_snapshots", () => {
+describe("finite action contracts without legacy planning tools", () => {
+  it("does not advertise removed planning actions and detects stale host snapshots", () => {
     expect(getActionContract("files", "invented")).toBeNull();
-    expect(diagnoseActionCompatibility([{tool:"mode",action:"ask"}], [
-      {name:"mode",inputSchema:{properties:{action:{enum:["get","begin"]}}}},
-    ])).toEqual([{tool:"mode",action:"ask",reason:"action_missing"}]);
+    for (const tool of ["mode", "mode_approve", "plan_panel", "inspect"])
+      expect(getActionContract(tool, "get")).toBeNull();
+    expect(diagnoseActionCompatibility([{tool:"files",action:"read_many"}], [
+      {name:"files",inputSchema:{properties:{action:{enum:["read"]}}}},
+    ])).toEqual([{tool:"files",action:"read_many",reason:"action_missing"}]);
+    expect(diagnoseActionCompatibility([{tool:"mode",action:"get"}], []))
+      .toEqual([{tool:"mode",action:"get",reason:"unknown_action"}]);
   });
   it("distinguishes_glob_from_pattern_and_missing_implementation_fields", () => {
     expect(getActionContract("workspace","glob")?.requiredInputs).toContain("pattern");
     expect(getActionContract("workspace","grep")?.requiredInputs).toContain("pattern");
     expect(getActionContract("files","read")?.requiredInputs).toContain("path");
   });
-  it("does_not_treat_mutation_or_nested_dispatch_as_read_only", () => {
+  it("classifies mutations and nested dispatch as writes without changing host permissions", () => {
     expect(getActionContract("files","write")?.effect).toBe("write");
-    expect(isPureReadAction("files",{action:"write",path:"x",content:"x"})).toBe(false);
-    expect(isPureReadAction("system",{action:"mcp_call",server:"x",toolName:"files",toolArgs:{action:"write"}})).toBe(false);
+    expect(isReadOnlyAction("files",{action:"write",path:"x",content:"x"})).toBe(false);
+    expect(isReadOnlyAction("system",{action:"mcp_call",server:"x",toolName:"files"})).toBe(false);
     expect(getActionContract("process","workflow_start")?.effect).toBe("write");
-    expect(getActionContract("mode_approve","approve")?.effect).toBe("write");
+    expect(getActionContract("tasks","start")?.effect).toBe("write");
+    expect(getActionContract("tasks","list")?.effect).toBe("read");
   });
-  it("matches_the_dispatch_guard_for_every_existing_action", () => {
+  it("matches the conservative action classifier for every grouped tool action", () => {
     for (const definition of toolDefinitions) {
       const actions=(definition.inputSchema.properties as {action?:{enum?:string[]}}).action?.enum ?? [];
       for (const action of actions) {
         const contract=getActionContract(definition.name,action)!;
-        expect(contract.planAllowed).toBe(isPlanSafeAction(definition.name,{action}));
-        expect(contract.effect==="read").toBe(isPureReadAction(definition.name,{action}));
+        expect(contract.effect==="read").toBe(isReadOnlyAction(definition.name,{action}));
+        expect("planAllowed" in contract).toBe(false);
       }
     }
   });

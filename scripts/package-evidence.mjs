@@ -24,7 +24,7 @@ const provedGates = [
   "release-preflight","version-sync","initial-build","native-uia-publish",
   "native-job-host-publish","durable-runtime-bundle","durable-recovery",
   "desktop-release-regression","external-mcp","skill-layout",
-  "plan-act-mcp-contract","plan-panel-ux","native-renderer-ui",
+  "native-renderer-ui",
   "clean-build","compiled-stdio-parity","electron-builder",
   "packaged-resource-presence","packaged-durable-bundle",
   "packaged-durable-recovery","packaged-stdio-smoke","packaged-typescript-diagnostics",

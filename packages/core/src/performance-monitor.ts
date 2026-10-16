@@ -45,7 +45,7 @@ export interface StageSample {
 export interface StageAggregate extends Omit<StageSample, "traceId" | "taskId" | "benchmarkRunId" | "bytes"> {
   count: number; p50Ms: number; p95Ms: number; bytes?: number;
 }
-const TELEMETRY_ACTIONS = new Set(["system","workspace","files","process","git","memory","browser","computer","mode","inspect","plan_panel","mode_approve","tasks","system.timeout_probe"]);
+const TELEMETRY_ACTIONS = new Set(["system","workspace","files","process","git","memory","browser","computer","tasks","system.timeout_probe"]);
 
 export class PerformanceMonitor {
   private readonly origin = performance.now();

@@ -126,7 +126,7 @@ Get-FileHash .\Qnector-*-win-x64-setup.exe -Algorithm SHA256
 5. Wait for **OpenAI Tunnel is connected**, then open ChatGPT Connector
    Settings from the success page.
 6. Create or verify the Qnector connector while the desktop app is running and
-   confirm that ChatGPT discovers nine grouped tools plus `inspect`, `mode_approve` and `plan_panel`.
+   confirm that ChatGPT discovers eight grouped tools: `system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, and `computer`.
 7. In Qnector, select **Workspace → Choose Folder**, then enable Qnector in a
    new ChatGPT conversation.
 
@@ -147,9 +147,9 @@ Use Qnector to create qnector-test.txt in the active workspace, read it back,
 and show the Git diff.
 ```
 
-## Plan / Act Mode on ChatGPT
+## Direct tools and task continuity
 
-Use Qnector with task-scoped planning: start a task with `memory.task_start`, save a read-only plan with `mode.begin`, and switch to Act Mode with `mode_approve` only after approving the current revision. Use `inspect` for read-only inspection and call **`plan_panel` with the same `memoryTaskId`** to show the interactive Plan / Act Task Controller in a compatible ChatGPT conversation. After installing Qnector updates, refresh and enable the new custom app actions in ChatGPT settings, then start a new chat. See [Plan / Act guide](docs/plan-act.md) for limits.
+Qnector no longer exposes Plan Mode, its approval tools, or an interactive planning panel. Use grouped MCP tools directly; ChatGPT's app permissions and confirmations still apply. For long-running or multi-chat work, use `memory.task_start` or `memory.task_resume` and pass the returned `memoryTaskId` in related tool calls. Existing Memory v2 records and durable jobs remain available. After updating Qnector, refresh the ChatGPT connector's tool schema so retired actions disappear from its cached list.
 
 ## Everyday use
 

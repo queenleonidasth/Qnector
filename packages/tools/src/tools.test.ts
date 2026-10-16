@@ -94,10 +94,10 @@ describe("Qnector grouped tools", () => {
     expect(value(minimal).managedProcesses).toEqual([]);
     expect(value(minimal).recentActivity).toEqual([]);
     expect(value(minimal).capabilities).toEqual(value(coding).capabilities);
-    expect(registry.list()).toHaveLength(9);
+    expect(registry.list()).toHaveLength(8);
   });
 
-  it("advertises nine grouped tools and supports file mutations", async () => {
+  it("advertises eight grouped tools and supports file mutations", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-tools-"));
     const config = defaultConfig(root);
     const context = makeContext(config);
@@ -111,7 +111,6 @@ describe("Qnector grouped tools", () => {
       "memory",
       "browser",
       "computer",
-      "mode",
     ]);
     // Legacy configurations must not re-enable the removed reader.
     config.social = { enabled: true, platforms: ["facebook", "youtube"] };

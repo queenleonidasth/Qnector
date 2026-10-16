@@ -277,6 +277,11 @@
         "outputMode",
         "env",
         "processId",
+        "waitBudgetMs",
+        "evidenceCursor",
+        "evidenceBudgetBytes",
+        "evidenceId",
+        "evidenceStoreCursor",
         "ptyId",
         "taskId",
         "workflowName",
@@ -287,6 +292,9 @@
         "maxConcurrency",
         "replayInterrupted",
         "description",
+        "recipeName",
+        "recipeInput",
+        "revision",
         "steps",
         "documents",
         "cursor",
@@ -298,15 +306,7 @@
         "intervalMs",
         "cols",
         "rows",
-        "enter",
-        "waitBudgetMs",
-        "evidenceCursor",
-        "evidenceBudgetBytes",
-        "evidenceId",
-        "evidenceStoreCursor",
-        "recipeName",
-        "recipeInput",
-        "revision"
+        "enter"
       ],
       "permissionHints": {
         "readOnlyHint": false,
@@ -594,90 +594,9 @@
         "openWorldHint": false
       },
       "legacyCallShape": "{action,...action-specific fields}"
-    },
-    {
-      "name": "mode",
-      "actions": [
-        "get",
-        "begin",
-        "update",
-        "ask",
-        "resolve",
-        "finalize",
-        "back_to_plan",
-        "step"
-      ],
-      "required": [
-        "action"
-      ],
-      "properties": [
-        "action",
-        "title",
-        "summary",
-        "steps",
-        "question",
-        "decisionId",
-        "answer",
-        "decidedBy",
-        "rationale",
-        "alternatives",
-        "delegationConfirmed",
-        "design",
-        "implementationPlan",
-        "index",
-        "done",
-        "expectedRevision",
-        "expectedStepId",
-        "expectedApprovedAt"
-      ],
-      "permissionHints": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": false
-      },
-      "legacyCallShape": "{action,...action-specific fields}"
     }
   ],
   "hostAliases": [
-    {
-      "name": "inspect",
-      "actions": [
-        "proxy"
-      ],
-      "required": [
-        "target",
-        "request"
-      ],
-      "permissionHints": {
-        "readOnlyHint": true,
-        "destructiveHint": false
-      }
-    },
-    {
-      "name": "plan_panel",
-      "actions": [
-        "show"
-      ],
-      "required": [],
-      "permissionHints": {
-        "readOnlyHint": true,
-        "destructiveHint": false
-      }
-    },
-    {
-      "name": "mode_approve",
-      "actions": [
-        "approve"
-      ],
-      "required": [
-        "expectedRevision"
-      ],
-      "permissionHints": {
-        "readOnlyHint": false,
-        "destructiveHint": true
-      }
-    },
     {
       "name": "system.timeout_probe",
       "actions": [

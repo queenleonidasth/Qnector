@@ -107,7 +107,7 @@ describe("Qnector MCP runtime", () => {
     );
     expect(
       initialized.response.headers.get("x-qnector-schema-revision"),
-    ).toContain("capability-recovery-v5");
+    ).toContain("capability-recovery-v6");
     expect(initialized.response.headers.get("x-qnector-capability")).toBe(
       "live",
     );
@@ -230,7 +230,7 @@ describe("Qnector MCP runtime", () => {
         )?.memoryTaskId,
       ).toBeTruthy();
       expect(advertised?._meta?.["qnector/schemaRevision"]).toContain(
-        "capability-recovery-v5",
+        "capability-recovery-v6",
       );
       expect(advertised?.title).toBe(`Qnector ${definition.name} (LIVE)`);
       expect(advertised?.description).toContain("QNECTOR IS CALLABLE NOW");
@@ -494,6 +494,7 @@ describe("Qnector MCP runtime", () => {
       params: {},
     });
     expect(JSON.stringify(resources.body)).toContain("qnector://memory/latest");
+    expect(JSON.stringify(resources.body)).not.toContain("ui://qnector/plan-act");
     expect(JSON.stringify(resources.body)).toContain(
       "qnector://workspace/status",
     );
@@ -533,8 +534,8 @@ describe("Qnector MCP runtime", () => {
         "Continue the saved Qnector task",
       );
       const modernTools = await client.listTools();
-      expect(modernTools.tools).toHaveLength(12);
-      expect(modernTools.tools.map((tool) => tool.name)).toContain("plan_panel");
+      expect(modernTools.tools).toHaveLength(8);
+      expect(modernTools.tools.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["mode", "inspect", "plan_panel", "mode_approve"]));
       expect(modernTools.tools.map((tool) => tool.name)).toContain("browser");
       expect(
         modernTools.tools

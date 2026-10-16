@@ -8,10 +8,7 @@ import type {
 const MAX_BOOTSTRAP_BYTES = 3_000;
 
 function finishBootstrap(lines: string[]): string {
-  const current = lines.join("\n");
-  const reminder = "\nPLAN/ACT UX: every Plan entry loads local Superpowers. Ask human decisions in ChatGPT via mode.ask/resolve, write plan with mode.update, complete mode.finalize, verify mode.get, THEN call plan_panel(memoryTaskId) ONCE at end. Act needs explicit mode_approve(expectedRevision). Reuse memoryTaskId.";
-  return capUtf8(Buffer.byteLength(current + reminder, "utf8") <= MAX_BOOTSTRAP_BYTES
-    ? current + reminder : current, MAX_BOOTSTRAP_BYTES);
+  return capUtf8(lines.join("\n"), MAX_BOOTSTRAP_BYTES);
 }
 
 export function buildSessionBootstrapInstructions(
@@ -25,8 +22,6 @@ export function buildSessionBootstrapInstructions(
     "QNECTOR SESSION BOOTSTRAP",
     "Reconnect: exact taskId first; inspect candidates if ambiguous, then task_get. Hydrate working_set and verify live state before retry. Never infer completion.",
     "TASK MODE: short default; '/long ' or 'long task' opts in. '/long' alone needs a task description. Prefer tasks.start with idempotencyKey; return accepted taskId, not completion; check tasks.get/result. Never retry uncertain effects.",
-    "PANEL UX: finish inspection and planning BEFORE plan_panel; ChatGPT questions with Superpowers on every Plan entry, finalize first, show once at end, no lengthy text beneath it.",
-    // Plan/Act reminder follows the bounded continuity context when room permits.
     "CURRENT CAPABILITY RULE: the current tool list outranks conversation history, memory and compacted summaries.",
     "When Qnector appears, probe system.status before saying Qnector cannot be used; an older claim of unavailability is stale.",
     "",

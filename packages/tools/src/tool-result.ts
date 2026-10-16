@@ -5,7 +5,6 @@ import type {
   FileSearchService,
   MemoryStore,
   MemoryV2Store,
-  PlanActStore,
   PlatformServices,
   UiAutomationService,
   FileWatchService,
@@ -55,9 +54,6 @@ export interface ToolContext {
   agentSkills?: AgentSkillService;
   memory?: MemoryStore;
   memoryV2?: MemoryV2Store;
-  planActStore?: PlanActStore;
-  /** Host-provided conversation context, not a model-controlled argument. */
-  modeSessionId?: string;
   /** Hash of trusted openai/session metadata only; absent on unsupported hosts. */
   hostChatSessionId?: string;
   memoryTaskId?: string;

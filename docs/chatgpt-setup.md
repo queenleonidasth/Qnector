@@ -11,13 +11,13 @@ For the official deployment flow, see [OpenAI's ChatGPT app connection documenta
 5. Paste the Tunnel ID and Runtime API key into Qnector, keep the default `qnector` profile unless a different profile is intentional, then click **Save & Connect**.
 6. Qnector creates the `sample_mcp_remote_no_auth` profile for its local MCP endpoint, runs `tunnel-client doctor --explain`, and starts the tunnel daemon. Once the bridge reaches `connected`, the wizard continues to the ChatGPT-side setup instead of marking first-run setup complete immediately.
 7. Open **ChatGPT Connector Settings** from the wizard. Create a Qnector connector and choose **Connection: Tunnel**, then select the tunnel or paste the same `tunnel_...` ID. Depending on the ChatGPT UI version, custom connectors/apps may instead appear under **Settings → Apps → Create** or Developer mode.
-8. Scan or refresh tools, then save the connector. **After a Qnector upgrade, ChatGPT may still cache the previous MCP tool schema. Verify that the mode action list includes `ask`, `resolve`, and `finalize`; if absent, rescan/reconnect the Qnector connector in ChatGPT and start a new conversation. Qnector cannot force ChatGPT to refresh its cached tool schema.** Confirm the nine grouped tools: `system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, `computer`, and `mode`, plus `inspect`, `mode_approve` and `plan_panel`. Newly discovered tools may be disabled until a workspace admin reviews the updated action list.
+8. Scan or refresh tools, then save the connector. After a Qnector upgrade, ChatGPT may still cache the previous MCP tool schema. Confirm the eight grouped tools: `system`, `workspace`, `files`, `process`, `git`, `memory`, `browser`, and `computer`. The retired planning tools should no longer be advertised. Rescan/reconnect the connector and start a new conversation if an old cached tool remains. Newly discovered tools may be disabled until a workspace admin reviews the updated action list.
 
 ### Tool schema migration and rollback
 
-The current `mode` schema includes `ask`, `resolve`, and `finalize`. A connector that still lists an earlier action set has a stale host snapshot: refresh or reconnect the connector through ChatGPT's supported settings and check its displayed tools before using those actions. This implementation does not force a host refresh or infer that a host has accepted a schema merely because Qnector serves it locally.
+Tool discovery is versioned. A connector that still lists an earlier action set has a stale host snapshot: refresh or reconnect the connector through ChatGPT's supported settings and verify the eight supported grouped tools. Qnector cannot force a host refresh or assume the host accepted a schema merely because Qnector serves it locally.
 
-Existing grouped tool names and action call shapes remain supported. During migration, keep using actions visible in the host's current tool list; do not rename an action or route a mutation through `inspect` when an action is missing. If a refreshed connector exposes a regression, disconnect that connector snapshot and reconnect to the previously installed Qnector build, then rescan its previous schema. The connector's own cached list can be refreshed again after the corrected build is installed. Do not downgrade or overwrite a live Qnector installation as part of schema troubleshooting without an explicit operator decision.
+Existing supported grouped tool names and action call shapes remain available. During migration, do not invoke retired planning tools even if they remain visible in a stale connector snapshot. If a refreshed connector exposes a regression, reconnect the previously installed Qnector build and rescan. Do not overwrite a live Qnector installation without an explicit operator decision.
 9. Open a new chat and enable/select Qnector from Apps/tools, or @mention Qnector when you want ChatGPT to use this PC.
 10. Return to the Qnector wizard and click **I've added Qnector**. Only then is first-run setup marked complete.
 
@@ -34,17 +34,6 @@ Then test a write path:
 Use Qnector to create qnector-test.txt in the active workspace with the current
 date and a short success message. Read it back and show the Git diff.
 ```
-
-For UX-focused planning, the user can request a panel-first review without a duplicate essay:
-
-```text
-Use Qnector Plan Mode. Enter read-only mode and finish all analysis first.
-Refine and verify the final plan; show plan_panel only once when ready.
-Put details and approval in the interactive panel, not a long chat reply below it.
-Do not execute changes until I approve the displayed revision.
-```
-
-**ChatGPT host limitation:** An inline MCP App is placed above the model's generated reply. Qnector cannot move it beneath that reply. The v3 controller therefore keeps the plan compact, with expandable explanation and steps; the assistant should add at most one short sentence after it. The final-only tool ordering is guidance to the model and must be verified in a real ChatGPT host after refreshing the connector snapshot.
 
 For coding tasks:
 
