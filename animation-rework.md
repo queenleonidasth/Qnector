@@ -1,6 +1,6 @@
 # QNECTOR — COMPLETE ANIMATION REWORK MASTER SPECIFICATION
 
-> **DESIGN APPROVED / IMPLEMENTATION NOT STARTED** | Revision 1.0 | 2026-10-16 | Owner: QNECTOR Desktop UI
+> **DESIGN APPROVED / NATIVE ELECTRON TRIAL UNDERWAY (NOT RELEASED)** | Revision V2.1 trial | 2026-10-16 | Owner: QNECTOR Desktop UI
 > This is the durable, canonical task checklist. Do not mark an item complete solely because code was written; require its named verification evidence. No Plan Mode changes, no new feature unrelated to motion, no production deployment from this task.
 
 ## 0. Non-negotiable brief (read before every implementation session)
@@ -388,6 +388,8 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 | 2026-10-16 | Mockup finalized, 0/48 implementation tasks | Chrome CDP passed: 10 screenshots, navigation stress (30 switches), drawer keyboard focus/Escape, early and full Orb hold, responsive 420px, Memory/Skills, four quality modes, updater/setup simulations, zero JS exceptions | docs/design/animation-rework-mockup-qc.cjs and docs/design/animation-rework-*-preview.png | Begin AR-01 before modifying QNECTOR runtime; full Electron performance testing still pending |
 
 | 2026-10-16 | Liquid Glass V2 design prototype, **0/48 production tasks** | Chrome CDP PASS: Queen logo embedded in standalone HTML; no Matrix glyph rain; hold progress hidden when idle; early cancel and full 3-second hold; reconnect; 30 rapid navigations, focus trap, quality/reduced controls, 420px viewport, zero JS exceptions; 9 Chrome screenshots | `docs/design/qnector-liquid-glass-motion-v2.html`, `qnector-liquid-glass-v2-qc.cjs`, `qnector-liquid-v2-*.png` | Begin AR-01 production baseline; do not mistake HTML prototype for completed Electron implementation |
+
+| 2026-10-17 (ICT) | **AR-01/AR-13–AR-17 native vertical slice IN PROGRESS**; full acceptance 0/48 | Isolated real-Electron renderer baseline 153.29 fps/p95 6.2ms, candidate sample 165 fps/p95 6.1ms; native Silk/Queen Orb/frameless portrait/hold circle and VSync driver. Typecheck/build/lint PASS; focused tests 27/27 PASS; native multi-size UI and hold/visibility smoke PASS. Full suite initially 460/462: dirty-worktree evidence guard (correct behavior), and stale preexisting Memory selector test, now updated without modifying Memory code. | `feat/royal-motion-60fps-trial`, `docs/design/royal-motion-trial-report.md`, `royal-motion-{baseline,candidate}-fps.json` and screenshots | Obtain repeated frame+GPU evidence with foreground games, clean-tree test, complete remaining 48 item acceptance; installed v0.4.57 untouched. |
 
 ## 10. Sign-off definition
 - [ ] All 48 task IDs finished and supported by evidence.

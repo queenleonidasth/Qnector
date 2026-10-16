@@ -5,6 +5,8 @@ import { defineConfig } from "vite";
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  // Relative Vite assets are required by Electron file:// windows.
+  base: "./",
   root: path.join(appRoot, "src", "renderer"),
   build: {
     outDir: path.join(appRoot, "dist", "renderer"),

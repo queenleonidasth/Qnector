@@ -128,7 +128,11 @@ describe("drawer navigation and content completeness UX", () => {
     expect(center).toContain("setVisibleMemories");
     expect(center).toContain("currentTask.pendingSteps.slice(1).map");
     expect(center).toContain("currentTask.completedSteps.map");
-    expect(center).toContain('id="memory-last-session"');
+    // Memory freshness fix shows newest activity first and only labels linked
+    // sessions as historical; the obsolete last-session heading was removed.
+    expect(center).toContain('id="memory-latest-activity"');
+    expect(center).toContain('data-testid="memory-linked-session"');
+    expect(center).toContain('data-testid="memory-freshness"');
     expect(center).toContain('id="memory-current-task"');
     expect(center).toContain('id="memory-activity-log"');
     expect(center).toContain("summary>Saved context");

@@ -31,7 +31,11 @@ import {
 } from "./runtime-diagnostics.js";
 import { inspectWindowsMcp } from "./windows-mcp-status.js";
 import "./royal-effects.css";
-import { GoldMatrixRain } from "./gold-matrix-rain.js";
+import { RoyalSilkBackground } from "./royal-silk-background.js";
+import { QueenLiquidOrb } from "./queen-liquid-orb.js";
+import "./liquid-motion.css";
+
+const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url).href;
 
 const fallbackBridge: TransportSnapshot = {
   state: "disconnected",
@@ -531,7 +535,11 @@ function App(): React.ReactElement {
   const holdStartRef = React.useRef<number | null>(null);
   const animFrameRef = React.useRef<number | null>(null);
   const didLongPressRef = React.useRef<boolean>(false);
-  const [holdProgress, setHoldProgress] = useState(0);
+  // Drive the hold ring directly from requestAnimationFrame without rerendering App.
+  const holdProgressRef = useRef(0);
+  const ringMeterRef = useRef<SVGCircleElement | null>(null);
+  const titleCountdownRef = useRef<HTMLSpanElement | null>(null);
+  const hintCountdownRef = useRef<HTMLSpanElement | null>(null);
   const [isHolding, setIsHolding] = useState(false);
   const [burstFlash, setBurstFlash] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -885,52 +893,68 @@ function App(): React.ReactElement {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setHoldProgress(0);
+      holdProgressRef.current = 0;
+      if (ringMeterRef.current) ringMeterRef.current.style.strokeDashoffset = "364.42";
       setIsDisconnecting(false);
       setBusy(false);
     }
   };
 
-  const startHold = () => {
-    if (bridge.state !== "connected" || busy || isDisconnecting) return;
-    setIsHolding(true);
+  const startHold = (): void => {
+    if (bridge.state !== "connected" || busy || isDisconnecting ||
+        holdStartRef.current !== null) return;
     holdStartRef.current = performance.now();
+    holdProgressRef.current = 0;
+    if (ringMeterRef.current) ringMeterRef.current.style.strokeDashoffset = "364.42";
+    setIsHolding(true);
+    let lastLabelAt = 0;
 
-    const tick = (now: number) => {
-      if (!holdStartRef.current) return;
-      const elapsed = now - holdStartRef.current;
-      const p = Math.min(elapsed / 3000, 1);
-      setHoldProgress(p);
+    const tick = (now: number): void => {
+      const startedAt = holdStartRef.current;
+      if (startedAt === null) return;
+      const progress = Math.min((now - startedAt) / 3000, 1);
+      holdProgressRef.current = progress;
+      if (ringMeterRef.current) {
+        ringMeterRef.current.style.strokeDashoffset =
+          String(364.42 * (1 - progress));
+      }
+      // The rAF ring runs at display refresh; text is updated at ~10 Hz.
+      // This avoids a full React App render on every compositor frame.
+      if (now - lastLabelAt >= 95) {
+        const secondsRemaining = (3 * (1 - progress)).toFixed(1);
+        if (titleCountdownRef.current)
+          titleCountdownRef.current.textContent = secondsRemaining;
+        if (hintCountdownRef.current)
+          hintCountdownRef.current.textContent = secondsRemaining;
+        lastLabelAt = now;
+      }
 
-      if (p < 1) {
+      if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(tick);
       } else {
+        animFrameRef.current = null;
+        holdStartRef.current = null;
         didLongPressRef.current = true;
         setIsHolding(false);
-        // Keep the ring full while the async disconnect is in progress.
-        setHoldProgress(1);
-        holdStartRef.current = null;
         setBurstFlash(true);
         window.setTimeout(() => setBurstFlash(false), 700);
-        window.setTimeout(() => {
-          didLongPressRef.current = false;
-        }, 1000);
+        window.setTimeout(() => { didLongPressRef.current = false; }, 1000);
         void disconnect();
       }
     };
     animFrameRef.current = requestAnimationFrame(tick);
   };
 
-  const cancelHold = () => {
-    if (isDisconnecting) return;
-    if (!isHolding && holdProgress === 0) return;
-    setIsHolding(false);
-    setHoldProgress(0);
+  const cancelHold = (): void => {
+    if (isDisconnecting || holdStartRef.current === null) return;
     holdStartRef.current = null;
-    if (animFrameRef.current) {
+    if (animFrameRef.current !== null) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
+    holdProgressRef.current = 0;
+    if (ringMeterRef.current) ringMeterRef.current.style.strokeDashoffset = "364.42";
+    setIsHolding(false);
   };
 
   const handleOrbClick = () => {
@@ -1215,8 +1239,8 @@ function App(): React.ReactElement {
   const isConnected = bridge.state === "connected";
   const isConnecting = bridge.state === "connecting";
   const disconnectRingActive = isHolding || isDisconnecting;
-  const disconnectRingProgress = isDisconnecting ? 1 : holdProgress;
-  const matrixDisconnectProgress = disconnectRingProgress;
+  const disconnectRingProgress = isDisconnecting ? 1 : holdProgressRef.current;
+  // Visual background no longer uses legacy Matrix deceleration.
 
   const effectiveUrl =
     bridge.publicUrl ?? (isConnected ? status?.localUrl : undefined);
@@ -1333,7 +1357,7 @@ function App(): React.ReactElement {
       <header className="app-header">
         <div className="brand-section">
           <div className="brand-crest">
-            <span className="crest-symbol">⚜</span>
+            <img src={QUEEN_IMAGE_URL} className="brand-queen-mark" alt="" />
           </div>
           <div>
             <h1 className="brand-title">QNECTOR</h1>
@@ -1374,9 +1398,8 @@ function App(): React.ReactElement {
 
       <main className="app-main">
         <section className="glass-card hero-glass-section">
-          <GoldMatrixRain
+          <RoyalSilkBackground
             isConnected={isConnected}
-            disconnectProgress={matrixDisconnectProgress}
             frozen={matrixFrozenAfterDisconnect}
             motionEnabled={animationsEnabled}
           />
@@ -1404,6 +1427,7 @@ function App(): React.ReactElement {
                 cy="65"
                 r="58"
                 className="charge-meter"
+                ref={ringMeterRef}
                 style={{
                   strokeDasharray: 364.42,
                   strokeDashoffset: 364.42 * (1 - disconnectRingProgress),
@@ -1443,32 +1467,18 @@ function App(): React.ReactElement {
               onKeyDown={handleOrbKeyDown}
               onKeyUp={handleOrbKeyUp}
             >
-              <div
-                className={`liquid-gold-core ${
-                  isHolding
-                    ? "charging"
-                    : isDisconnecting
-                      ? "disconnecting"
-                      : isConnecting
-                        ? "connecting"
-                        : isConnected
-                          ? "connected"
-                          : "disconnected"
-                }`}
+              <QueenLiquidOrb
+                connected={isConnected}
+                holding={isHolding}
+                disconnecting={isDisconnecting}
+                motionEnabled={animationsEnabled}
               />
-              <div className="glass-glare" />
-              {isConnected && !isHolding && !isDisconnecting && (
-                <>
-                  <div className="orbit-spark spark-1" />
-                  <div className="orbit-spark spark-2" />
-                </>
-              )}
             </div>
           </div>
 
           <h2 className="hero-state-title">
             {isHolding
-              ? `DISCONNECTING (${((1 - holdProgress) * 3).toFixed(1)}s)`
+              ? <>DISCONNECTING (<span ref={titleCountdownRef}>3.0</span>s)</>
               : isDisconnecting
                 ? "DISCONNECTING…"
                 : isConnected
@@ -1532,7 +1542,7 @@ function App(): React.ReactElement {
           >
             {isHolding ? (
               <span>
-                ⚡ Disconnecting in {((1 - holdProgress) * 3).toFixed(1)}s
+                ⚡ Disconnecting in <span ref={hintCountdownRef}>3.0</span>s
               </span>
             ) : isDisconnecting ? (
               <span>⚡ Disconnecting Bridge…</span>

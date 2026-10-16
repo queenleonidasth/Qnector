@@ -134,11 +134,12 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     );
   });
 
-  it("embeds the Royal Gold Matrix digital rain background inside the hero card behind the golden orb", async () => {
+  it("uses the Silk/Aurora background in the hero while preserving legacy Matrix styles as rollback", async () => {
     const css = await effects();
     const text = await source();
 
-    expect(text).toContain("<GoldMatrixRain");
+    expect(text).toContain("<RoyalSilkBackground");
+    expect(text).not.toContain("<GoldMatrixRain");
     expect(text).toContain("isConnected={isConnected}");
     expect(css).toContain(".gold-matrix-layer {");
     expect(css).toContain(".gold-matrix-canvas {");
@@ -161,14 +162,14 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(text).not.toContain("QNECTORBRIDGE");
   });
 
-  it("binds Matrix deceleration to the 3-second orb disconnect gesture", async () => {
+  it("preserves original Matrix helper for rollback while migrating the 3-second hold to rAF", async () => {
     const text = await source();
     const matrixText = await matrix();
 
-    expect(text).toContain("disconnectProgress={matrixDisconnectProgress}");
+    expect(text).toContain("ref={ringMeterRef}");
     expect(text).toContain("frozen={matrixFrozenAfterDisconnect}");
     expect(text).toContain(
-      "const matrixDisconnectProgress = disconnectRingProgress;",
+      "const disconnectRingProgress = isDisconnecting ? 1 : holdProgressRef.current;",
     );
     expect(text).toContain("setMatrixFrozenAfterDisconnect(true)");
     expect(text).toContain("setMatrixFrozenAfterDisconnect(false)");
