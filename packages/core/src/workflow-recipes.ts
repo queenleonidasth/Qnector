@@ -25,8 +25,8 @@ export function compileRecipe(
     version: 1,
     name: `recipe-${name}`,
     description: `Read-only ${name} recipe; task ${context.taskId}, revision ${context.revision}`,
-    mode: "sequential",
-    maxConcurrency: 1,
+    mode: "graph",
+    maxConcurrency: 2,
     steps,
     createdAt: now,
     updatedAt: now,
@@ -41,7 +41,7 @@ function recipeSteps(name: RecipeName, input: Record<string, unknown>): Workflow
     const common = { ...(cwd ? { cwd } : {}) };
     const steps: WorkflowStep[] = [
       { id: "status", type: "tool", tool: "git", input: { action: "status", ...common } },
-      { id: "diff", type: "tool", tool: "git", input: { action: "diff", ...common, ...(paths ? { paths } : {}) }, dependsOn: ["status"] },
+      { id: "diff", type: "tool", tool: "git", input: { action: "diff", ...common, ...(paths ? { paths } : {}) } },
     ];
     if (name === "verify_changes")
       steps.push({ id: "diagnostics", type: "tool", tool: "workspace", input: { action: "diagnostics", ...(cwd ? { path: cwd } : {}) }, dependsOn: ["diff"] });

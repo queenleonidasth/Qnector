@@ -138,8 +138,8 @@ export async function executeProcess(
         const run = await context.workflowManager.run(workspace, {
           name: definition.name,
           description: definition.description,
-          mode: "sequential",
-          maxConcurrency: 1,
+          mode: definition.mode,
+          maxConcurrency: definition.maxConcurrency,
           steps: definition.steps,
           memoryTaskId: taskId,
           ...(stringInput(object, "idempotencyKey") ? { idempotencyKey: stringInput(object, "idempotencyKey") } : {}),

@@ -4,12 +4,13 @@ import { compileRecipe } from "./workflow-recipes.js";
 const context = { workspaceId: "ws", taskId: "task-1", revision: "rev-1" };
 
 describe("typed workflow recipes", () => {
-  it("compiles repository inspection to ordered, read-only DAG substeps", () => {
+  it("allows independent read-only repository inspections to run concurrently", () => {
     const recipe = compileRecipe("inspect_repository", { cwd: ".", paths: ["src"] }, context);
-    expect(recipe.mode).toBe("sequential");
+    expect(recipe.mode).toBe("graph");
+    expect(recipe.maxConcurrency).toBe(2);
     expect(recipe.steps.map((step) => step.id)).toEqual(["status", "diff"]);
     expect(recipe.steps.every((step) => step.type === "tool")).toBe(true);
-    expect(recipe.steps[1]?.dependsOn).toEqual(["status"]);
+    expect(recipe.steps[1]?.dependsOn).toBeUndefined();
   });
 
   it("rejects invalid recipe input before producing any workflow steps", () => {
