@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { findVerifiedPackage } from "./package-evidence.mjs";
 import { evidenceDigest, validateControlledSuite, validateEvidenceEnvelope } from "./performance-evidence.mjs";
+import { assessAcceptance } from "./acceptance-scope.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -97,12 +98,17 @@ const report = {
   revision: (await commandResult("git", ["rev-parse", "HEAD"])).output.trim(),
   environment: { platform: process.platform, arch: process.arch, node: process.version, cpus: os.cpus().length, totalMemoryBytes: os.totalmem(), freeMemoryBytes: os.freemem() },
   hostLatency: "UNKNOWN",
-  releaseEligible: results.every((result) => result.status === "PASS"),
-  gates: results,
+  ...(() => {
+    const scoped = assessAcceptance(results, { skipConcurrentApps: process.env.QNECTOR_SKIP_CONCURRENT_APP_TESTS === "1" });
+    return { releaseEligible: scoped.releaseEligible, localValidationEligible: scoped.localValidationEligible,
+      waiverPolicy: scoped.waivedGates.length ? "user-waived-external-apps" : "strict",
+      waivedGates: scoped.waivedGates, gates: scoped.gates };
+  })(),
 };
 const output = process.env.QNECTOR_ACCEPTANCE_REPORT ?? path.join(root, "fixtures/performance/task12-acceptance-report.json");
 await writeFile(output, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-console.log(JSON.stringify({ report: path.relative(root, output), releaseEligible: report.releaseEligible, gates: results }, null, 2));
+console.log(JSON.stringify({ report: path.relative(root, output), releaseEligible: report.releaseEligible,
+  localValidationEligible: report.localValidationEligible, waivedGates: report.waivedGates, gates: report.gates }, null, 2));
 if (results.some((result) => result.status === "FAIL")) process.exitCode = 1;
 
 async function commandResult(file: string, args: string[]) {

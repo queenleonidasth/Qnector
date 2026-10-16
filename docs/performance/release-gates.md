@@ -15,4 +15,10 @@ Release is permitted only after every required gate has passing evidence on the 
 
 Run `npx.cmd tsx scripts/accept-end-to-end-performance.mts` to produce `fixtures/performance/task12-acceptance-report.json`. The report marks unsupported gates `UNKNOWN`; only an all-`PASS` report is release-eligible. Never treat an unavailable ChatGPT host measurement as zero latency or as a pass.
 
+## User-scoped local validation (16 October 2026)
+
+The user explicitly opted out of tests that require simultaneously operating another app (such as the external ChatGPT host or separate tunnel client). Set `QNECTOR_SKIP_CONCURRENT_APP_TESTS=1` to report the `tunnel` and `chatgpt-host` gates as **SKIPPED**, never PASS. The report provides `localValidationEligible` separately; `releaseEligible` remains **false** whenever a gate is SKIPPED, UNKNOWN or FAIL. Real FAILs are never waived.
+
+This scope does not exempt product-native correctness, packaging, checksums, versioning, trusted signing, local benchmark regressions, or in-place upgrade/rollback checks. Foreground-game and real ChatGPT latency remain unverified, not zero, even if the user waives running those companion applications.
+
 The existing checked-in telemetry and `read_many` fixtures are local component measurements, not end-to-end acceptance. They do not establish the full workload suite, host timing, tunnel availability, signed packaged build, remote upload, or installed upgrade.
