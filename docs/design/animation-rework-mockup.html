@@ -1,0 +1,909 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>QNECTOR • Royal Precision Motion — Interactive Mockup</title>
+<style>
+:root{
+ --bg:#090a0d;--panel:rgba(20,22,28,.88);--panel2:rgba(25,27,34,.90);--line:rgba(224,185,93,.16);
+ --lineStrong:rgba(235,190,83,.42);--gold:#edc773;--gold2:#ffe9ae;--gold3:#aa7d34;--muted:#a29b8b;
+ --text:#f7f2e7;--textSoft:#ccc7bb;--success:#84e1af;--danger:#fa9a93;--blue:#91aeda;
+ --fast:135ms;--medium:220ms;--slow:340ms;--ambient:11s;--accent:#edc773;--ease:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-width:320px;font:14px/1.52 "Segoe UI Variable","Segoe UI",Inter,Arial,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit}
+button{cursor:pointer;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--gold2);outline-offset:3px}
+button:disabled{cursor:not-allowed;opacity:.5}
+button:hover:not(:disabled){filter:brightness(1.1)}
+button:active:not(:disabled){transform:scale(.975)}
+[hidden]{display:none!important}
+::selection{background:rgba(237,199,115,.35)}
+body:before{content:"";position:fixed;inset:-10%;pointer-events:none;z-index:-1;background:radial-gradient(ellipse at 12% 17%,rgba(140,87,34,.19),transparent 34%),radial-gradient(ellipse at 86% 72%,rgba(110,73,24,.17),transparent 35%),radial-gradient(ellipse at 55% 45%,rgba(23,32,46,.22),transparent 50%);animation:ambientDrift var(--ambient) ease-in-out infinite alternate}
+body:after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;background:linear-gradient(to bottom,transparent 97%,rgba(255,225,163,.014) 98%);background-size:100% 7px;opacity:.6}
+@keyframes ambientDrift{to{transform:translate3d(2%,1%,0) scale(1.025)}}
+@keyframes enterUp{from{opacity:0;transform:translate3d(0,14px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes enterLeft{from{opacity:0;transform:translate3d(15px,0,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes ambientSpin{to{transform:rotate(360deg)}}
+@keyframes floatOrb{0%,100%{transform:translateY(2px)}50%{transform:translateY(-5px)}}
+@keyframes slowGlow{0%,100%{opacity:.5}50%{opacity:.85}}
+@keyframes celebratory{from{opacity:.85;transform:scale(.5)}to{opacity:0;transform:scale(1.45)}}
+@keyframes runningPulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(132,225,175,.35)}50%{opacity:.65;box-shadow:0 0 0 6px rgba(132,225,175,0)}}
+@keyframes revealLine{0%{width:0;opacity:.35}100%{width:100%;opacity:1}}
+@keyframes panelEntry{from{opacity:0;transform:translateY(9px) scale(.992)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes rowEnter{from{opacity:0;transform:translateX(9px)}to{opacity:1;transform:translateX(0)}}
+@keyframes successPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes sweep{from{transform:translateX(-120%)}to{transform:translateX(350%)}}
+@keyframes slideToast{from{opacity:0;transform:translate3d(0,-8px,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes spinIcon{to{transform:rotate(360deg)}}
+.shell{width:min(1500px,calc(100% - 80px));margin:auto;padding:22px 0 116px;min-height:100vh}
+.topbar{height:80px;border:1px solid rgba(235,190,83,.12);border-radius:19px;background:linear-gradient(115deg,rgba(33,32,30,.74),rgba(17,19,23,.85));box-shadow:0 14px 40px rgba(0,0,0,.23);padding:0 27px;display:flex;align-items:center;justify-content:space-between;gap:20px;position:relative;z-index:2;animation:enterUp .5s var(--ease) both}
+.brand{display:flex;align-items:center;gap:15px;min-width:0}
+.crest{height:46px;width:46px;flex:none;border:1px solid rgba(255,227,164,.52);border-radius:13px;display:grid;place-items:center;font-size:27px;color:var(--gold2);background:radial-gradient(circle at 40% 32%,#9e7539,#392916 63%,#171716);box-shadow:0 0 21px rgba(237,199,115,.19),inset 0 1px 4px rgba(255,238,191,.26);position:relative}
+.crest:after{content:"";position:absolute;inset:-4px;border:1px solid rgba(255,237,183,.10);border-radius:16px;pointer-events:none}
+.brand-name{font-family:Georgia,Times,serif;letter-spacing:.27em;font-weight:700;font-size:22px;white-space:nowrap;line-height:1.2}
+.brand-sub{letter-spacing:.27em;color:#aa8a50;font-size:9px;font-weight:700;margin-top:4px}
+.topright{display:flex;align-items:center;gap:12px}
+.kicker{font-size:10px;color:var(--gold);font-weight:700;letter-spacing:.23em;text-transform:uppercase}
+.hero-sub{font-size:13px;color:var(--muted)}
+.version{font-size:11px;color:#aba394;border:1px solid var(--line);border-radius:8px;padding:7px 10px;white-space:nowrap}
+.demo-badge{font-size:10px;letter-spacing:.12em;color:#f1d493;padding:7px 11px;border:1px solid rgba(225,177,76,.25);background:rgba(227,180,78,.08);border-radius:9px;white-space:nowrap}
+.topicon{border:1px solid rgba(235,190,83,.2);height:38px;width:38px;border-radius:11px;background:rgba(255,255,255,.025);display:grid;place-items:center;transition:background var(--fast),border-color var(--fast)}
+.topicon:hover{background:rgba(237,199,115,.11);border-color:var(--lineStrong)}
+.toptitle{display:flex;align-items:end;justify-content:space-between;gap:24px;margin:31px 5px 19px}
+.toptitle h1{font-size:28px;letter-spacing:-.035em;font-weight:650;margin:6px 0 3px}
+.toptitle p{color:var(--muted);margin:0}
+.live-indicator{display:flex;align-items:center;gap:9px;color:#cfccbe;font-size:11px;letter-spacing:.08em}
+.dot{height:7px;width:7px;display:inline-block;border-radius:50%;background:var(--gold)}
+.dot.success{background:var(--success);box-shadow:0 0 12px rgba(132,225,175,.33)}
+.dot.running{background:var(--gold);animation:runningPulse 1.6s ease-in-out infinite}
+.dot.error{background:var(--danger)}
+.primary-grid{display:grid;grid-template-columns:minmax(0,1.18fr) minmax(365px,.82fr);gap:18px;min-height:500px}
+.panel{border:1px solid var(--line);background:var(--panel);border-radius:22px;box-shadow:0 26px 52px rgba(0,0,0,.28),inset 0 1px rgba(255,255,255,.045);position:relative;overflow:hidden;animation:panelEntry .52s var(--ease) both}
+.panel:before{content:"";position:absolute;top:0;left:17px;right:17px;height:1px;background:linear-gradient(to right,transparent,rgba(247,218,143,.34),transparent);pointer-events:none}
+.hero{display:flex;flex-direction:column;align-items:center;min-height:528px;padding:19px 30px 24px;background:radial-gradient(circle at 50% 39%,rgba(93,65,27,.18),transparent 55%),linear-gradient(120deg,rgba(23,25,31,.93),rgba(16,17,22,.96))}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.36}
+.hero:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(13,14,18,.65),transparent 27%,transparent 75%,rgba(13,14,18,.65)),linear-gradient(to bottom,rgba(13,14,18,.7),transparent 35%,rgba(13,14,18,.76));z-index:0}
+.hero-head{align-self:stretch;display:flex;justify-content:space-between;gap:15px;align-items:center;position:relative;z-index:2}
+.eyebrow{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#c6ad77;font-weight:750}
+.state-pill{border:1px solid rgba(132,225,175,.24);background:rgba(132,225,175,.07);color:#a8edc7;display:inline-flex;gap:8px;align-items:center;border-radius:100px;padding:5px 10px;font-size:10px;letter-spacing:.1em;font-weight:750;white-space:nowrap}
+.state-pill[data-state=disconnected]{background:rgba(250,154,147,.06);border-color:rgba(250,154,147,.25);color:#f1a49b}
+.state-pill[data-state=connecting]{background:rgba(237,199,115,.1);border-color:rgba(237,199,115,.25);color:#eed09a}
+.orb-stage{height:297px;width:100%;display:flex;align-items:center;justify-content:center;position:relative;z-index:2;flex:none}
+.orb-halo{position:absolute;width:330px;height:330px;max-width:90%;border-radius:50%;background:radial-gradient(circle,rgba(201,143,47,.11),transparent 62%);filter:blur(12px);animation:slowGlow 7s ease-in-out infinite}
+.orb-grid{position:absolute;width:290px;height:290px;border-radius:50%;border:1px solid rgba(244,212,142,.095);box-shadow:inset 0 0 32px rgba(230,184,86,.05)}
+.orb-grid:after{content:"";position:absolute;inset:20px;border:1px dashed rgba(235,192,91,.17);border-radius:50%}
+.orbit-ring{width:257px;height:257px;border-radius:50%;position:absolute;display:grid;place-items:center;background:conic-gradient(from 10deg,transparent 0 70deg,rgba(243,209,125,.66) 83deg,transparent 102deg,transparent 212deg,rgba(189,136,55,.30) 257deg,transparent 280deg);animation:ambientSpin 19s linear infinite;opacity:.75;mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.4px))}
+.orbit-ring.second{width:234px;height:234px;animation-direction:reverse;animation-duration:28s;opacity:.37}
+.orb-button{height:200px;width:200px;border-radius:50%;border:1px solid rgba(247,221,164,.36);background:linear-gradient(150deg,rgba(255,235,178,.14),rgba(96,60,15,.06) 40%,rgba(235,169,70,.06));display:grid;place-items:center;position:relative;z-index:2;box-shadow:inset 0 0 33px rgba(255,227,158,.08),0 0 25px rgba(218,166,55,.16);transition:transform .22s var(--ease),box-shadow .24s ease;user-select:none;touch-action:none}
+.orb-button:hover{transform:scale(1.025);box-shadow:inset 0 0 40px rgba(255,227,158,.16),0 0 36px rgba(218,166,55,.27)}
+.orb-button:active,.orb-button.holding{transform:scale(.975)}
+.orb-core{width:154px;height:154px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 37% 25%,#fff3d0 0,#f2d38b 12%,#c69444 35%,#7b4f21 57%,#281a10 77%,#0d1119 100%);box-shadow:inset -18px -20px 35px rgba(0,0,0,.61),inset 8px 8px 24px rgba(255,238,180,.23),0 0 28px rgba(226,156,65,.37),0 0 75px rgba(205,130,42,.16);position:relative;animation:floatOrb 6s ease-in-out infinite}
+.orb-core:before{content:"";position:absolute;inset:11px;border-radius:50%;border:1px solid rgba(255,235,163,.21);background:radial-gradient(ellipse at 40% 15%,rgba(255,255,255,.30),transparent 43%)}
+.orb-glyph{font-family:Georgia,serif;font-size:31px;text-shadow:0 2px 15px rgba(255,247,204,.7);color:#fff1c9;z-index:1}
+.progress-svg{position:absolute;inset:-9px;width:calc(100% + 18px);height:calc(100% + 18px);transform:rotate(-90deg);pointer-events:none;overflow:visible}
+.progress-svg circle{fill:none;stroke:var(--gold2);stroke-linecap:round;stroke-width:3;stroke-dasharray:665;stroke-dashoffset:665;filter:drop-shadow(0 0 5px rgba(247,215,143,.65))}
+.celebrate{position:absolute;width:220px;height:220px;border:2px solid rgba(255,223,134,.7);border-radius:50%;opacity:0;pointer-events:none;z-index:1}
+.celebrate.run{animation:celebratory .55s ease-out both}
+.hero[data-state=disconnected] .orb-core{filter:grayscale(.8) brightness(.49);animation-play-state:paused}
+.hero[data-state=disconnected] .orbit-ring{animation-play-state:paused;opacity:.25}
+.hero[data-state=connecting] .orb-core{animation:slowGlow .9s ease-in-out infinite}
+.hero-copy{text-align:center;position:relative;z-index:2;margin-top:-2px}
+.hero-copy h2{font-family:Georgia,serif;letter-spacing:.06em;font-weight:500;font-size:23px;margin:1px 0 4px}
+.hero-copy p{font-size:11px;color:#a99b80;margin:0;letter-spacing:.035em}
+.hero-actions{display:flex;justify-content:center;gap:10px;margin-top:18px;position:relative;z-index:2}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid rgba(225,188,108,.27);background:rgba(235,194,109,.09);border-radius:11px;padding:11px 17px;font-size:12px;font-weight:700;transition:transform var(--fast) var(--ease),background var(--fast),border-color var(--fast),box-shadow var(--fast)}
+.btn.gold{background:linear-gradient(110deg,#b88b43,#f2d591 44%,#b98b48);color:#1d170c;border:none;box-shadow:0 8px 23px rgba(222,173,78,.15)}
+.btn:hover{border-color:rgba(241,212,142,.48);background:rgba(237,199,115,.16)}
+.btn.gold:hover{background:linear-gradient(110deg,#c99a4a,#ffe4a2 44%,#cb9651)}
+.btn.small{padding:7px 11px;font-size:11px;border-radius:8px}
+.side-panel{min-height:528px;padding:22px 23px;display:flex;flex-direction:column;background:linear-gradient(144deg,rgba(29,30,36,.92),rgba(16,18,23,.98))}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:13px}
+.panel-head h3{margin:3px 0 0;font-weight:600;font-size:19px;letter-spacing:-.025em}
+.link-button{border:0;background:transparent;color:var(--gold);font-size:11px;letter-spacing:.04em}
+.feed-list{display:grid;gap:9px;flex:1;min-height:0;align-content:start}
+.feed-row{height:68px;display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid rgba(255,255,255,.055);border-radius:12px;background:rgba(6,9,13,.39);text-align:left;position:relative;overflow:hidden;transition:border-color var(--fast),transform var(--fast),background var(--fast)}
+.feed-row:hover{border-color:var(--lineStrong);background:rgba(235,185,82,.065);transform:translateX(2px)}
+.feed-row.enter{animation:rowEnter .3s var(--ease) both}
+.feed-led{width:7px;height:7px;border-radius:50%;background:var(--success);flex:none}
+.feed-row[data-status=running] .feed-led{background:var(--gold);animation:runningPulse 1.5s infinite}
+.feed-row[data-status=error] .feed-led{background:var(--danger)}
+.feed-main{min-width:0;flex:1;display:grid;gap:3px}
+.feed-main strong{font-size:12px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-main small{color:#97928b;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feed-state{font-family:Consolas,monospace;text-transform:uppercase;letter-spacing:.1em;color:#abc9af;font-size:9px}
+.feed-row[data-status=running] .feed-state{color:var(--gold)}
+.feed-row[data-status=error] .feed-state{color:var(--danger)}
+.feed-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:13px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);font-size:10px;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:18px}
+.stat-card{padding:18px 19px;min-height:120px;transition:border-color var(--medium),transform var(--medium) var(--ease)}
+.stat-card:hover{border-color:var(--lineStrong);transform:translateY(-2px)}
+.stat-card .stat-head{display:flex;justify-content:space-between;align-items:center;color:#bbb4a7;font-size:11px}
+.stat-card .stat-icon{font-size:17px;color:var(--gold);opacity:.85}
+.stat-card strong{display:block;font:500 28px Georgia,serif;color:#f6e2ad;margin-top:9px}
+.stat-card small{font-size:10px;color:#958d80}
+.note-band{margin:22px 4px 0;display:flex;align-items:center;gap:11px;color:#837e77;font-size:10px}
+.note-band:before{content:"";height:1px;flex:1;background:linear-gradient(to right,transparent,rgba(232,195,114,.19))}
+.note-band:after{content:"";height:1px;flex:1;background:linear-gradient(to left,transparent,rgba(232,195,114,.19))}
+.dock{position:fixed;z-index:10;left:50%;bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;border-radius:19px;padding:7px;background:linear-gradient(130deg,rgba(40,37,32,.96),rgba(17,19,23,.97));border:1px solid rgba(235,194,110,.27);box-shadow:0 12px 50px rgba(0,0,0,.65),inset 0 1px rgba(255,255,255,.05)}
+.dock-item{position:relative;display:flex;align-items:center;gap:9px;padding:11px 15px;border:1px solid transparent;background:transparent;border-radius:12px;font-weight:650;font-size:12px;letter-spacing:.01em;color:#bdb4a1;transition:background var(--fast),color var(--fast),transform var(--fast)}
+.dock-item svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.6}
+.dock-item:hover{color:#fff0cc;background:rgba(237,199,115,.06);transform:translateY(-2px)}
+.dock-item.active{color:#ffe5a8;background:rgba(239,191,100,.12)}
+.dock-item.active:after{content:"";position:absolute;left:15px;right:15px;bottom:3px;height:2px;border-radius:3px;background:#f7d48a;box-shadow:0 0 10px rgba(238,197,109,.5);animation:revealLine var(--medium) var(--ease) both}
+.dock-mini{border-left:1px solid var(--line);padding-left:7px;display:flex}
+.scrim{position:fixed;inset:0;z-index:19;background:rgba(2,4,7,.4);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity var(--slow) ease}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;z-index:20;right:25px;top:94px;bottom:103px;width:min(550px,calc(100vw - 50px));min-height:340px;background:linear-gradient(145deg,rgba(33,34,40,.99),rgba(15,17,22,.99));border-radius:22px;border:1px solid rgba(241,204,131,.29);box-shadow:0 30px 120px rgba(0,0,0,.75),inset 0 1px rgba(255,255,255,.06);display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translate3d(27px,0,0) scale(.985);pointer-events:none;transition:transform var(--slow) var(--ease),opacity var(--medium)}
+.drawer.open{transform:translate3d(0,0,0) scale(1);opacity:1;pointer-events:auto}
+.drawer-top{display:flex;justify-content:space-between;align-items:start;gap:14px;padding:20px 23px 11px;border-bottom:1px solid rgba(255,255,255,.045)}
+.drawer-top h2{font:500 22px Georgia,serif;margin:4px 0 0}
+.close{height:31px;width:31px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.035);font-size:19px}
+.drawer-tabs{display:flex;gap:4px;padding:10px 18px;overflow-x:auto;border-bottom:1px solid var(--line)}
+.drawer-tabs button{border:0;background:transparent;color:#aa9f8e;font-size:11px;border-radius:7px;padding:7px 10px;white-space:nowrap}
+.drawer-tabs button.active{color:#ffe3a6;background:rgba(235,195,120,.12)}
+.drawer-body{overflow:auto;padding:19px 23px 24px;scrollbar-color:#54452b transparent;scrollbar-width:thin}
+.drawer-body.page-enter{animation:enterLeft var(--medium) var(--ease) both}
+.drawer-body h3{font-size:14px;margin:4px 0 6px}
+.drawer-body h4{margin:19px 0 10px;font-size:12px;letter-spacing:.05em;color:#f3dfb2}
+.drawer-body p,.muted{font-size:12px;color:var(--muted)}
+.section-card{padding:17px;border:1px solid var(--line);border-radius:14px;background:rgba(8,10,14,.38);margin-bottom:12px;min-width:0;position:relative;overflow:hidden}
+.section-card.gold-edge{border-color:rgba(238,194,106,.28);background:linear-gradient(105deg,rgba(161,115,51,.11),rgba(10,11,14,.35))}
+.mini-eyebrow{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#ac9460;font-weight:700}
+.row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.row.wrap{flex-wrap:wrap}
+.meter{background:rgba(255,255,255,.08);height:5px;border-radius:10px;overflow:hidden}
+.meter span{height:100%;display:block;background:linear-gradient(90deg,#9b6d36,#f2cf81);transition:width var(--slow) var(--ease);width:0}
+.form-field{display:grid;gap:6px;margin:12px 0}
+.form-field label{font-size:10px;color:#c3b49a}
+.form-field input,.form-field select{width:100%;border:1px solid rgba(237,199,115,.2);background:#12151b;border-radius:10px;padding:10px 12px;color:#ede6d9}
+.form-field input::placeholder{color:#777169}
+.switch-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 2px;border-bottom:1px solid rgba(255,255,255,.07)}
+.switch-copy{display:grid;gap:2px}
+.switch-copy strong{font-size:12px}
+.switch-copy small{font-size:10px;color:var(--muted)}
+.toggle{appearance:none;width:43px;height:25px;border-radius:20px;border:1px solid rgba(255,255,255,.15);background:#34343a;position:relative;flex:none;transition:background var(--medium),border-color var(--medium);cursor:pointer}
+.toggle:before{content:"";position:absolute;left:3px;top:3px;background:#b4a99a;width:17px;height:17px;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.3);transition:transform var(--medium) cubic-bezier(.2,1.35,.25,1),background var(--medium)}
+.toggle:checked{border-color:rgba(242,204,132,.52);background:rgba(201,151,65,.7)}
+.toggle:checked:before{transform:translateX(18px);background:#fff0be}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:8px;background:rgba(237,199,115,.08);border:1px solid rgba(237,199,115,.14);color:#d7c397;padding:5px 8px;font-size:10px}
+.chip.green{background:rgba(132,225,175,.07);border-color:rgba(132,225,175,.24);color:#a4e5c0}
+.stack{display:grid;gap:10px}
+.skill-row{display:flex;align-items:center;gap:11px;padding:12px;border-radius:11px;background:rgba(255,255,255,.027);border:1px solid rgba(255,255,255,.07);transition:border-color var(--fast),background var(--fast)}
+.skill-row:hover{border-color:rgba(247,207,120,.26);background:rgba(235,196,110,.06)}
+.skill-symbol{height:35px;width:35px;border-radius:11px;background:rgba(235,196,110,.1);border:1px solid var(--line);color:var(--gold);display:grid;place-items:center;font-size:18px}
+.skill-row strong{display:block;font-size:12px}
+.skill-row small{color:var(--muted);font-size:10px}
+.digits{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:13px}
+.digit{padding:13px;border:1px solid var(--line);background:rgba(13,15,20,.46);border-radius:11px}
+.digit b{display:block;font:500 26px Georgia,serif;color:#f6e0a6;margin-top:7px}
+.digit span{font-size:9px;color:var(--muted)}
+.timeline-item{display:flex;align-items:start;gap:12px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.timeline-item:last-child{border:0}
+.timeline-item .timeline-mark{height:22px;width:22px;border-radius:8px;display:grid;place-items:center;background:rgba(235,196,110,.12);color:var(--gold)}
+.timeline-item strong{font-size:12px;display:block}
+.timeline-item small{color:var(--muted);font-size:10px}
+.quality{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:14px 0}
+.quality button{padding:10px 5px;font-size:11px;background:rgba(255,255,255,.035);border-radius:10px;border:1px solid rgba(255,255,255,.085);transition:border-color var(--medium),background var(--medium)}
+.quality button.active{background:linear-gradient(130deg,rgba(177,126,44,.25),rgba(225,191,119,.10));border-color:rgba(249,218,153,.45);color:#ffdf98}
+.quality small{display:block;font-size:9px;color:#988d7f;margin-top:3px}
+.warning{padding:11px 12px;border-radius:9px;color:#edca9b;background:rgba(223,153,67,.08);border:1px solid rgba(223,153,67,.2);font-size:11px;line-height:1.55}
+.overlay-dialog{border:1px solid rgba(241,204,131,.38);border-radius:22px;padding:0;background:linear-gradient(142deg,#292829,#12151a 78%);color:#f8eede;box-shadow:0 28px 140px rgba(0,0,0,.83);width:min(770px,calc(100vw - 34px));max-height:calc(100vh - 54px);overflow:auto}
+.overlay-dialog::backdrop{background:rgba(1,3,6,.70);backdrop-filter:blur(6px)}
+.dialog-top{display:flex;justify-content:space-between;align-items:start;gap:14px;padding:24px 27px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
+.dialog-top h2{font:500 23px Georgia,serif;margin:5px 0 0}
+.dialog-content{padding:24px 27px 28px}
+.dialog-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:22px}
+.motion-lab-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.lab-card{background:rgba(8,10,14,.43);border-radius:13px;border:1px solid var(--line);min-height:155px;padding:15px;text-align:left;display:grid;align-content:start;gap:7px;position:relative;overflow:hidden}
+.lab-card:hover{border-color:var(--lineStrong)}
+.lab-card .lab-stage{height:61px;display:grid;place-items:center}
+.lab-card .lab-shape{height:27px;width:68px;border-radius:9px;background:linear-gradient(135deg,#ac7d36,#e9c67f);box-shadow:0 0 30px rgba(212,156,67,.12)}
+.lab-card.play .lab-shape{animation:enterUp .55s var(--ease) both}
+.lab-card[data-demo=ring] .lab-shape{width:40px;height:40px;background:transparent;border:3px solid #dbb670;border-top-color:transparent;border-radius:50%}
+.lab-card.play[data-demo=ring] .lab-shape{animation:spinIcon .8s linear infinite}
+.lab-card[data-demo=glow] .lab-shape{border-radius:50%;width:42px;height:42px}
+.lab-card.play[data-demo=glow] .lab-shape{animation:slowGlow 1.2s ease-in-out 2}
+.lab-card[data-demo=slide] .lab-shape{width:96px;height:30px}
+.lab-card.play[data-demo=slide] .lab-shape{animation:enterLeft .45s var(--ease) both}
+.lab-card[data-demo=check] .lab-shape{height:40px;width:40px;background:rgba(132,225,175,.16);border:1px solid rgba(132,225,175,.5);color:#a4ecc5;font-size:22px;text-align:center;line-height:40px}
+.lab-card.play[data-demo=check] .lab-shape{animation:successPop .5s var(--ease) both}
+.lab-card[data-demo=fill] .lab-shape{height:8px;width:100%;background:rgba(255,255,255,.10);border-radius:5px;overflow:hidden;position:relative}
+.lab-card[data-demo=fill] .lab-shape:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#95632d,#eacb88);transform:translateX(-100%)}
+.lab-card.play[data-demo=fill] .lab-shape:after{animation:sweep 1.25s ease-in-out both}
+.lab-card[data-demo=press] .lab-shape{width:98px;height:36px;border-radius:9px}
+.lab-card.play[data-demo=press] .lab-shape{animation:successPop .43s var(--ease) both}
+.lab-card strong{font-size:12px}
+.lab-card small{color:var(--muted);font-size:10px}
+.toasts{position:fixed;z-index:80;right:31px;top:113px;display:grid;gap:8px;max-width:calc(100vw - 62px);pointer-events:none}
+.toast{padding:12px 15px;border:1px solid rgba(241,204,131,.26);background:linear-gradient(110deg,rgba(46,43,36,.99),rgba(18,21,26,.98));border-radius:12px;box-shadow:0 12px 35px rgba(0,0,0,.4);font-size:12px;min-width:260px;max-width:350px;animation:slideToast var(--medium) var(--ease);pointer-events:auto;display:flex;gap:10px;align-items:center}
+.toast-icon{color:var(--gold);font-size:17px}
+.toast.good .toast-icon{color:var(--success)}
+.toast.bad .toast-icon{color:var(--danger)}
+.protocol{font:10px/1.5 Consolas,monospace;color:#afa17f}
+.demo-seq{position:fixed;z-index:12;left:22px;bottom:26px;border:1px solid var(--line);border-radius:12px;background:rgba(18,20,25,.86);padding:7px 12px;color:#c9b88f;font-size:10px;box-shadow:0 9px 30px rgba(0,0,0,.25)}
+.demo-seq strong{color:#ead49b}
+@media(max-width:1060px){.shell{width:calc(100% - 38px)}.primary-grid{grid-template-columns:1fr}.hero{min-height:500px}.side-panel{min-height:485px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.topright .version{display:none}}
+@media(max-width:650px){.shell{width:calc(100% - 24px);padding-top:12px}.topbar{padding:0 13px;height:69px}.brand-name{font-size:17px}.brand-sub{font-size:8px}.crest{width:38px;height:38px}.topright .demo-badge{display:none}.toptitle{display:block}.toptitle h1{font-size:23px}.toptitle .live-indicator{margin-top:9px}.primary-grid{gap:13px}.hero{padding:17px 9px;min-height:500px}.side-panel{padding:20px 16px}.hero-copy h2{font-size:21px}.cards{gap:10px}.stat-card{padding:14px;min-height:111px}.stat-card strong{font-size:23px}.dock{bottom:12px;width:calc(100% - 24px);justify-content:space-around}.dock-item{padding:9px 8px;gap:5px;font-size:9px;display:grid;justify-items:center}.dock-mini{padding-left:3px}.drawer{left:12px;right:12px;top:79px;bottom:85px;width:auto}.drawer-top{padding:14px 15px}.drawer-body{padding:14px}.motion-lab-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dialog-content{padding:16px}.demo-seq{display:none}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+html[data-quality=off] *,html[data-quality=off] *:before,html[data-quality=off] *:after{animation:none!important;transition:none!important}
+html[data-quality=eco] .orbit-ring,html[data-quality=eco] .orb-core,html[data-quality=eco] body:before{animation:none!important}
+html[data-quality=eco] .orb-halo{filter:none}
+html[data-quality=off] .orb-halo{filter:none;opacity:.2}
+</style>
+</head>
+<body>
+<div class="shell" id="appShell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="crest" aria-hidden="true">♛</div>
+      <div>
+        <div class="brand-name">QNECTOR</div>
+        <div class="brand-sub">ROYAL MCP BRIDGE</div>
+      </div>
+    </div>
+    <div class="topright">
+      <span class="demo-badge">MOTION REWORK / INTERACTIVE MOCKUP</span>
+      <span class="version">CONCEPT 1.0</span>
+      <button class="topicon" id="btnUpdate" type="button" title="Simulate updater" aria-label="Simulate updater">↻</button>
+      <button class="topicon" id="btnSettings" type="button" title="Animation quality settings" aria-label="Animation quality settings">⚙</button>
+      <button class="topicon" id="btnLab" type="button" title="Open motion lab" aria-label="Open motion lab">✧</button>
+    </div>
+  </header>
+  <section class="toptitle">
+    <div>
+      <span class="kicker">COMMAND CENTER / ANIMATION STUDY</span>
+      <h1>Bridge Overview <span style="color:#b58e4d;font:500 13px Georgia,serif;vertical-align:middle">✦ Precision in Motion</span></h1>
+      <p>Premium motion for a working tool. Every animation respects the actual application state.</p>
+    </div>
+    <div class="live-indicator"><span class="dot success" id="headerDot"></span><span id="headerStatus">INTERACTIVE PROTOTYPE · CONNECTED DEMO</span></div>
+  </section>
+  <main>
+    <div class="primary-grid">
+      <section class="panel hero" id="hero" data-state="connected" aria-label="Simulated MCP connection visualization">
+        <canvas id="matrix" aria-hidden="true"></canvas>
+        <div class="hero-head">
+          <div class="eyebrow">PRIMARY CONNECTION / CORE 01</div>
+          <div class="state-pill" id="statePill" data-state="connected"><span class="dot success" id="orbDot"></span><span id="statePillText">LINK STABLE</span></div>
+        </div>
+        <div class="orb-stage" id="orbStage">
+          <span class="orb-halo" aria-hidden="true"></span>
+          <span class="orb-grid" aria-hidden="true"></span>
+          <span class="orbit-ring" aria-hidden="true"></span>
+          <span class="orbit-ring second" aria-hidden="true"></span>
+          <span class="celebrate" id="celebrate" aria-hidden="true"></span>
+          <button class="orb-button" id="orbButton" type="button" aria-label="Hold for three seconds to simulate disconnect" title="Connected: hold for 3 seconds to disconnect. Disconnected: click to connect.">
+            <span class="orb-core"><span class="orb-glyph">♛</span></span>
+            <svg class="progress-svg" viewBox="0 0 218 218" aria-hidden="true"><circle cx="109" cy="109" r="106" id="holdRing"></circle></svg>
+          </button>
+        </div>
+        <div class="hero-copy" aria-live="polite" aria-atomic="true">
+          <div class="mini-eyebrow" id="orbStateKicker">ACTIVE MCP CHANNEL</div>
+          <h2 id="orbTitle">Your bridge is online.</h2>
+          <p id="orbSubtitle">Motion stays subtle while the connection is stable.</p>
+        </div>
+        <div class="hero-actions">
+          <button class="btn gold" id="btnPrimary" type="button">✦ Simulate success</button>
+          <button class="btn" id="btnSecondary" type="button">◌ Simulate reconnect</button>
+        </div>
+        <span style="position:absolute;right:19px;bottom:12px;color:#9d8962;font:9px Consolas;z-index:2">SIMULATED STATES ONLY — NO LIVE MCP CALLS</span>
+      </section>
+      <section class="panel side-panel" aria-label="Simulated activity feed">
+        <div class="panel-head">
+          <div><span class="eyebrow">SYSTEM EVENTS / LIVE MOTION</span><h3>Live Activity Feed</h3></div>
+          <span class="state-pill"><span class="dot success"></span>LIVE PREVIEW</span>
+        </div>
+        <div class="feed-list" id="feed" aria-live="polite">
+          <button class="feed-row" type="button" data-status="success" data-title="system.context_snapshot"><span class="feed-led"></span><span class="feed-main"><strong>system.context_snapshot</strong><small>Workspace and runtime state synchronized</small></span><span class="feed-state">DONE</span></button>
+          <button class="feed-row" type="button" data-status="success" data-title="memory.v2_snapshot"><span class="feed-led"></span><span class="feed-main"><strong>memory.v2_snapshot</strong><small>Task context loaded successfully</small></span><span class="feed-state">DONE</span></button>
+          <button class="feed-row" type="button" data-status="running" data-title="process.run"><span class="feed-led"></span><span class="feed-main"><strong>process.run</strong><small>Mock background operation</small></span><span class="feed-state">RUNNING</span></button>
+          <button class="feed-row" type="button" data-status="success" data-title="skills_route"><span class="feed-led"></span><span class="feed-main"><strong>skills_route</strong><small>Tool context resolved in preview</small></span><span class="feed-state">DONE</span></button>
+          <button class="feed-row" type="button" data-status="success" data-title="files.read_many"><span class="feed-led"></span><span class="feed-main"><strong>files.read_many</strong><small>Project source inspected</small></span><span class="feed-state">DONE</span></button>
+        </div>
+        <div class="feed-footer">
+          <span><span class="dot success"></span> <span id="eventCounter">5</span> simulated tool events</span>
+          <button class="link-button" id="btnAddEvent" type="button">+ New event →</button>
+        </div>
+      </section>
+    </div>
+    <div class="cards" aria-label="Preview metric cards">
+      <div class="panel stat-card" tabindex="0"><div class="stat-head"><span>BRIDGE LATENCY</span><span class="stat-icon">◷</span></div><strong id="latencyStat">18 <span style="font:12px Segoe UI,sans-serif;color:var(--muted)">ms</span></strong><small>Simulated • no live measurement</small></div>
+      <div class="panel stat-card" tabindex="0"><div class="stat-head"><span>MEMORY RECORDS</span><span class="stat-icon">◈</span></div><strong id="memoryStat">361</strong><small>Sample visual data • not persistent</small></div>
+      <div class="panel stat-card" tabindex="0"><div class="stat-head"><span>SKILLS ACTIVE</span><span class="stat-icon">✦</span></div><strong id="skillsStat">08 <span style="font:12px Segoe UI,sans-serif;color:var(--muted)">/ 12</span></strong><small>Toggle in Skills panel</small></div>
+      <div class="panel stat-card" tabindex="0"><div class="stat-head"><span>MOTION PROFILE</span><span class="stat-icon">◎</span></div><strong id="qualityStat" style="font-size:25px">Balanced</strong><small>Selectable in Settings</small></div>
+    </div>
+    <div class="note-band">ANIMATIONS REWORK / VISUAL SPECIFICATION • STATE DRIVEN • ACCESSIBLE • GPU CONSCIOUS</div>
+  </main>
+</div>
+
+<nav class="dock" aria-label="QNECTOR demo navigation">
+  <button class="dock-item" type="button" data-view="workspace" aria-label="Open Workspace"><svg viewBox="0 0 24 24"><path d="M3 8h7l2 3h9v9H3zM3 8V5h8l2 3"/></svg>Workspace</button>
+  <button class="dock-item" type="button" data-view="memory" aria-label="Open Memory"><svg viewBox="0 0 24 24"><path d="M12 4c-3-2-7 0-7 4-3 1-3 6 0 7-1 4 3 7 6 5V6m1-2c3-2 7 0 7 4 3 1 3 6 0 7 1 4-3 7-6 5V6"/></svg>Memory</button>
+  <button class="dock-item" type="button" data-view="skills" aria-label="Open Skills"><svg viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/></svg>Skills</button>
+  <button class="dock-item" type="button" data-view="settings" aria-label="Open Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</button>
+  <div class="dock-mini"><button class="dock-item" type="button" data-view="runtime" aria-label="Open Runtime"><svg viewBox="0 0 24 24"><path d="M3 14h4l3-7 4 10 3-6h4"/></svg>Runtime</button></div>
+</nav>
+<button class="demo-seq" id="btnSequence" type="button" title="Run a safe, local animation preview sequence"><strong>▶</strong> Play guided motion sequence</button>
+<div class="scrim" id="scrim" aria-hidden="true"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="QNECTOR details" aria-hidden="true" inert>
+  <div class="drawer-top"><div><span class="eyebrow">PRECISION MOTION / INTERACTIVE PREVIEW</span><h2 id="drawerTitle">Workspace</h2></div><button class="close" id="btnCloseDrawer" type="button" aria-label="Close drawer">×</button></div>
+  <nav class="drawer-tabs" aria-label="Drawer sections">
+    <button type="button" data-view="workspace">Workspace</button>
+    <button type="button" data-view="memory">Memory</button>
+    <button type="button" data-view="skills">Skills</button>
+    <button type="button" data-view="settings">Settings</button>
+    <button type="button" data-view="runtime">Runtime</button>
+  </nav>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<template id="view-workspace">
+  <div class="section-card gold-edge"><div class="mini-eyebrow">ACTIVE WORKSPACE</div><h3>Source & local context</h3><p>Workspace cards open with a restrained fade-slide, while file paths remain readable immediately.</p><div class="chips"><span class="chip green">● Connected demo</span><span class="chip">Native Windows UI</span><span class="chip">No Plan Mode</span></div></div>
+  <div class="section-card"><div class="mini-eyebrow">SIMULATED CURRENT FOLDER</div><h3>C:\Users\QUEEN</h3><p>Shown for layout demonstration. This mockup cannot inspect or change your files.</p><div class="row"><button class="btn small" type="button" data-action="workspace">◈ Change workspace (demo)</button><button class="btn small" type="button" data-action="copy">▣ Preview copy feedback</button></div></div>
+  <h4>Recent workspace events</h4>
+  <div class="timeline-item"><span class="timeline-mark">✓</span><div><strong>Workspace snapshot collected</strong><small>Illustrative activity · 2 min ago</small></div></div>
+  <div class="timeline-item"><span class="timeline-mark">◇</span><div><strong>Motion reference mapped</strong><small>42 keyframe declarations catalogued</small></div></div>
+  <div class="timeline-item"><span class="timeline-mark">✦</span><div><strong>Rework specification written</strong><small>48 tasks with QA gates and references</small></div></div>
+</template>
+
+<template id="view-memory">
+  <div class="section-card gold-edge"><div class="row"><div><div class="mini-eyebrow">LATEST PERSISTED ACTIVITY</div><h3>Current Task: Animation Rework</h3></div><span class="chip green">ACTIVE</span></div><p>Modernized activity is separate from the historical last-linked session. The date reflects actual record freshness, not the age of a linked discussion.</p><small class="protocol">2026-10-16 · ILLUSTRATIVE SNAPSHOT</small></div>
+  <div class="digits"><div class="digit"><span>Saved tasks</span><b>01</b></div><div class="digit"><span>Tool events</span><b>362</b></div><div class="digit"><span>Chat excerpts</span><b>—</b></div></div>
+  <div class="section-card"><div class="row"><strong style="font-size:12px">Memory freshness</strong><span class="chip green">WRITE OK</span></div><p>Tool events: Oct 16 · Facts: Oct 16 · Chat excerpts: None recorded.</p><div class="warning">ChatGPT conversation is not captured passively by MCP. This panel illustrates a faithful saved-state design.</div></div>
+  <div class="form-field"><label for="memorySearch">Search saved records (demo)</label><input id="memorySearch" type="search" placeholder="Search task, decision, note ..."></div>
+  <div class="stack" id="memoryRows">
+    <div class="section-card" data-memory="Animation motion rework"><div class="row"><strong style="font-size:12px">Animation rework approved</strong><span class="chip">Decision</span></div><p>Royal Precision Motion, 48 planned tasks, adaptive rendering.</p></div>
+    <div class="section-card" data-memory="Memory latest activity"><div class="row"><strong style="font-size:12px">Memory latest activity</strong><span class="chip">Rule</span></div><p>Newest persisted work appears before an old linked session.</p></div>
+    <div class="section-card" data-memory="Privacy chat excerpts"><div class="row"><strong style="font-size:12px">Explicit chat capture</strong><span class="chip">Privacy</span></div><p>No transcript capture without the user's explicit permission.</p></div>
+  </div>
+</template>
+
+<template id="view-skills">
+  <div class="section-card gold-edge"><div class="row"><div><div class="mini-eyebrow">SKILL MANAGER / MOTION STUDY</div><h3>Available capabilities</h3></div><span class="chip green">08 ACTIVE</span></div><p>Spring switches and shared entry motion. Skill enablement here is local demonstration only.</p></div>
+  <div class="form-field"><label for="skillSearch">Filter skills</label><input id="skillSearch" type="search" placeholder="Find a skill ..."></div>
+  <div class="stack" id="skillRows">
+    <div class="skill-row" data-skill="Filesystem"><span class="skill-symbol">⌘</span><div style="flex:1"><strong>Filesystem</strong><small>Read and edit local files</small></div><input class="toggle" type="checkbox" checked aria-label="Toggle Filesystem (demo)"></div>
+    <div class="skill-row" data-skill="Windows MCP"><span class="skill-symbol">▣</span><div style="flex:1"><strong>Windows MCP</strong><small>Desktop and OS operations</small></div><input class="toggle" type="checkbox" checked aria-label="Toggle Windows MCP (demo)"></div>
+    <div class="skill-row" data-skill="Git Integration"><span class="skill-symbol">◇</span><div style="flex:1"><strong>Git Integration</strong><small>Repository operations</small></div><input class="toggle" type="checkbox" checked aria-label="Toggle Git Integration (demo)"></div>
+    <div class="skill-row" data-skill="Browser QC"><span class="skill-symbol">◎</span><div style="flex:1"><strong>Browser QC</strong><small>Navigation and visual checks</small></div><input class="toggle" type="checkbox" aria-label="Toggle Browser QC (demo)"></div>
+  </div>
+  <div style="margin-top:15px" class="row"><button class="btn small" type="button" data-action="skill-import">✦ Simulate import</button><button class="btn small" type="button" data-action="save-skill">✓ Save state (demo)</button></div>
+</template>
+
+<template id="view-settings">
+  <div class="section-card gold-edge"><div class="mini-eyebrow">MOTION QUALITY / SYSTEM PREVIEW</div><h3>Royal Precision Motion</h3><p>Adaptive effects do not take priority over tool responsiveness or foreground game frame pacing.</p>
+  <div class="quality" role="group" aria-label="Animation quality">
+  <button type="button" data-quality-button="full">Full<small>Opt-in</small></button>
+  <button type="button" data-quality-button="balanced">Balanced<small>Default</small></button>
+  <button type="button" data-quality-button="eco">Eco<small>Low cost</small></button>
+  <button type="button" data-quality-button="off">Off<small>Static</small></button></div>
+  <small class="protocol" id="qualityDetail">Balanced · 60 FPS Canvas target (proposal) · moderate particles</small>
+  </div>
+  <div class="switch-row"><div class="switch-copy"><strong>Enable ambient background</strong><small>Gold Matrix + faint Aurora; paused when hidden</small></div><input class="toggle" id="toggleAmbient" type="checkbox" checked aria-label="Enable ambient background"></div>
+  <div class="switch-row"><div class="switch-copy"><strong>Interactive feedback</strong><small>Hover, press, shared layout and status transitions</small></div><input class="toggle" id="toggleFeedback" type="checkbox" checked aria-label="Interactive feedback"></div>
+  <div class="switch-row"><div class="switch-copy"><strong>Reduce motion</strong><small>Disable travel and bouncy motion in this mockup</small></div><input class="toggle" id="toggleReduced" type="checkbox" aria-label="Reduce motion"></div>
+  <div class="form-field"><label for="intensity">Ambient intensity</label><input type="range" id="intensity" min="0" max="100" value="36"></div>
+  <h4>Motion tokens</h4>
+  <div class="chips"><span class="chip">PRESS 100ms</span><span class="chip">HOVER 160ms</span><span class="chip">ROUTE 220ms</span><span class="chip">DRAWER 300ms</span><span class="chip">AMBIENT 11s</span></div>
+  <p>All values shown are proposed design targets and do not modify installed QNECTOR preferences.</p>
+  <div class="row wrap"><button class="btn small" type="button" data-action="lab">✧ Open Motion Lab</button><button class="btn small" type="button" data-action="setup">◎ Setup Wizard</button><button class="btn small" type="button" data-action="update">↻ Updater Demo</button></div>
+</template>
+
+<template id="view-runtime">
+  <div class="section-card gold-edge"><div class="row"><div><div class="mini-eyebrow">RUNTIME DIAGNOSTICS</div><h3>Execution Overview</h3></div><span class="chip green">STABLE DEMO</span></div><p>Values are fabricated for visual testing. Job progress and completion must be backed by verified runtime state in production.</p></div>
+  <div class="digits"><div class="digit"><span>ACTIVE JOBS</span><b>02</b></div><div class="digit"><span>LAST RUN</span><b>18<span style="font:10px Segoe UI;color:var(--muted)">ms</span></b></div><div class="digit"><span>CHECKS</span><b>79</b></div></div>
+  <h4>Durable Job Status</h4>
+  <div class="section-card"><div class="row"><strong style="font-size:12px">Package inspection (demo)</strong><span class="chip">RUNNING</span></div><p>Motion QA snapshot · Verified work/total: 7 / 10</p><div class="meter"><span style="width:70%"></span></div><small class="protocol">70% · KNOWN DEMO WORK UNITS ONLY</small></div>
+  <div class="section-card"><div class="row"><strong style="font-size:12px">Memory readback</strong><span class="chip green">COMPLETE</span></div><p>Recorded status derived from test evidence (mock content).</p><div class="meter"><span style="width:100%"></span></div></div>
+  <div class="section-card"><div class="row"><strong style="font-size:12px">Unmeasured check</strong><span class="chip">PENDING</span></div><p>No fake percentage for indeterminate operations. Use a subtle loader instead.</p><div class="meter"><span class="indeterminate"></span></div></div>
+  <button class="btn small" type="button" data-action="runtime-refresh">↻ Refresh simulated dashboard</button>
+</template>
+
+<dialog id="labDialog" class="overlay-dialog" aria-labelledby="labTitle">
+ <div class="dialog-top"><div><span class="eyebrow">DESIGN SYSTEM / INTERACTION LAB</span><h2 id="labTitle">Motion Reference Mapping</h2><p class="muted">Click any tile to replay a local approximation. Individual reference links are indexed in animation-rework.md.</p></div><button class="close" type="button" data-close-dialog="labDialog" aria-label="Close motion lab">×</button></div>
+ <div class="dialog-content">
+  <div class="motion-lab-grid">
+   <button class="lab-card" type="button" data-demo="press"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Inner Press / Button Press</strong><small>Microinteractions · 100–160ms</small></button>
+   <button class="lab-card" type="button" data-demo="glow"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Glow Pulse / Aurora</strong><small>Ambient · quiet, slow, optional</small></button>
+   <button class="lab-card" type="button" data-demo="slide"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Route Slide</strong><small>Navigation · 180–260ms</small></button>
+   <button class="lab-card" type="button" data-demo="check"><div class="lab-stage"><span class="lab-shape">✓</span></div><strong>Success Check Draw</strong><small>Verified status only</small></button>
+   <button class="lab-card" type="button" data-demo="ring"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Gradient Arc</strong><small>Indeterminate job status</small></button>
+   <button class="lab-card" type="button" data-demo="fill"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Progress Fill</strong><small>Real known work units only</small></button>
+   <button class="lab-card" type="button" data-demo="card"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Staggered Card Reveal</strong><small>Bounded list entrance</small></button>
+   <button class="lab-card" type="button" data-demo="press"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Soft Spring Toggle</strong><small>Short selection feedback</small></button>
+   <button class="lab-card" type="button" data-demo="glow"><div class="lab-stage"><span class="lab-shape"></span></div><strong>Rim Glow</strong><small>Central Orb identity</small></button>
+  </div>
+  <div class="section-card gold-edge" style="margin-top:17px"><div class="row"><div><div class="mini-eyebrow">REFERENCE CATALOG</div><h3>782 motions · 64 categories</h3></div><a class="btn small" style="text-decoration:none" href="https://motion-reference.takayustudio.jp/" target="_blank" rel="noopener noreferrer">Open source ↗</a></div><p>Detailed one-to-one mapping (90 entries) and 48 implementation tasks are recorded in the project's animation-rework.md.</p></div>
+  <div class="dialog-actions"><button class="btn" type="button" data-close-dialog="labDialog">Close</button><button class="btn gold" type="button" id="btnReplayAll">Replay all demos</button></div>
+ </div>
+</dialog>
+
+<dialog id="setupDialog" class="overlay-dialog" aria-labelledby="setupTitle">
+ <div class="dialog-top"><div><span class="eyebrow">QNECTOR SETUP / DEMO ONLY</span><h2 id="setupTitle">Setup Assistant</h2><p class="muted" id="setupSubtitle">State transitions designed to preserve user input and focus.</p></div><button class="close" type="button" data-close-dialog="setupDialog" aria-label="Close setup">×</button></div>
+ <div class="dialog-content">
+   <div class="chips" id="setupChips"></div>
+   <div style="margin-top:19px" class="meter"><span id="setupBar" style="width:25%"></span></div>
+   <div class="section-card" id="setupStepContent" style="margin-top:20px;min-height:175px"></div>
+   <div class="warning">Offline UI preview: no credentials are collected or transmitted and no real network tunnel is configured.</div>
+   <div class="dialog-actions"><button class="btn" id="btnSetupBack" type="button">Back</button><button class="btn gold" id="btnSetupNext" type="button">Next step →</button></div>
+ </div>
+</dialog>
+
+<dialog id="updateDialog" class="overlay-dialog" aria-labelledby="updateTitle">
+  <div class="dialog-top"><div><span class="eyebrow">UPDATER UX / DEMO ONLY</span><h2 id="updateTitle">Update Experience</h2><p class="muted">One reliable progress source; no fake installation state.</p></div><button class="close" type="button" data-close-dialog="updateDialog" aria-label="Close updater">×</button></div>
+  <div class="dialog-content">
+    <div class="section-card gold-edge"><div class="row"><div><div class="mini-eyebrow">VISUAL PREVIEW</div><h3 id="updateStateText">Ready to simulate download</h3></div><span id="updatePercent" class="chip">IDLE</span></div><p>Simulated bytes transferred; this is not a QNECTOR release download.</p><div class="meter"><span id="updateBar" style="width:0"></span></div><p class="protocol" id="updateCaption">No update is being performed.</p></div>
+    <div class="dialog-actions"><button class="btn" type="button" data-close-dialog="updateDialog">Cancel demo</button><button class="btn gold" type="button" id="btnStartUpdate">▶ Simulate update</button></div>
+  </div>
+</dialog>
+
+<dialog id="eventDialog" class="overlay-dialog" aria-labelledby="eventTitle" style="width:min(510px,calc(100vw - 32px))">
+ <div class="dialog-top"><div><span class="eyebrow">ACTIVITY DETAIL / MOCK DATA</span><h2 id="eventTitle">Tool event</h2></div><button class="close" type="button" data-close-dialog="eventDialog" aria-label="Close activity detail">×</button></div>
+ <div class="dialog-content"><span class="chip" id="eventStatus">STATUS</span><h3 style="margin-top:20px">Event payload</h3><p id="eventDescription">A simulated tool result.</p><div class="section-card"><span class="mini-eyebrow">PROVENANCE</span><p>Visual mockup only. No real MCP tool invocation has occurred.</p></div><div class="dialog-actions"><button type="button" class="btn" data-close-dialog="eventDialog">Close</button></div></div>
+</dialog>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = (selector, scope=document) => scope.querySelector(selector);
+  const $$ = (selector, scope=document) => Array.from(scope.querySelectorAll(selector));
+  const root=document.documentElement;
+  const hero=$("#hero"), orb=$("#orbButton"), ring=$("#holdRing");
+  const pill=$("#statePill"), pillText=$("#statePillText"), orbTitle=$("#orbTitle");
+  const orbSubtitle=$("#orbSubtitle"), orbKicker=$("#orbStateKicker");
+  const headerStatus=$("#headerStatus"), headerDot=$("#headerDot"), orbDot=$("#orbDot");
+  const drawer=$("#drawer"), scrim=$("#scrim"), drawerBody=$("#drawerBody");
+  const feed=$("#feed"), toasts=$("#toasts");
+  const titles={workspace:"Active Workspace",memory:"AI Project Memory",skills:"Skill Manager",settings:"Bridge Settings",runtime:"Runtime & Diagnostics"};
+  let connection="connected", activeView=null, lastFocus=null, drawerHideTimer=0;
+  let quality="balanced", reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let ambient=true, feedback=true, intensity=.36;
+  let holdStart=0, holdId=0, holdTriggered=false, holdSuppressUntil=0, connectTimer=0, eventNumber=5, updateTimer=0, setupStep=0, introSequence=0;
+  const skillState={"Filesystem":true,"Windows MCP":true,"Git Integration":true,"Browser QC":false};
+
+  function applyMotionPolicy(){
+    root.dataset.quality=(quality==="off" || reduced)?"off":quality;
+    root.dataset.feedback=feedback?"on":"off";
+    $("#qualityStat").textContent=reduced?"Reduced":quality.charAt(0).toUpperCase()+quality.slice(1);
+    if($("#qualityDetail")){
+      const caps={full:"Full · test 60–120 FPS, high detail (proposal)",
+       balanced:"Balanced · 60 FPS Canvas target, moderate density (proposal)",
+       eco:"Eco · 24–30 FPS Canvas or static, sparse density (proposal)",
+       off:"Off · static background and instant feedback"};
+      $("#qualityDetail").textContent=caps[quality]+(reduced?" · Reduced motion override":"");
+      $$("[data-quality-button]").forEach(b=>{
+        b.classList.toggle("active",b.dataset.qualityButton===quality);
+        b.setAttribute("aria-pressed",String(b.dataset.qualityButton===quality));
+      });
+    }
+    const ambientAllowed=ambient && quality!=="off" && !reduced;
+    $("#matrix").style.opacity=ambientAllowed?String(Math.min(.56,intensity)):"0";
+    restartMatrix();
+  }
+  function toast(message,kind="info"){
+    const el=document.createElement("div");
+    el.className="toast "+(kind==="success"?"good":kind==="error"?"bad":"");
+    el.setAttribute("role",kind==="error"?"alert":"status");
+    const icon=document.createElement("span"),copy=document.createElement("span");
+    icon.className="toast-icon";icon.textContent=kind==="success"?"✓":kind==="error"?"!":"✦";
+    copy.textContent=message;el.append(icon,copy);
+    toasts.prepend(el);
+    while(toasts.childElementCount>3) toasts.lastElementChild.remove();
+    window.setTimeout(()=>el.remove(),3700);
+  }
+  function setConnection(next){
+    connection=next;hero.dataset.state=next;pill.dataset.state=next;
+    orbDot.className="dot "+(next==="connected"?"success":next==="connecting"?"running":"error");
+    headerDot.className=orbDot.className;
+    if(next==="connected"){
+      pillText.textContent="LINK STABLE";orbKicker.textContent="ACTIVE MCP CHANNEL";
+      orbTitle.textContent="Your bridge is online.";
+      orbSubtitle.textContent="Motion stays subtle while the connection is stable.";
+      headerStatus.textContent="INTERACTIVE PROTOTYPE · CONNECTED DEMO";
+      orb.setAttribute("aria-label","Hold for three seconds to simulate disconnect");
+    }else if(next==="connecting"){
+      pillText.textContent="ESTABLISHING LINK";orbKicker.textContent="CONNECTION SEQUENCE";
+      orbTitle.textContent="Establishing secure bridge…";
+      orbSubtitle.textContent="A visual state simulation, not an actual tunnel.";
+      headerStatus.textContent="SIMULATED CONNECTING";
+      orb.setAttribute("aria-label","Simulated connecting in progress");
+    }else{
+      pillText.textContent="LINK INACTIVE";orbKicker.textContent="INACTIVE MCP CHANNEL";
+      orbTitle.textContent="Your bridge is offline.";
+      orbSubtitle.textContent="Click the Orb to simulate reconnection.";
+      headerStatus.textContent="SIMULATED DISCONNECTED";
+      orb.setAttribute("aria-label","Click to simulate reconnect");
+    }
+    $("#btnPrimary").disabled=next==="connecting";
+    $("#btnSecondary").disabled=next==="connecting";
+    $("#btnPrimary").textContent=next==="connected"?"✦ Simulate success":next==="disconnected"?"✦ Connect demo":"◌ Connecting";
+    $("#btnSecondary").textContent=next==="disconnected"?"◈ System remains local":"◌ Simulate reconnect";
+    if(next!=="connected")cancelHold();
+  }
+  function celebration(){
+    const el=$("#celebrate");el.classList.remove("run");void el.offsetWidth;el.classList.add("run");
+    window.setTimeout(()=>el.classList.remove("run"),620);
+  }
+  function startConnection(){
+    if(connection==="connecting")return;
+    window.clearTimeout(connectTimer);
+    setConnection("connecting");
+    toast("Simulated bridge handshake started.");
+    connectTimer=window.setTimeout(()=>{
+      setConnection("connected");celebration();toast("Simulated connection completed.","success");
+      addEvent("system.connect","Preview connection state confirmed","success",false);
+    },1400);
+  }
+  function simulateReconnect(){
+    cancelHold();window.clearTimeout(connectTimer);setConnection("disconnected");
+    window.setTimeout(startConnection,350);
+  }
+  function finishHold(){
+    if(holdTriggered)return;
+    holdTriggered=true;holdSuppressUntil=performance.now()+750;cancelHold();
+    window.clearTimeout(connectTimer);
+    setConnection("disconnected");
+    toast("3-second hold completed — simulated disconnect.","success");
+    addEvent("system.disconnect","Preview disconnect sequence","success",false);
+  }
+  function holdTick(timestamp){
+    if(!holdStart || connection!=="connected")return;
+    const elapsed=timestamp-holdStart,p=Math.max(0,Math.min(1,elapsed/3000));
+    ring.style.strokeDashoffset=String(665*(1-p));
+    if(p>=1){finishHold();return}
+    holdId=window.requestAnimationFrame(holdTick);
+  }
+  function startHold(){
+    if(connection!=="connected" || holdStart)return;
+    holdTriggered=false;holdStart=performance.now();orb.classList.add("holding");
+    holdId=window.requestAnimationFrame(holdTick);
+    $("#orbSubtitle").textContent="Hold for 3 seconds to disconnect • release to cancel";
+  }
+  function cancelHold(){
+    if(holdId)window.cancelAnimationFrame(holdId);
+    holdId=0;holdStart=0;ring.style.strokeDashoffset="665";orb.classList.remove("holding");
+    if(connection==="connected")orbSubtitle.textContent="Motion stays subtle while the connection is stable.";
+  }
+  orb.addEventListener("pointerdown",e=>{
+    if(connection==="connected"){e.preventDefault();if(orb.setPointerCapture)orb.setPointerCapture(e.pointerId);startHold()}
+  });
+  orb.addEventListener("pointerup",()=>{
+    if(holdStart && !holdTriggered){cancelHold();toast("Hold the Orb for 3 seconds to disconnect (demo).")}
+  });
+  orb.addEventListener("pointercancel",cancelHold);
+  orb.addEventListener("lostpointercapture",()=>{if(holdStart&&!holdTriggered)cancelHold()});
+  orb.addEventListener("click",()=>{if(holdTriggered){holdTriggered=false;if(performance.now()<holdSuppressUntil)return}if(connection==="disconnected")startConnection()});
+  orb.addEventListener("keydown",e=>{
+    if(e.repeat)return;
+    if((e.key==="Enter"||e.key===" ") && connection==="connected"){e.preventDefault();startHold()}
+    if((e.key==="Enter"||e.key===" ") && connection==="disconnected"){e.preventDefault();startConnection()}
+  });
+  orb.addEventListener("keyup",e=>{
+    if((e.key==="Enter"||e.key===" ")&&holdStart&&!holdTriggered){e.preventDefault();cancelHold();toast("Release canceled the disconnect (demo).")}
+  });
+
+  function addEvent(title,description,status="running",resolve=true){
+    eventNumber++;
+    const el=document.createElement("button");el.type="button";el.className="feed-row enter";
+    el.dataset.status=status;el.dataset.title=title;el.dataset.desc=description;
+    const dot=document.createElement("span");dot.className="feed-led";
+    const main=document.createElement("span");main.className="feed-main";
+    const name=document.createElement("strong");name.textContent=title;
+    const desc=document.createElement("small");desc.textContent=description;
+    main.append(name,desc);
+    const state=document.createElement("span");state.className="feed-state";state.textContent=status==="running"?"RUNNING":status==="error"?"FAILED":"DONE";
+    el.append(dot,main,state);feed.prepend(el);$("#eventCounter").textContent=String(eventNumber);
+    while(feed.children.length>5)feed.lastElementChild.remove();
+    if(resolve)window.setTimeout(()=>{
+      if(!el.isConnected)return;el.dataset.status="success";state.textContent="DONE";
+      desc.textContent="Completed preview state (no real tool executed)";
+      el.dataset.desc=desc.textContent;
+      toast(title+" completed (demo).","success");
+    },1400);
+  }
+  $("#btnAddEvent").addEventListener("click",()=>{
+    const examples=[["files.read_many","Inspect mock source files"],["process.run","Compile simulated UI transitions"],["memory.note","Record an example motion decision"],["system.doctor","Check mock bridge diagnostics"],["git.status","Inspect example worktree"]];
+    const e=examples[(eventNumber-5)%examples.length];addEvent(e[0],e[1]);
+  });
+  feed.addEventListener("click",e=>{
+    const row=e.target.closest(".feed-row");if(!row)return;
+    $("#eventTitle").textContent=row.dataset.title||"Tool event";
+    $("#eventStatus").textContent=(row.dataset.status||"status").toUpperCase();
+    $("#eventDescription").textContent=row.dataset.desc||$("small",row)?.textContent||"A simulated tool event.";
+    openDialog("eventDialog");
+  });
+  $("#btnPrimary").addEventListener("click",()=>{
+    if(connection==="disconnected")return startConnection();
+    if(connection!=="connected")return;
+    celebration();toast("Verified-style success animation (simulation).","success");
+    addEvent("system.preview","One-shot radial celebration","success",false);
+  });
+  $("#btnSecondary").addEventListener("click",()=>{
+    if(connection==="connected")simulateReconnect();
+    else if(connection==="disconnected")toast("This is an offline mockup. Nothing is connected.");
+  });
+
+  function focusAfterDrawerOpen(){
+    $("#btnCloseDrawer").focus({preventScroll:true});
+  }
+  function openDrawer(view,focus=true){
+    if(!titles[view])return;
+    const first=!activeView;
+    if(first)lastFocus=document.activeElement;
+    activeView=view;window.clearTimeout(drawerHideTimer);
+    drawer.inert=false;drawer.removeAttribute("inert");drawer.setAttribute("aria-hidden","false");
+    $("#drawerTitle").textContent=titles[view];
+    drawerBody.innerHTML=$("#view-"+view).innerHTML;
+    drawerBody.classList.remove("page-enter");void drawerBody.offsetWidth;drawerBody.classList.add("page-enter");
+    $$("[data-view]",drawer).forEach(el=>{
+      const active=el.dataset.view===view;
+      el.classList.toggle("active",active);
+      if(active)el.setAttribute("aria-current","page");else el.removeAttribute("aria-current");
+    });
+    $$("[data-view]",$(".dock")).forEach(el=>{
+      const active=el.dataset.view===view;
+      el.classList.toggle("active",active);
+      el.setAttribute("aria-expanded",String(active));
+      el.setAttribute("aria-controls","drawer");
+    });
+    if(view==="settings")syncSettingsControls();
+    if(view==="skills")syncSkillControls();
+    // Commit visible state synchronously: the UI must open even if rAF is paused or throttled.
+    scrim.classList.add("open");drawer.classList.add("open");
+    if(first && focus)window.setTimeout(focusAfterDrawerOpen,130);
+    restartMatrix();
+  }
+  function closeDrawer(){
+    if(!activeView)return;
+    activeView=null;drawer.classList.remove("open");scrim.classList.remove("open");
+    $$("[data-view]",$(".dock")).forEach(el=>{el.classList.remove("active");el.setAttribute("aria-expanded","false")});
+    drawer.setAttribute("aria-hidden","true");drawer.inert=true;
+    window.clearTimeout(drawerHideTimer);
+    drawerHideTimer=window.setTimeout(()=>{drawerBody.innerHTML="";restartMatrix()},360);
+    if(lastFocus&&typeof lastFocus.focus==="function")lastFocus.focus({preventScroll:true});
+  }
+  $$("[data-view]",document).forEach(btn=>btn.addEventListener("click",()=>openDrawer(btn.dataset.view)));
+  $("#btnSettings").addEventListener("click",()=>openDrawer("settings"));
+  $("#btnCloseDrawer").addEventListener("click",closeDrawer);
+  scrim.addEventListener("click",closeDrawer);
+
+  function setQuality(next){
+    if(!["full","balanced","eco","off"].includes(next))return;
+    quality=next;applyMotionPolicy();
+    toast("Motion profile set to "+next+" (mockup only).");
+  }
+  function syncSettingsControls(){
+    $$("[data-quality-button]",drawerBody).forEach(b=>{
+      b.classList.toggle("active",b.dataset.qualityButton===quality);
+      b.setAttribute("aria-pressed",String(b.dataset.qualityButton===quality));
+    });
+    $("#toggleAmbient").checked=ambient;
+    $("#toggleFeedback").checked=feedback;
+    $("#toggleReduced").checked=reduced;
+    $("#intensity").value=String(Math.round(intensity*100));
+    applyMotionPolicy();
+  }
+  function syncSkillControls(){
+    $$("[data-skill]",drawerBody).forEach(row=>$("input",row).checked=Boolean(skillState[row.dataset.skill]));
+  }
+  drawerBody.addEventListener("click",e=>{
+    const button=e.target.closest("button");if(!button)return;
+    if(button.dataset.qualityButton)return setQuality(button.dataset.qualityButton);
+    const action=button.dataset.action;
+    if(action==="lab")return openDialog("labDialog");
+    if(action==="setup")return openDialog("setupDialog");
+    if(action==="update")return openDialog("updateDialog");
+    if(action==="copy"){toast("Copy feedback preview: the real clipboard was not changed.");return}
+    if(action==="workspace"){toast("Mockup cannot change the real filesystem.");return}
+    if(action==="skill-import"){toast("Skill import animation preview — no installation.");return}
+    if(action==="save-skill"){toast("Skill toggle choices are in-memory only.","success");return}
+    if(action==="runtime-refresh"){toast("Simulated diagnostics refreshed.","success");return}
+  });
+  drawerBody.addEventListener("change",e=>{
+    const t=e.target;
+    if(t.id==="toggleAmbient"){ambient=t.checked;applyMotionPolicy();return}
+    if(t.id==="toggleFeedback"){feedback=t.checked;applyMotionPolicy();return}
+    if(t.id==="toggleReduced"){reduced=t.checked;applyMotionPolicy();return}
+    const skill=t.closest("[data-skill]");
+    if(skill&&t.matches("input[type=checkbox]")){
+      skillState[skill.dataset.skill]=t.checked;
+      $("#skillsStat").firstChild.textContent=String(5+Object.values(skillState).filter(Boolean).length).padStart(2,"0")+" ";
+      toast(skill.dataset.skill+": "+(t.checked?"enabled":"disabled")+" (demo only).");
+    }
+  });
+  drawerBody.addEventListener("input",e=>{
+    const t=e.target;
+    if(t.id==="intensity"){intensity=Number(t.value)/100;applyMotionPolicy()}
+    if(t.id==="memorySearch"){
+      const q=t.value.toLowerCase();$$("[data-memory]",drawerBody).forEach(row=>row.hidden=!row.dataset.memory.toLowerCase().includes(q));
+    }
+    if(t.id==="skillSearch"){
+      const q=t.value.toLowerCase();$$("[data-skill]",drawerBody).forEach(row=>row.hidden=!row.dataset.skill.toLowerCase().includes(q));
+    }
+  });
+  root.dataset.feedback="on";
+  $("#btnLab").addEventListener("click",()=>openDialog("labDialog"));
+  $("#btnUpdate").addEventListener("click",()=>openDialog("updateDialog"));
+
+  function openDialog(id){
+    const el=$("#"+id);if(!el||el.open)return;
+    if(id==="setupDialog"){setupStep=0;renderSetup()}
+    if(id==="updateDialog")resetUpdate();
+    el.showModal();
+  }
+  $$("[data-close-dialog]").forEach(btn=>btn.addEventListener("click",()=>{
+    const dialog=$("#"+btn.dataset.closeDialog);dialog.close();
+  }));
+  for(const id of ["setupDialog","labDialog","updateDialog","eventDialog"]){
+    const dialog=$("#"+id);
+    dialog.addEventListener("click",e=>{if(e.target===dialog)dialog.close()});
+  }
+  $("#labDialog").addEventListener("click",e=>{
+    const card=e.target.closest(".lab-card");if(!card)return;
+    replay(card);
+  });
+  function replay(card){
+    card.classList.remove("play");void card.offsetWidth;card.classList.add("play");
+    window.setTimeout(()=>card.classList.remove("play"),1650);
+  }
+  $("#btnReplayAll").addEventListener("click",()=>{
+    $$(".lab-card").forEach((card,i)=>window.setTimeout(()=>replay(card),i*95));
+  });
+
+  const steps=[
+    {heading:"Environment check",body:"Visual feedback for installed components, local state and bridge readiness. Each check reveals as its real outcome becomes known.",line:"Check → collect → confirm",action:"Environment scan completed (preview)."},
+    {heading:"Secure tunnel settings",body:"Step transition preserves text and focus. Real QNECTOR configuration values are never read or written by this offline preview.",line:"No API keys or secrets collected",action:"Simulated tunnel prepared."},
+    {heading:"ChatGPT connection",body:"A single accent connects the incoming control to the next step. Do not animate or claim success before the real connector responds.",line:"Connect → verify → continue",action:"Simulated connector verification."},
+    {heading:"Setup complete",body:"Verified-style check animation and quiet radial celebration. This is not a real installation, login or runtime setup.",line:"Success motion only after a verified state",action:"Preview is complete."}
+  ];
+  function renderSetup(){
+    const step=steps[setupStep];
+    $("#setupChips").innerHTML="";
+    ["CHECK","TUNNEL","CHATGPT","DONE"].forEach((label,i)=>{
+      const span=document.createElement("span");span.className="chip"+(i<=setupStep?" green":"");
+      span.textContent=(i<setupStep?"✓ ":i===setupStep?"◈ ":"○ ")+label;
+      $("#setupChips").append(span);
+    });
+    $("#setupBar").style.width=String((setupStep+1)*25)+"%";
+    const target=$("#setupStepContent");target.innerHTML="";
+    const eyebrow=document.createElement("div");eyebrow.className="mini-eyebrow";eyebrow.textContent="STEP "+(setupStep+1)+" OF 4";
+    const h=document.createElement("h3");h.textContent=step.heading;
+    const p=document.createElement("p");p.textContent=step.body;
+    const note=document.createElement("span");note.className="chip";note.textContent=step.line;
+    target.append(eyebrow,h,p,note);target.style.animation="none";void target.offsetWidth;target.style.animation="enterLeft .25s var(--ease) both";
+    $("#btnSetupBack").disabled=setupStep===0;
+    $("#btnSetupNext").textContent=setupStep===3?"Finish demo":"Next step →";
+  }
+  $("#btnSetupBack").addEventListener("click",()=>{if(setupStep>0){setupStep--;renderSetup()}});
+  $("#btnSetupNext").addEventListener("click",()=>{
+    toast(steps[setupStep].action,setupStep===3?"success":"info");
+    if(setupStep===3){$("#setupDialog").close();celebration();return}
+    setupStep++;renderSetup();
+  });
+
+  function resetUpdate(){
+    if(updateTimer)window.clearInterval(updateTimer);
+    updateTimer=0;
+    $("#updateStateText").textContent="Ready to simulate download";
+    $("#updatePercent").textContent="IDLE";$("#updateBar").style.width="0";
+    $("#updateCaption").textContent="No update is being performed.";
+    $("#btnStartUpdate").disabled=false;$("#btnStartUpdate").textContent="▶ Simulate update";
+  }
+  $("#updateDialog").addEventListener("close",()=>{if(updateTimer)window.clearInterval(updateTimer);updateTimer=0});
+  $("#btnStartUpdate").addEventListener("click",()=>{
+    if(updateTimer)return;
+    let current=0;$("#btnStartUpdate").disabled=true;
+    $("#updateStateText").textContent="Transferring mock data…";
+    $("#updateCaption").textContent="Known demo work units: 0 / 20";
+    updateTimer=window.setInterval(()=>{
+      current=Math.min(20,current+1);
+      const percent=current*5;
+      $("#updatePercent").textContent=percent+"%";
+      $("#updateBar").style.width=percent+"%";
+      $("#updateCaption").textContent="Known demo work units: "+current+" / 20";
+      if(current===20){
+        window.clearInterval(updateTimer);updateTimer=0;
+        $("#updateStateText").textContent="Demo update sequence complete";
+        $("#btnStartUpdate").disabled=false;$("#btnStartUpdate").textContent="↻ Replay demo";
+        toast("Preview progress completed. No real update performed.","success");
+      }
+    },130);
+  });
+
+  const canvas=$("#matrix"),ctx=canvas.getContext("2d",{alpha:true});
+  let columns=[],cw=1,ch=1,dpr=1,frameId=0,lastFrame=0,canvasActive=false;
+  const charset="QNECTOR0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ⟡✦⋄";
+  function resizeCanvas(){
+    if(!ctx)return;
+    const rect=canvas.getBoundingClientRect(),oldColumns=columns;
+    cw=Math.max(1,rect.width);ch=Math.max(1,rect.height);
+    dpr=Math.min(devicePixelRatio||1,quality==="full"?2:1.5);
+    canvas.width=Math.round(cw*dpr);canvas.height=Math.round(ch*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    const gap=quality==="full"?18:quality==="balanced"?25:34;
+    const count=Math.min(60,Math.floor(cw/gap));
+    columns=Array.from({length:count},(_,i)=>{
+      const existing=oldColumns[i];
+      return existing?{...existing,x:(i+.5)*cw/count}:{x:(i+.5)*cw/count,y:Math.random()*ch,v:.1+Math.random()*.3,len:7+Math.floor(Math.random()*9),glyphs:Array.from({length:15},()=>charset[Math.floor(Math.random()*charset.length)])};
+    });
+    drawMatrix(false);
+  }
+  function drawMatrix(advance){
+    if(!ctx)return;
+    ctx.clearRect(0,0,cw,ch);
+    ctx.font="11px Consolas, monospace";
+    ctx.textAlign="center";
+    for(const col of columns){
+      if(advance){col.y+=col.v*(quality==="eco"?1:1.25);if(col.y-col.len*15>ch){col.y=-Math.random()*200;col.v=.15+Math.random()*.35}}
+      for(let j=0;j<col.len;j++){
+        const y=col.y-j*15;if(y<0||y>ch)continue;
+        const alpha=Math.max(.07,(1-j/col.len)*.45);
+        ctx.fillStyle=j===0?"rgba(255,247,197,.7)":"rgba(225,179,83,"+alpha+")";
+        if(advance&&Math.random()<.0007)col.glyphs[j]=charset[Math.floor(Math.random()*charset.length)];
+        ctx.fillText(col.glyphs[j%col.glyphs.length],col.x,y);
+      }
+    }
+  }
+  function matrixAllowed(){
+    return Boolean(ctx && ambient && quality!=="off" && !reduced && !document.hidden && !activeView);
+  }
+  function matrixFrame(t){
+    if(!matrixAllowed()){frameId=0;canvasActive=false;drawMatrix(false);return}
+    const fps=quality==="full"?90:quality==="balanced"?60:25;
+    if(t-lastFrame>=1000/fps-.5){lastFrame=t;drawMatrix(true)}
+    frameId=window.requestAnimationFrame(matrixFrame);
+  }
+  function restartMatrix(){
+    if(frameId)window.cancelAnimationFrame(frameId);
+    frameId=0;lastFrame=0;canvasActive=matrixAllowed();
+    if(canvasActive)frameId=window.requestAnimationFrame(matrixFrame);
+    else drawMatrix(false);
+  }
+  new ResizeObserver(resizeCanvas).observe(hero);
+  document.addEventListener("visibilitychange",restartMatrix);
+  window.matchMedia("(prefers-reduced-motion: reduce)").addEventListener("change",e=>{
+    reduced=e.matches;if(activeView==="settings")syncSettingsControls();else applyMotionPolicy();
+  });
+  window.addEventListener("keydown",e=>{
+    // Native modal dialogs manage their own focus. Drawer focus is kept inside its dialog.
+    if($$("dialog").some(x=>x.open) || !activeView)return;
+    if(e.key==="Escape"){e.preventDefault();closeDrawer();return}
+    if(e.key!=="Tab")return;
+    const focusable=$$('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])',drawer)
+      .filter(el=>el.getClientRects().length>0 && !el.closest("[hidden]"));
+    if(!focusable.length)return;
+    const first=focusable[0],last=focusable[focusable.length-1],current=document.activeElement;
+    if(e.shiftKey && (current===first || !drawer.contains(current))){e.preventDefault();last.focus({preventScroll:true})}
+    else if(!e.shiftKey && (current===last || !drawer.contains(current))){e.preventDefault();first.focus({preventScroll:true})}
+  });
+  $("#btnSequence").addEventListener("click",()=>{
+    window.clearTimeout(introSequence);
+    toast("Guided animation sequence — all states are simulated.");
+    openDrawer("memory");
+    introSequence=window.setTimeout(()=>{openDrawer("skills");introSequence=window.setTimeout(()=>{
+      closeDrawer();introSequence=window.setTimeout(()=>{
+        addEvent("system.preview_sequence","Controlled list entrance","running",true);celebration();
+        introSequence=window.setTimeout(()=>openDialog("labDialog"),900);
+      },420);
+    },760)},760);
+  });
+
+  const style=document.createElement("style");
+  style.textContent="html[data-feedback=off] .btn,html[data-feedback=off] .dock-item,html[data-feedback=off] .feed-row,html[data-feedback=off] .stat-card{transition:none!important}"+
+    "html[data-feedback=off] .feed-row.enter{animation:none!important}"+
+    "@media(max-width:420px){.dock-item{font-size:8px}.hero-actions .btn{padding:10px 10px;font-size:10px}}";
+  document.head.appendChild(style);
+  applyMotionPolicy();
+  resizeCanvas();
+  setConnection("connected");
+})();
+</script>
+</body>
+</html>
