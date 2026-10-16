@@ -42,7 +42,8 @@ async function run(variant:Variant){
   const rendered=mile("renderer-ready-to-show");
   const loaded=mile("renderer-loaded");
   const window=mile("window-created");
-  if(!Number.isFinite(rendered)||!Number.isFinite(loaded)||!Number.isFinite(window)||rendered!<loaded!||loaded!<window!)
+  // renderer-loaded precedes ready-to-show; both happen after the BrowserWindow exists.
+  if(!Number.isFinite(rendered)||!Number.isFinite(loaded)||!Number.isFinite(window)||loaded!<window!||rendered!<loaded!)
     throw Error("STARTUP_MILESTONE_INVALID_"+variant);
   const stages=data.milestones.map(x=>x.name).join("|");
   await rm(folder,{recursive:true,force:true});

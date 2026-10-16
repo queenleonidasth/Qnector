@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { findVerifiedPackage } from "./package-evidence.mjs";
+import { evidenceDigest, validateControlledSuite, validateEvidenceEnvelope } from "./performance-evidence.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,14 +54,31 @@ for (const [gate, script] of [
 const gitDiff = await commandResult("git", ["diff", "--check"]);
 results.push({ gate: "git-diff-check", status: gitDiff.code === 0 ? "PASS" : "FAIL", evidence: gitDiff.output || (gitDiff.code === 0 ? "clean" : "git diff --check failed") });
 const expectedCommit = (await commandResult("git", ["rev-parse", "HEAD"])).output.trim();
+async function evidenceFile(gate: string, variable: string) {
+  const file = process.env[variable];
+  if (!file) return { status: "UNKNOWN" as const, evidence: `No ${gate} evidence file supplied (${variable}); gate remains UNKNOWN.` };
+  try {
+    const envelope = JSON.parse(await readFile(path.resolve(file), "utf8"));
+    return validateEvidenceEnvelope(envelope, { revision: expectedCommit, kind: gate });
+  } catch (error) {
+    return { status: "UNKNOWN" as const, evidence: `${gate} evidence could not be read: ${(error as Error).message}` };
+  }
+}
 const packageEvidence = findVerifiedPackage(expectedCommit);
 results.push({ gate: "stdio-packaged", status: packageEvidence?.smokeVerified ? "PASS" : "UNKNOWN",
   evidence: packageEvidence ? `Verified exact-commit package with compiled stdio smoke, SHA256 resources and binaries: ${packageEvidence.packageDirectory}`
     : "No verified, exact-commit clean packaged artifact with stdio smoke; run scripts/package-windows.ps1." });
-results.push({ gate: "tunnel", status: "UNKNOWN", evidence: "No authenticated tunnel endpoint supplied; no tunnel exposure can be inferred from local tests." });
-results.push({ gate: "electron-gui", status: "UNKNOWN", evidence: "GUI/interactive acceptance must be recorded on an available desktop session." });
-results.push({ gate: "chatgpt-host", status: "UNKNOWN", evidence: "Client tool refresh/exposure and client-observed timings are not observable from this local runtime; host gap remains UNKNOWN." });
-results.push({ gate: "controlled-performance-suite", status: "UNKNOWN", evidence: "Existing checked-in benchmark fixtures cover telemetry and read_many only. Full baseline/candidate ABBA suite (5 warmups, 30 samples per workload and 10 cold starts with resource sampling) is not yet evidenced." });
+results.push({ gate: "tunnel", ...await evidenceFile("tunnel", "QNECTOR_TUNNEL_EVIDENCE") });
+results.push({ gate: "electron-gui", ...await evidenceFile("electron GUI", "QNECTOR_GUI_EVIDENCE") });
+results.push({ gate: "chatgpt-host", ...await evidenceFile("ChatGPT candidate host", "QNECTOR_CHATGPT_HOST_EVIDENCE") });
+try {
+  const file = process.env.QNECTOR_CONTROLLED_SUITE_EVIDENCE;
+  const envelope = file ? JSON.parse(await readFile(path.resolve(file), "utf8")) : undefined;
+  const suite = envelope?.payload && envelope.sha256 === evidenceDigest(envelope.payload) ? envelope.payload : undefined;
+  results.push({ gate: "controlled-performance-suite", ...validateControlledSuite(suite, expectedCommit) });
+} catch (error) {
+  results.push({ gate: "controlled-performance-suite", status: "UNKNOWN", evidence: `Controlled suite evidence unreadable: ${(error as Error).message}` });
+}
 results.push({ gate: "native-build", status: packageEvidence?.nativeBuildVerified ? "PASS" : "UNKNOWN",
   evidence: packageEvidence ? "Exact-commit UIA and Job Host binary hashes matched package evidence; packaged durable-recovery smoke passed."
     : "Native UIA and Job Host must be built, packaged and validated by scripts/package-windows.ps1." });
