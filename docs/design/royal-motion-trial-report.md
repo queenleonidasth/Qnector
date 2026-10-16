@@ -53,6 +53,16 @@ Evidence: `royal-motion-baseline-fps.json`, `royal-motion-candidate-fps.json`, a
 - **Final full project suite on clean committed trial branch: 462/462 tests PASS across 100 test files (106.02 seconds).** Initial full run 460/462 found a correct package-evidence dirty-worktree guard and an outdated pre-existing Memory Center selector. After committing a clean tree and updating *only the test assertion* to current latest activity, linked session and freshness markers, targeted tests 10/10 and complete suite 462/462 passed. Memory behavior and package guards remain unchanged.
 - No installed QNECTOR binary, updater, live Bridge or tunnel is modified or exercised by these smoke tests.
 
+## Orb portrait clarity refinement (2026-10-16, source trial only)
+
+**Reported:** Queen portrait looked soft inside an otherwise approved Orb. The 256×256 transparent original is sharp; the problem was primarily compositing. `mix-blend-mode: screen` lifted the opaque dark hair/eye outlines to match the underlying bright fluid, the image was only 76% of the sphere, and the reflection overlaid the portrait.
+
+**Targeted fix:** retain the original unchanged PNG and the frameless transparent design, but render it with normal alpha compositing, slightly increase its size to 84%, add restrained static contrast/saturation, and mask glass reflection in the central portrait area while preserving refractive lighting at the rim. No new asset dependency or extra animation loop; no other menu or functionality changed.
+
+**Verified:** before/after captures from the actual Electron renderer at 440×790 are `royal-motion-orb-clarity-before.png`, `royal-motion-orb-clarity-after.png`, and enlarged side-by-side `royal-motion-orb-clarity-comparison.png`. Image loading 256px ×2, TypeScript/build, focused test 4/4, native Orb hold/visibility smoke (including computed-style clarity assertions) and lint PASS; Impeccable CSS detector yielded no findings. Measured native rAF cadence 165.01 FPS average, p95 6.20ms and no intervals over 17ms during one 4.2s pass (not a guaranteed minimum FPS under every load).
+
+**Delivery boundary:** updated only the isolated `feat/royal-motion-60fps-trial` source and synthetic Electron preview, not installed QNECTOR v0.4.57.
+
 ## Remaining checks before shipping
 
 - Repeated real frame **presentation** and GPU/CPU utilization, including gaming/Delta Force foreground coexistence, not just renderer rAF metrics.

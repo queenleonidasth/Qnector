@@ -38,7 +38,11 @@ describe("Royal Liquid Glass V2.1 production trial", () => {
     expect(orb).toContain('className="queen-orb-portrait"');
     expect(orb).toContain('className="queen-orb-fluid"');
     expect(css).toContain(".queen-orb-portrait {");
-    expect(css).toContain("mix-blend-mode: screen");
+    // Do not wash out opaque dark Queen details with screen blending.
+    expect(css).toContain("mix-blend-mode: normal");
+    expect(css).not.toContain("mix-blend-mode: screen");
+    expect(css).toContain("filter: contrast(1.15) saturate(1.08)");
+    expect(css).toContain("-webkit-mask-image: radial-gradient");
     expect(css).toContain("background: none;");
     expect(css).toContain("border: 0;");
     expect(css).toContain("box-shadow: none;");

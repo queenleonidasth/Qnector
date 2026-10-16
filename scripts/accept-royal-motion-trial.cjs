@@ -15,7 +15,14 @@ async function snapshot(){
  const meter=document.querySelector(".charge-meter");
  const orb=document.querySelector(".glass-sphere-enclosure");
  const images=[...document.querySelectorAll(".brand-queen-mark,.queen-orb-portrait")];
+ const portraitStyle=getComputedStyle(document.querySelector(".queen-orb-portrait"));
+ const reflectionStyle=getComputedStyle(document.querySelector(".queen-orb-reflection"));
  return {
+  queenBlend:portraitStyle.mixBlendMode,
+  queenImageBorder:portraitStyle.borderTopWidth,
+  queenImageBackground:portraitStyle.backgroundColor,
+  queenImageContrast:portraitStyle.filter,
+  reflectionMask:reflectionStyle.maskImage,
   hasSilk:!!document.querySelector(".liquid-silk-canvas"),
   hasMatrix:!!document.querySelector(".gold-matrix-canvas"),
   hasOrbFluid:!!document.querySelector(".queen-orb-fluid"),
@@ -46,6 +53,11 @@ async function main(){
  assert.equal(result.hasMatrix,false);
  assert.equal(result.hasOrbFluid,true);
  assert.deepEqual(result.imageWidths,[256,256]);
+ assert.equal(result.queenBlend,"normal","Preserve original black/gold portrait contrast");
+ assert.equal(result.queenImageBorder,"0px","No square icon border");
+ assert.equal(result.queenImageBackground,"rgba(0, 0, 0, 0)","No square background plate");
+ assert.match(result.queenImageContrast,/contrast\(1\.15\)/,"Retain crisp source detail");
+ assert.match(result.reflectionMask,/radial-gradient/,"Glass reflection must avoid the face center");
  assert.equal(result.active,false);
  assert.equal(result.visible,"hidden","No waiting ring at idle");
  assert.equal(result.inWindow,"visible");

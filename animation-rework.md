@@ -37,6 +37,12 @@
 - **Implementation model:** the source PNG already has a transparent outer background. Preserve its original proportions and colors. Render the Queen art as an image INSIDE the translucent orb shell (behind its glass highlight), rather than as a framed child of the transparent hold-interaction button. Use screen optical blending and restrained warm-gold lighting so the subject reads as part of the moving fluid.
 - **Functional behavior retained:** no hold ring/dot before pressing; 3-second hold and cancel; reconnect; all five navigation drawers, Motion Lab, search, Quality profiles and reduced motion. Header app icon may retain its small square brand badge: the no-frame requirement concerns the central Orb.
 - **Verified demo:** docs/design/qnector-liquid-glass-v2-1-qc.cjs. Checks transparent image loaded and moved into Orb shell, zero framed border/background/box-shadow, screen blend, and the existing Chrome functional suite; output screenshots qnector-liquid-v2-1-*.png. Demo success DOES NOT complete production AR tasks.
+## 0C. Native Queen Orb portrait clarity — isolated source refinement (2026-10-16)
+
+- **Latest approved Orb artwork treatment:** keep the actual transparent `queen-portrait.png` icon, but avoid `screen` blending over the moving light field: it erased the subject's opaque black hair/face edges and made the illustration look fuzzy. In the Electron trial, render the image with normal alpha compositing and measured static contrast, at 84% of Orb interior, with a central-clear/edge-only glass reflection mask. Preserve all lighting, frameless integration, animations, 3s hold interaction and native-VSync cadence.
+- **Screenshots from actual Electron renderer:** `docs/design/royal-motion-orb-clarity-before.png`, `royal-motion-orb-clarity-after.png`, `royal-motion-orb-clarity-comparison.png`; subject details are noticeably clearer after the change without a square backing.
+- **Implementation boundary:** only the existing Royal Motion source-trial branch was modified. No installed QNECTOR build updated, no release performed, and remaining 48-task-wide design acceptance is still pending. See `docs/design/royal-motion-trial-report.md` for quantitative QC and limitations.
+
 ## 1. Source-of-truth baseline
 
 | Item | Verified at audit (2026-10-16) |
