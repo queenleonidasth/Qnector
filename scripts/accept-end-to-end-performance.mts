@@ -29,9 +29,17 @@ async function command(gate: string, file: string, args: string[]): Promise<void
   }
 }
 
-if (manifest.tools.length !== 9 || manifest.hostAliases.length !== 5)
-  throw new Error("Golden contract fixture must cover the baseline 9 grouped tools and 5 host aliases");
-results.push({ gate: "public-api-golden", status: "PASS", evidence: `${manifest.tools.length} grouped tools, ${manifest.hostAliases.length} host aliases; see public-api-contract.test.ts for actions, fields, permissions and legacy shape assertions` });
+const expectedTools = ["system", "workspace", "files", "process", "git", "memory", "browser", "computer"];
+const expectedHostAliases = ["system.timeout_probe", "tasks"];
+function namesEqual(actual: string[], expected: string[]): boolean {
+  return actual.length === expected.length &&
+    JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort());
+}
+if (!namesEqual(manifest.tools.map((tool) => tool.name), expectedTools) ||
+    !namesEqual(manifest.hostAliases.map((alias) => alias.name), expectedHostAliases)) {
+  throw new Error("Golden contract fixture must cover the approved 8 grouped tools and 2 opt-in aliases; Plan Mode is retired");
+}
+results.push({ gate: "public-api-golden", status: "PASS", evidence: `${manifest.tools.length} supported grouped tools, ${manifest.hostAliases.length} opt-in aliases; see public-api-contract.test.ts for actions, fields, permissions and legacy shape assertions` });
 
 // Node 22+ on Windows cannot execFile a .cmd/.bat script directly.
 // Pass only fixed, trusted acceptance commands through cmd.exe; never

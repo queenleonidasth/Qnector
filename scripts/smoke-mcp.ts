@@ -102,7 +102,7 @@ try {
         workspace,
         checks: [
           "initialize",
-          "tools/list (12 named tools, no social)",
+          "tools/list (8 grouped tools; no Plan Mode or social)",
           "system.info",
           "files.write/read",
           "memory.save_checkpoint/recall",
