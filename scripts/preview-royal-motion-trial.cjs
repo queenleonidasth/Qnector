@@ -25,7 +25,7 @@ app.whenReady().then(async () => {
     (_r,callback)=>callback({cancel:true}),
   );
   await win.loadFile(path.join(root,"apps","desktop","index.html"));
-  await win.webContents.executeJavaScript('(()=>{const b=document.createElement("div");b.textContent="ROYAL MOTION TEST - SIMULATED DATA";b.style.cssText="position:fixed;bottom:1px;left:50%;transform:translateX(-50%);z-index:9999;font:10px Segoe UI,sans-serif;letter-spacing:.09em;padding:3px 10px;border:1px solid rgba(249,213,148,.42);border-radius:8px;color:#ffe6ad;background:rgba(18,17,18,.88);pointer-events:none;white-space:nowrap";document.body.append(b)})()');
+  await win.webContents.executeJavaScript('(()=>{const b=document.createElement("div");b.textContent="ROYAL MOTION TEST - SIMULATED DATA";b.style.cssText="position:fixed;bottom:1px;left:50%;transform:translateX(-50%);z-index:9999;font:10px Segoe UI,sans-serif;letter-spacing:.09em;padding:3px 10px;border:1px solid rgba(249,213,148,.42);border-radius:8px;color:#ffe6ad;background:rgba(18,17,18,.88);pointer-events:none;white-space:nowrap";document.body.append(b);document.title="QNECTOR Motion Trial — SIMULATED DATA (not installed)"})()');
   win.show();
   win.focus();
 }).catch(error => {

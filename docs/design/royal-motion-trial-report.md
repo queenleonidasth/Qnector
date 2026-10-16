@@ -50,7 +50,7 @@ Evidence: `royal-motion-baseline-fps.json`, `royal-motion-candidate-fps.json`, a
 - Focused Royal tests: **27/27 PASS** at first run (added new assertions; rerun if more code changes).
 - `pnpm accept:native-ui`: **PASS** (all five native drawers, four viewport sizes: 420×620, 435×900, 451×978, 700×900; keyboard Esc/Tab, no overflow, no console errors). Initial ResizeObserver loop warning was fixed before final pass.
 - `electron scripts/accept-royal-motion-trial.cjs`: **PASS** before visibility extension, then **PASS** with native visibility hide/resume simulation: actual Queen PNG loads, idle ring hidden, hold progress updates, early release cancels, full 3-second hold invokes real UI command, synthetic backend rejection handled without false success.
-- Full project suite: first long run, **460/462 tests PASS**, **two issues**: `scripts/package-evidence.test.ts` rejects **dirty Git worktree during development** (expected by release integrity contract); `scroll-completeness.test.ts` held a stale pre-existing Memory UI element `id="memory-last-session"`. Stale test updated to assert the actual `id="memory-latest-activity"`, `data-testid="memory-linked-session"` and freshness markers; no Memory code changed. Re-test package-evidence after committing a clean tree, do not override release integrity checks.
+- **Final full project suite on clean committed trial branch: 462/462 tests PASS across 100 test files (106.02 seconds).** Initial full run 460/462 found a correct package-evidence dirty-worktree guard and an outdated pre-existing Memory Center selector. After committing a clean tree and updating *only the test assertion* to current latest activity, linked session and freshness markers, targeted tests 10/10 and complete suite 462/462 passed. Memory behavior and package guards remain unchanged.
 - No installed QNECTOR binary, updater, live Bridge or tunnel is modified or exercised by these smoke tests.
 
 ## Remaining checks before shipping
@@ -58,7 +58,7 @@ Evidence: `royal-motion-baseline-fps.json`, `royal-motion-candidate-fps.json`, a
 - Repeated real frame **presentation** and GPU/CPU utilization, including gaming/Delta Force foreground coexistence, not just renderer rAF metrics.
 - Check high-DPI and varied refresh rates using physical equipment where available.
 - Full cross-screen Liquid Glass design parity beyond the Orb/hero/background. Most of 48 implementation tasks remain outstanding.
-- Full project suite after clean Git commit; packaged Windows update/rollback acceptance, actual production connection hold under the user app, reduced-motion screen-reader QA.
+- Packaged Windows update/rollback acceptance, actual production connection hold under the installed user app, reduced-motion screen-reader QA. The full automated source suite is already green (462/462).
 - Keep latest user-approved `animation-rework.md` master checklist as the authority; do not mark a phase complete from one visual trial.
 
 ## How to preview safely

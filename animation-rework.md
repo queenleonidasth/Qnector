@@ -391,6 +391,8 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 
 | 2026-10-17 (ICT) | **AR-01/AR-13–AR-17 native vertical slice IN PROGRESS**; full acceptance 0/48 | Isolated real-Electron renderer baseline 153.29 fps/p95 6.2ms, candidate sample 165 fps/p95 6.1ms; native Silk/Queen Orb/frameless portrait/hold circle and VSync driver. Typecheck/build/lint PASS; focused tests 27/27 PASS; native multi-size UI and hold/visibility smoke PASS. Full suite initially 460/462: dirty-worktree evidence guard (correct behavior), and stale preexisting Memory selector test, now updated without modifying Memory code. | `feat/royal-motion-60fps-trial`, `docs/design/royal-motion-trial-report.md`, `royal-motion-{baseline,candidate}-fps.json` and screenshots | Obtain repeated frame+GPU evidence with foreground games, clean-tree test, complete remaining 48 item acceptance; installed v0.4.57 untouched. |
 
+| 2026-10-17 (ICT) | First native vertical slice **built, validated, not shipped**; full-phase acceptance **0/48** | Full project Vitest suite now **462/462 PASS across 100 files** on clean commit after updating stale Memory test assertion (no Memory code change); isolated native hold and visibility QA PASS, typecheck/build/lint PASS; rAF candidate sample 165 FPS but not universal guarantee | `feat/royal-motion-60fps-trial` commit `196d4b1`, `docs/design/royal-motion-trial-report.md` | Next: evaluate repeated FPS and GPU frame presentation during gaming, complete remaining screen motion, package QA. Installed v0.4.57 untouched. |
+
 ## 10. Sign-off definition
 - [ ] All 48 task IDs finished and supported by evidence.
 - [ ] No known blocker in G1–G7; all failed tests and deferred external tests explicitly documented.
