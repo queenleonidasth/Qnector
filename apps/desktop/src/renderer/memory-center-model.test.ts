@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   currentSavedTask,
   filterMemories,
+  latestSavedActivity,
   latestSavedActivityTask,
   latestLinkedSessionTask,
   pendingTasks,
@@ -119,6 +120,37 @@ describe("Memory Center data fidelity", () => {
     expect(latestSavedActivityTask([staleNamed, freshGeneral])?.title).toBe(
       "General workspace activity",
     );
+  });
+  it("prefers the newest saved task instead of an older linked chat", () => {
+    const recentTask = {
+      ...task("Repair Memory", "active"),
+      updatedAt: "2026-10-16T15:25:00Z",
+    };
+    expect(latestSavedActivity([recentTask], [], [], [])).toMatchObject({
+      kind: "task",
+      title: "Repair Memory",
+      timestamp: "2026-10-16T15:25:00Z",
+    });
+  });
+  it("prefers a recent tool event or saved fact over an older task", () => {
+    const old = { ...task("Old", "idle"), updatedAt: "2026-10-14T12:00:00Z" };
+    const recentEvent = event("new", "2026-10-16T01:00:00Z");
+    expect(latestSavedActivity([old], [recentEvent], [], [])).toMatchObject({
+      kind: "event",
+      timestamp: recentEvent.timestamp,
+    });
+    expect(
+      latestSavedActivity(
+        [old],
+        [recentEvent],
+        [{ key: "New context", updatedAt: "2026-10-16T02:00:00Z" }],
+        [],
+      ),
+    ).toMatchObject({
+      kind: "note",
+      title: "Saved note: New context",
+      timestamp: "2026-10-16T02:00:00Z",
+    });
   });
   it("shows a blocked task only when no in-progress task exists", () => {
     const blocked = {

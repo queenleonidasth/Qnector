@@ -113,3 +113,60 @@ export function recentSavedLog(
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     .slice(0, Math.max(0, limit));
 }
+
+/** The newest saved Qnector record, not the historical linked chat topic. */
+export interface LatestSavedActivity {
+  kind: "task" | "event" | "note" | "legacy";
+  title: string;
+  timestamp: string;
+  context?: string;
+}
+
+export function latestSavedActivity(
+  tasks: readonly MemoryTask[],
+  events: readonly MemoryV2Event[],
+  notes: readonly Pick<MemoryFact, "key" | "updatedAt">[],
+  changes: readonly { timestamp: string; summary: string }[],
+): LatestSavedActivity | undefined {
+  const candidates: LatestSavedActivity[] = [];
+  for (const task of tasks) {
+    candidates.push({
+      kind: "task",
+      title: task.title,
+      timestamp:
+        task.lastEventAt && task.lastEventAt > task.updatedAt
+          ? task.lastEventAt
+          : task.updatedAt,
+      ...(task.currentTask && task.currentTask !== task.title
+        ? { context: task.currentTask }
+        : {}),
+    });
+  }
+  for (const entry of events) {
+    candidates.push({
+      kind: "event",
+      title: entry.summary,
+      timestamp: entry.timestamp,
+    });
+  }
+  for (const note of notes) {
+    candidates.push({
+      kind: "note",
+      title: "Saved note: " + note.key,
+      timestamp: note.updatedAt,
+    });
+  }
+  for (const change of changes) {
+    candidates.push({
+      kind: "legacy",
+      title: change.summary,
+      timestamp: change.timestamp,
+    });
+  }
+  const precedence = { task: 3, note: 2, event: 1, legacy: 0 };
+  return candidates.sort(
+    (a, b) =>
+      b.timestamp.localeCompare(a.timestamp) ||
+      precedence[b.kind] - precedence[a.kind],
+  )[0];
+}

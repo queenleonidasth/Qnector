@@ -43,7 +43,7 @@ describe("simplified Memory Center", () => {
     expect(html).toContain("Latest Activity");
     expect(html).toContain("Current Task");
     expect(html).toContain("Activity Log");
-    expect(html).toContain("No saved session topic");
+    expect(html).toContain("No saved Qnector activity");
     expect(html).toContain("No active task is recorded");
     expect(html).toContain("No recorded activity");
     expect(html).not.toContain("General workspace activity");
@@ -62,11 +62,11 @@ describe("simplified Memory Center", () => {
       },
     });
     expect(html).toContain("Discussed deployment steps");
-    expect(html).toContain("Most recently linked session");
+    expect(html).toContain("Last linked session (saved topic only)");
     expect(html).toContain(
       "QNECTOR stores task/tool context. Chat words are saved only when the user explicitly opts in",
     );
-    expect(html).toContain("Saved task context: Review updater");
+    expect(html).not.toContain("Saved task context: Review updater");
   });
   it("shows the newest Qnector activity when no chat session is linked", () => {
     const html = render({
@@ -109,11 +109,66 @@ describe("simplified Memory Center", () => {
     });
     expect(html).toContain("Latest Activity");
     expect(html).toContain("General workspace activity");
-    expect(html).toContain(
-      "No linked chat session was recorded. Showing the newest saved Qnector activity instead.",
-    );
+    expect(html).toContain("Newest saved task or workspace activity.");
     const firstPanel = html.split("</section>")[0] ?? "";
     expect(firstPanel).not.toContain("Old plugin work");
+  });
+  it("does not let an Oct 14 linked session hide Oct 16 saved work", () => {
+    const html = render({
+      ...base,
+      v2: {
+        ...base.v2!,
+        lastSession: {
+          taskId: "linked",
+          title: "Old discussion",
+          currentTask: "Legacy work",
+          linkedAt: "2026-10-14T08:00:00Z",
+        },
+        tasks: [
+          {
+            id: "new-work",
+            workspaceId: "w",
+            title: "Repair Memory",
+            status: "active",
+            currentTask: "Fix QNECTOR memory",
+            completedSteps: [],
+            pendingSteps: [],
+            criticalContext: "",
+            createdAt: "2026-10-16T01:00:00Z",
+            updatedAt: "2026-10-16T15:25:00Z",
+            sessionCount: 0,
+            touchedPaths: [],
+          },
+        ],
+      },
+    });
+    expect(html).toContain(
+      '<strong class="memory-center-primary">Repair Memory</strong>',
+    );
+    expect(html).toContain("Activity updated: Oct 16, 2026");
+    expect(html).toContain("Last linked session (saved topic only):");
+    expect(html).toContain("Old discussion");
+    expect(html).not.toContain(
+      '<strong class="memory-center-primary">Old discussion</strong>',
+    );
+  });
+  it("distinguishes missing explicit chat records and facts from stale dates", () => {
+    const html = render({
+      ...base,
+      v2: {
+        ...base.v2!,
+        freshness: {
+          toolEventsAt: "2026-10-16T15:25:00Z",
+          semanticFactsAt: null,
+          conversationTurnsAt: null,
+        },
+      },
+    });
+    expect(html).toContain("Tool events:");
+    expect(html).toContain("Oct 16, 2026");
+    expect(html).toContain("Saved facts:");
+    expect(html.match(/None recorded/g)).toHaveLength(2);
+    expect(html).toContain("Explicit chat excerpts:");
   });
   it("does not hard-code Thai interface strings or expose deletion by default", () => {
     const source = readFileSync(

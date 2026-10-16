@@ -3,8 +3,7 @@ import type { MemoryV2Snapshot, MemoryFact, MemoryTask } from "@qnector/shared";
 import {
   currentSavedTask,
   filterMemories,
-  latestSavedActivityTask,
-  latestLinkedSessionTask,
+  latestSavedActivity,
   presentMemories,
   recentSavedLog,
 } from "./memory-center-model.js";
@@ -53,6 +52,10 @@ function formatTime(timestamp?: string): string {
     ? "Unknown time"
     : date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
 }
+function formatRecordedTime(timestamp?: string | null): string {
+  return timestamp ? formatTime(timestamp) : "None recorded";
+}
+
 function taskStatus(status: MemoryTask["status"]): string {
   return {
     active: "In progress",
@@ -123,13 +126,13 @@ export function MemoryCenter({
       ),
     );
   }, [memory, taskPage]);
-  const lastSessionTask = latestLinkedSessionTask(tasks);
   const savedSession = memory?.v2?.lastSession;
-  const latestActivity = latestSavedActivityTask(tasks);
-  const latestTopic = savedSession
-    ? lastSessionTask
-    : (lastSessionTask ?? latestActivity);
-  const hasLinkedSession = Boolean(savedSession || lastSessionTask);
+  const latestActivity = latestSavedActivity(
+    tasks,
+    memory?.v2?.events ?? [],
+    records,
+    memory?.state.recentChanges ?? [],
+  );
   const currentTask = currentSavedTask(tasks);
   const otherTasks = tasks.filter(
     (task) =>
@@ -257,65 +260,66 @@ export function MemoryCenter({
 
       <section
         className="memory-center-panel"
-        aria-labelledby="memory-last-session"
+        aria-labelledby="memory-latest-activity"
       >
         <div className="memory-center-panel-heading">
           <span className="memory-center-panel-number">01</span>
-          <h3 id="memory-last-session">
-            {hasLinkedSession ? "Last Session" : "Latest Activity"}
-          </h3>
+          <h3 id="memory-latest-activity">Latest Activity</h3>
         </div>
         {!memory ? (
           <p className="memory-center-note" role="status">
             Loading saved context…
           </p>
-        ) : savedSession || latestTopic ? (
+        ) : latestActivity ? (
           <>
             <strong className="memory-center-primary">
-              {savedSession?.title ?? latestTopic?.title}
+              {latestActivity.title}
             </strong>
-            {(savedSession?.currentTask || latestTopic?.currentTask) &&
-              (savedSession?.currentTask ?? latestTopic?.currentTask) !==
-                (savedSession?.title ?? latestTopic?.title) && (
-                <p className="memory-center-main-text">
-                  Saved task context:{" "}
-                  {savedSession?.currentTask ?? latestTopic?.currentTask}
-                </p>
-              )}
+            {latestActivity.context && (
+              <p className="memory-center-main-text">
+                Saved task context: {latestActivity.context}
+              </p>
+            )}
             <p className="memory-center-note">
-              {savedSession
-                ? "Most recently linked session (saved topic only)."
-                : lastSessionTask
-                  ? "Latest session-linked task (session timestamp unavailable)."
-                  : "No linked chat session was recorded. Showing the newest saved Qnector activity instead."}
+              {latestActivity.kind === "task"
+                ? "Newest saved task or workspace activity."
+                : latestActivity.kind === "note"
+                  ? "Newest saved note."
+                  : "Newest saved tool or file activity."}
             </p>
             <small className="memory-center-time">
-              {savedSession
-                ? "Session linked: "
-                : hasLinkedSession
-                  ? "Task last updated: "
-                  : "Activity updated: "}
-              {formatTime(
-                savedSession?.linkedAt ??
-                  latestTopic?.lastEventAt ??
-                  latestTopic?.updatedAt,
-              )}
+              Activity updated: {formatTime(latestActivity.timestamp)}
             </small>
           </>
         ) : (
           <p className="memory-center-note">
-            No saved session topic for this workspace yet.
+            No saved Qnector activity for this workspace yet.
+          </p>
+        )}
+        {savedSession && (
+          <p className="memory-center-note" data-testid="memory-linked-session">
+            Last linked session (saved topic only): {savedSession.title}
+            {" · "}Linked: {formatTime(savedSession.linkedAt)}
           </p>
         )}
         {memory?.v2?.freshness && (
           <p className="memory-center-note" data-testid="memory-freshness">
-            Tool events: {formatTime(memory.v2.freshness.toolEventsAt ?? undefined)}
-            {" · "}Saved facts: {formatTime(memory.v2.freshness.semanticFactsAt ?? undefined)}
-            {" · "}Explicit chat excerpts: {formatTime(memory.v2.freshness.conversationTurnsAt ?? undefined)}
+            Tool events:{" "}
+            {formatRecordedTime(memory.v2.freshness.toolEventsAt ?? undefined)}
+            {" · "}Saved facts:{" "}
+            {formatRecordedTime(
+              memory.v2.freshness.semanticFactsAt ?? undefined,
+            )}
+            {" · "}Explicit chat excerpts:{" "}
+            {formatRecordedTime(
+              memory.v2.freshness.conversationTurnsAt ?? undefined,
+            )}
           </p>
         )}
         <p className="memory-center-disclaimer">
-          QNECTOR stores task/tool context. Chat words are saved only when the user explicitly opts in to recording a specific excerpt; ordinary ChatGPT messages are not captured automatically.
+          QNECTOR stores task/tool context. Chat words are saved only when the
+          user explicitly opts in to recording a specific excerpt; ordinary
+          ChatGPT messages are not captured automatically.
         </p>
         {memory && (
           <details className="memory-center-optional">
