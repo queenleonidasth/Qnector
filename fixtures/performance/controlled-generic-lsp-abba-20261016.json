@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "workload": "generic-lsp-on-demand-reuse",
+  "baselineRevision": "e809591d9cceca0140c9cc66fdcf7b4dc62be0f6",
+  "candidateRevision": "87452adf7eaedeeb533b1e9b713ffffc021fd611",
+  "environment": {
+    "node": "v24.20.0",
+    "platform": "win32",
+    "cpuCount": 16
+  },
+  "warmupRounds": 5,
+  "measuredPerVariant": 30,
+  "freshServerStartsPerVariant": 10,
+  "correctness": "PASS",
+  "outputSha256": "fda7357f57bcf55e0ac8f7b535eb0abcc705d2f28fbaebcc4a158b13cef25dec",
+  "warm": {
+    "baseline": {
+      "elapsed": {
+        "n": 30,
+        "p50Ms": 482.10390000000007,
+        "p95Ms": 508.7618999999995,
+        "p50Confidence95Ms": [
+          477.31029999999737,
+          488.3784000000014
+        ],
+        "p95Confidence95Ms": [
+          501.1153999999988,
+          511.83849999999984
+        ]
+      },
+      "parentCpuMicroseconds": {
+        "n": 30,
+        "p50Ms": 0,
+        "p95Ms": 31000,
+        "p50Confidence95Ms": [
+          0,
+          0
+        ],
+        "p95Confidence95Ms": [
+          16000,
+          63000
+        ]
+      },
+      "maxParentRssBytes": 78536704,
+      "outputSha256": [
+        "fda7357f57bcf55e0ac8f7b535eb0abcc705d2f28fbaebcc4a158b13cef25dec"
+      ]
+    },
+    "candidate": {
+      "elapsed": {
+        "n": 30,
+        "p50Ms": 0.7740999999987253,
+        "p95Ms": 1.2909999999992579,
+        "p50Confidence95Ms": [
+          0.7201999999997497,
+          0.8768999999992957
+        ],
+        "p95Confidence95Ms": [
+          1.0212999999985186,
+          1.406200000001263
+        ]
+      },
+      "parentCpuMicroseconds": {
+        "n": 30,
+        "p50Ms": 0,
+        "p95Ms": 0,
+        "p50Confidence95Ms": [
+          0,
+          0
+        ],
+        "p95Confidence95Ms": [
+          0,
+          15000
+        ]
+      },
+      "maxParentRssBytes": 78540800,
+      "outputSha256": [
+        "fda7357f57bcf55e0ac8f7b535eb0abcc705d2f28fbaebcc4a158b13cef25dec"
+      ]
+    }
+  },
+  "freshServer": {
+    "baseline": {
+      "elapsed": {
+        "n": 10,
+        "p50Ms": 474.5017000000007,
+        "p95Ms": 490.03029999999853,
+        "p50Confidence95Ms": [
+          468.8856999999989,
+          482.1771000000008
+        ],
+        "p95Confidence95Ms": [
+          480.2645999999986,
+          490.03029999999853
+        ]
+      },
+      "parentCpuMicroseconds": {
+        "n": 10,
+        "p50Ms": 0,
+        "p95Ms": 15000,
+        "p50Confidence95Ms": [
+          0,
+          0
+        ],
+        "p95Confidence95Ms": [
+          0,
+          15000
+        ]
+      },
+      "maxParentRssBytes": 72843264,
+      "outputSha256": [
+        "fda7357f57bcf55e0ac8f7b535eb0abcc705d2f28fbaebcc4a158b13cef25dec"
+      ]
+    },
+    "candidate": {
+      "elapsed": {
+        "n": 10,
+        "p50Ms": 481.8725999999988,
+        "p95Ms": 495.96559999999954,
+        "p50Confidence95Ms": [
+          470.8834999999999,
+          487.40599999999904
+        ],
+        "p95Confidence95Ms": [
+          486.5761999999995,
+          495.96559999999954
+        ]
+      },
+      "parentCpuMicroseconds": {
+        "n": 10,
+        "p50Ms": 0,
+        "p95Ms": 15000,
+        "p50Confidence95Ms": [
+          0,
+          0
+        ],
+        "p95Confidence95Ms": [
+          0,
+          15000
+        ]
+      },
+      "maxParentRssBytes": 72556544,
+      "outputSha256": [
+        "fda7357f57bcf55e0ac8f7b535eb0abcc705d2f28fbaebcc4a158b13cef25dec"
+      ]
+    }
+  },
+  "releaseEligible": false,
+  "limitations": "Real JSON-RPC with the installed basedpyright language server and a fixed isolated Python fixture. Warm candidate reuses the server; fresh service starts a separate server. Not end-to-end ChatGPT/host/network, and process CPU covers the parent only."
+}

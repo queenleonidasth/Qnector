@@ -2,17 +2,27 @@ import {spawn} from "node:child_process";
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {mkdir,mkdtemp,readFile,rm} from "node:fs/promises";
+import {existsSync,readFileSync} from "node:fs";
+import {findVerifiedPackage} from "./package-evidence.mjs";
 import os from "node:os";
 import path from "node:path";
 import {performance} from "node:perf_hooks";
 type Variant="baseline"|"candidate";
 const root=path.resolve(import.meta.dirname,"..");
-const baselineRoot=path.resolve(process.env.QNECTOR_BENCH_BASELINE??"D:\\Projects\\Qnector-PlanMode2");
-const executables:Record<Variant,string>={
-  baseline:"C:\\Program Files\\Qnector\\Qnector.exe",
-  candidate:path.join(root,"apps/desktop/release/durable-candidate-20261015-104030/win-unpacked/Qnector.exe"),
-};
+const baselineRoot=path.resolve(process.env.QNECTOR_BENCH_BASELINE??"D:/Projects/Qnector-PlanMode2");
 const rev=(cwd:string)=>execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8",windowsHide:true}).trim();
+const candidatePackage=findVerifiedPackage(rev(root));
+if(!candidatePackage)throw Error("CANDIDATE_EXACT_COMMIT_PACKAGE_NOT_VERIFIED: build and verify this HEAD before benchmarking");
+const candidateExe=path.join(candidatePackage.packageDirectory,"win-unpacked","Qnector.exe");
+if(!existsSync(candidateExe))throw Error("CANDIDATE_PACKAGED_ELECTRON_EXE_MISSING");
+const baselineExe=process.env.QNECTOR_BENCH_BASELINE_EXE??"C:/Program Files/Qnector/Qnector.exe";
+if(!existsSync(baselineExe))throw Error("BASELINE_ELECTRON_EXE_MISSING");
+const baselineManifest=path.join(path.dirname(baselineExe),"resources","build-provenance.json");
+if(!existsSync(baselineManifest))throw Error("BASELINE_EXECUTABLE_PROVENANCE_MISSING");
+const baselineProvenance=JSON.parse(readFileSync(baselineManifest,"utf8")) as {sourceRevision:string;dirtyTree:boolean};
+if(!/^[0-9a-f]{40}$/i.test(baselineProvenance.sourceRevision)||baselineProvenance.dirtyTree!==false)
+  throw Error("BASELINE_EXECUTABLE_PROVENANCE_INVALID");
+const executables:Record<Variant,string>={baseline:baselineExe,candidate:candidateExe};
 const temp=await mkdtemp(path.join(os.tmpdir(),"qnector-isolated-startup-abba-"));
 const pct=(a:number[],p:number)=>[...a].sort((x,y)=>x-y)[Math.max(0,Math.ceil(a.length*p)-1)]!;
 const ci=(a:number[],p:number,seed=9876)=>{const results=[];for(let i=0;i<500;i++){const x=[];for(let j=0;j<a.length;j++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;x.push(a[Math.floor(seed/2**32*a.length)]!);}results.push(pct(x,p));}return [pct(results,.025),pct(results,.975)];};
@@ -71,13 +81,15 @@ try{
     }]));
     console.log(JSON.stringify({
       schemaVersion:1,workload:"isolated-hidden-packaged-electron-process-startup",
-      baselineRevision:rev(baselineRoot),candidatePackageRevision:"7466deccb16e9579a7230c405ea1e3f8da1d1d6e",
+      baselineRevision:baselineProvenance.sourceRevision,baselineRepositoryRevision:rev(baselineRoot),
+      baselineRepositoryMatchesExecutable:baselineProvenance.sourceRevision===rev(baselineRoot),
+      candidatePackageRevision:candidatePackage.revision,
       candidateCodeHeadAtRun:rev(root),warmupRounds:5,measuredPerVariant:30,
       coldProcessStartsPerVariant:10,realProcessStarts:true,isolatedProfile:true,
       environment:{os:os.platform(),node:process.version,cpuCount:os.cpus().length,freeMemoryBytes:os.freemem()},
       measures:render(measurements),coldStarts:render(extra),correctness:"PASS",
       releaseEligible:false,
-      limitations:"Hidden startup probe renders the packaged Electron UI but skips live MCP/tunnel, tray and user workflow. Isolated APPDATA and LOCALAPPDATA; no update/install. Does not verify production launch/game frame-time/interactive host tool exposure."
+      limitations:"Hidden startup probe renders the packaged Electron UI but skips live MCP/tunnel, tray and user workflow. BaselineRevision is read from installed executable provenance, not inferred from baseline source checkout. Isolated APPDATA and LOCALAPPDATA; no update/install. Does not verify production launch/game frame-time/interactive host tool exposure."
     },null,2));
   }
 }finally{await rm(temp,{recursive:true,force:true});}

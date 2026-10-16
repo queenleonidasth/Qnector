@@ -28,11 +28,11 @@ const warm:Record<Variant,Measurement[]>={baseline:[],candidate:[]};
 const cold:Record<Variant,Measurement[]>={baseline:[],candidate:[]};
 const folder=await mkdtemp(path.join(os.tmpdir(),"qnector-generic-lsp-benchmark-"));
 const source=path.join(folder,"benchmark.py");
-const fixtureServer=path.join(root,"packages/core/src/fixtures/fake-lsp-server.mjs");
+const serverExecutable=path.join(root,"node_modules/.bin/basedpyright-langserver.cmd");
 const original=new BaselineLsp(),candidate=new CandidateLsp({maxSessions:2,idleMs:30_000});
 const payload={workspaceRoot:folder,path:source,action:"document_symbols" as const,
- serverCommand:process.execPath,serverArgs:[fixtureServer]};
-const expected=createHash("sha256").update(JSON.stringify({name:"fixture สวัสดี\n",kind:12})).digest("hex");
+ serverCommand:serverExecutable,serverArgs:["--stdio"]};
+const expected=createHash("sha256").update(JSON.stringify({name:"greeting",kind:12})).digest("hex");
 async function measure(variant:Variant,fresh=false):Promise<Measurement>{
  const service=fresh?(variant==="baseline"?new BaselineLsp():new CandidateLsp({idleMs:100})):variant==="baseline"?original:candidate;
  const cpu=process.cpuUsage(),start=performance.now();
@@ -56,7 +56,7 @@ function summarize(data:Record<Variant,Measurement[]>){
  }]));
 }
 try{
- await writeFile(source,"fixture สวัสดี\n");
+ await writeFile(source,"def greeting():\n    return 'สวัสดี'\n");
  for(let round=0;round<20;round++)
   for(const name of (round%2===0?["baseline","candidate","candidate","baseline"]:["candidate","baseline","baseline","candidate"]) as Variant[]){
    const output=await measure(name);
@@ -72,7 +72,7 @@ try{
   warmupRounds:5,measuredPerVariant:30,freshServerStartsPerVariant:10,
   correctness:"PASS",outputSha256:expected,warm:summarize(warm),freshServer:summarize(cold),
   releaseEligible:false,
-  limitations:"Real JSON-RPC over real Node child processes with an isolated deterministic fake LSP server. Warm candidate reuses one real child; fresh service starts a separate child. Not end-to-end ChatGPT/host/network, and process CPU covers the parent only."
+  limitations:"Real JSON-RPC with the installed basedpyright language server and a fixed isolated Python fixture. Warm candidate reuses the server; fresh service starts a separate server. Not end-to-end ChatGPT/host/network, and process CPU covers the parent only."
  };
  console.log(JSON.stringify(report,null,2));
 }finally{
