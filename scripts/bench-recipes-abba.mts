@@ -79,7 +79,7 @@ try{
       if(!working.ok)throw Error("working_set failed");
       const revision=(working.data as {data:{revision:string}}).data.revision;
       const submit=await registry.call("process",ctx,{
-        action:"workflow_recipe",recipeName:"inspect_repository",recipeInput:{cwd:fixture},
+        action:"workflow_recipe",recipeName:"inspect_repository",recipeInput:{cwd:fixture,parallel:true},
         revision,idempotencyKey:"abba-"+(++counter),
       });
       if(!submit.ok)throw Error("recipe submit failed "+JSON.stringify(submit.error));

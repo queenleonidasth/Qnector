@@ -25,8 +25,8 @@ export function compileRecipe(
     version: 1,
     name: `recipe-${name}`,
     description: `Read-only ${name} recipe; task ${context.taskId}, revision ${context.revision}`,
-    mode: "graph",
-    maxConcurrency: 2,
+    mode: name === "inspect_repository" && input.parallel === true ? "graph" : "sequential",
+    maxConcurrency: name === "inspect_repository" && input.parallel === true ? 2 : 1,
     steps,
     createdAt: now,
     updatedAt: now,
@@ -35,13 +35,15 @@ export function compileRecipe(
 
 function recipeSteps(name: RecipeName, input: Record<string, unknown>): WorkflowStep[] {
   if (name === "inspect_repository" || name === "verify_changes") {
-    onlyKeys(input, ["cwd", "paths"]);
+    onlyKeys(input, name === "inspect_repository" ? ["cwd", "paths", "parallel"] : ["cwd", "paths"]);
+    if (input.parallel !== undefined && typeof input.parallel !== "boolean")
+      throw new Error("RECIPE_INVALID_INPUT: parallel must be a boolean");
     const cwd = optionalString(input.cwd, "cwd");
     const paths = optionalStringList(input.paths, "paths");
     const common = { ...(cwd ? { cwd } : {}) };
     const steps: WorkflowStep[] = [
       { id: "status", type: "tool", tool: "git", input: { action: "status", ...common } },
-      { id: "diff", type: "tool", tool: "git", input: { action: "diff", ...common, ...(paths ? { paths } : {}) } },
+      { id: "diff", type: "tool", tool: "git", input: { action: "diff", ...common, ...(paths ? { paths } : {}) }, dependsOn: input.parallel === true ? undefined : ["status"] },
     ];
     if (name === "verify_changes")
       steps.push({ id: "diagnostics", type: "tool", tool: "workspace", input: { action: "diagnostics", ...(cwd ? { path: cwd } : {}) }, dependsOn: ["diff"] });

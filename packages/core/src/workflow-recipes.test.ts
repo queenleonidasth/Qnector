@@ -5,12 +5,27 @@ const context = { workspaceId: "ws", taskId: "task-1", revision: "rev-1" };
 
 describe("typed workflow recipes", () => {
   it("allows independent read-only repository inspections to run concurrently", () => {
-    const recipe = compileRecipe("inspect_repository", { cwd: ".", paths: ["src"] }, context);
+    const recipe = compileRecipe("inspect_repository", { cwd: ".", paths: ["src"], parallel: true }, context);
     expect(recipe.mode).toBe("graph");
     expect(recipe.maxConcurrency).toBe(2);
     expect(recipe.steps.map((step) => step.id)).toEqual(["status", "diff"]);
     expect(recipe.steps.every((step) => step.type === "tool")).toBe(true);
     expect(recipe.steps[1]?.dependsOn).toBeUndefined();
+  });
+
+  it("preserves default failure dependency and requires explicit parallel opt-in", () => {
+    const legacy = compileRecipe("inspect_repository", { cwd: "." }, context);
+    expect(legacy.mode).toBe("sequential");
+    expect(legacy.maxConcurrency).toBe(1);
+    expect(legacy.steps[1]?.dependsOn).toEqual(["status"]);
+    const verify = compileRecipe("verify_changes", { cwd: "." }, context);
+    expect(verify.mode).toBe("sequential");
+    expect(verify.steps[1]?.dependsOn).toEqual(["status"]);
+    expect(verify.steps[2]?.dependsOn).toEqual(["diff"]);
+    expect(() => compileRecipe("inspect_repository", { parallel: "yes" }, context))
+      .toThrow("parallel must be a boolean");
+    expect(() => compileRecipe("verify_changes", { parallel: true }, context))
+      .toThrow("RECIPE_INVALID_INPUT");
   });
 
   it("rejects invalid recipe input before producing any workflow steps", () => {
