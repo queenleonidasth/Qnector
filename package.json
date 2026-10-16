@@ -21,6 +21,7 @@
     "typecheck": "tsc -b --pretty false",
     "pretest": "tsc -b --pretty false",
     "test": "vitest run --maxWorkers=2",
+    "test:acceptance": "vitest run --no-file-parallelism",
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings 0",
     "format:check": "prettier --check .",

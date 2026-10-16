@@ -47,7 +47,7 @@ results.push({ gate: "public-api-golden", status: "PASS", evidence: `${manifest.
 // interpolate user-provided arguments or paths into the shell string.
 for (const [gate, script] of [
   ["typecheck", "typecheck"],
-  ["test", "test"],
+  ["test", "test:acceptance"],
   ["lint", "lint"],
   ["http-mcp-smoke", "smoke:mcp"],
   ["local-performance", "accept:performance"],
