@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { findVerifiedPackage } from "./package-evidence.mjs";
 import { evidenceDigest, validateControlledSuite, validateEvidenceEnvelope } from "./performance-evidence.mjs";
 import { assessAcceptance } from "./acceptance-scope.mjs";
+import { writeAcceptanceExceptions } from "./acceptance-exception-report.mjs";
 
 const execFileAsync = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -38,9 +39,11 @@ function namesEqual(actual: string[], expected: string[]): boolean {
 }
 if (!namesEqual(manifest.tools.map((tool) => tool.name), expectedTools) ||
     !namesEqual(manifest.hostAliases.map((alias) => alias.name), expectedHostAliases)) {
-  throw new Error("Golden contract fixture must cover the approved 8 grouped tools and 2 opt-in aliases; Plan Mode is retired");
+  results.push({ gate: "public-api-golden", status: "FAIL", evidence: "Expected 8 grouped tools and 2 opt-in aliases, with all retired planning endpoints absent; see fixtures/performance/manifest.json." });
 }
-results.push({ gate: "public-api-golden", status: "PASS", evidence: `${manifest.tools.length} supported grouped tools, ${manifest.hostAliases.length} opt-in aliases; see public-api-contract.test.ts for actions, fields, permissions and legacy shape assertions` });
+if (!results.some((result) => result.gate === "public-api-golden")) {
+  results.push({ gate: "public-api-golden", status: "PASS", evidence: `${manifest.tools.length} supported grouped tools, ${manifest.hostAliases.length} opt-in aliases; see public-api-contract.test.ts for actions, fields, permissions and legacy shape assertions` });
+}
 
 // Node 22+ on Windows cannot execFile a .cmd/.bat script directly.
 // Pass only fixed, trusted acceptance commands through cmd.exe; never
@@ -107,8 +110,10 @@ const report = {
 };
 const output = process.env.QNECTOR_ACCEPTANCE_REPORT ?? path.join(root, "fixtures/performance/task12-acceptance-report.json");
 await writeFile(output, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+const exceptionReport = await writeAcceptanceExceptions(report, process.env.QNECTOR_QA_REPORT_DIR ?? path.join(root, "apps/desktop/release/qa-reports"));
 console.log(JSON.stringify({ report: path.relative(root, output), releaseEligible: report.releaseEligible,
-  localValidationEligible: report.localValidationEligible, waivedGates: report.waivedGates, gates: report.gates }, null, 2));
+  localValidationEligible: report.localValidationEligible, waivedGates: report.waivedGates,
+  exceptionReport: path.relative(root, exceptionReport), gates: report.gates }, null, 2));
 if (results.some((result) => result.status === "FAIL")) process.exitCode = 1;
 
 async function commandResult(file: string, args: string[]) {

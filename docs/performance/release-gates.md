@@ -22,3 +22,13 @@ The user explicitly opted out of tests that require simultaneously operating ano
 This scope does not exempt product-native correctness, packaging, checksums, versioning, trusted signing, local benchmark regressions, or in-place upgrade/rollback checks. Foreground-game and real ChatGPT latency remain unverified, not zero, even if the user waives running those companion applications.
 
 The existing checked-in telemetry and `read_many` fixtures are local component measurements, not end-to-end acceptance. They do not establish the full workload suite, host timing, tunnel availability, signed packaged build, remote upload, or installed upgrade.
+
+## Automatically recorded test exceptions
+
+The acceptance runner writes its detailed JSON report and a second **redacted, human-readable QA exception report** for the same source revision. By default the latter is located under:
+
+    apps/desktop/release/qa-reports/acceptance-exceptions-<12-character-Git-revision>.md
+
+An operator may set QNECTOR_QA_REPORT_DIR to select another output directory. The sidecar records PASS/FAIL/SKIPPED/UNKNOWN counts, only unresolved gates, and an actionable revisit condition for each gate. It **never copies raw stdout/stderr or secret-bearing tool evidence** from the detailed JSON report. A golden public API mismatch is recorded as FAIL and does not prevent other independent checks from running.
+
+The sidecar intentionally lives under the ignored build/release directory; acceptance evidence generation must **not dirty Git**, since that would invalidate the exact-commit package preflight. The tracked historical exception audit is in docs/performance/noplan-qa-exceptions-2026-10-16.md. A failed or missing local gate remains a release blocker even when the user instructs to continue unrelated work.
