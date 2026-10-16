@@ -48,3 +48,30 @@ describe("desktop updater release selection", () => {
     expect(parseSha256Digest("sha512:abc")).toBeUndefined();
   });
 });
+
+it("selects only the Windows artifact matching the advertised release version", () => {
+  const mixedAssets: GitHubReleaseAsset[] = [
+    ...assets,
+    {
+      name: "Qnector-0.4.57-win-x64-setup.exe",
+      browser_download_url: "https://example.test/0.4.57/setup.exe",
+      size: 151,
+    },
+    {
+      name: "Qnector-0.4.57-win-x64-portable.exe",
+      browser_download_url: "https://example.test/0.4.57/portable.exe",
+      size: 152,
+    },
+  ];
+  expect(selectWindowsAsset(mixedAssets, "installed", "v0.4.57")?.name).toBe(
+    "Qnector-0.4.57-win-x64-setup.exe",
+  );
+  expect(selectWindowsAsset(mixedAssets, "portable", "v0.4.57")?.name).toBe(
+    "Qnector-0.4.57-win-x64-portable.exe",
+  );
+  expect(selectWindowsAsset(mixedAssets, "development", "0.4.57")?.name).toBe(
+    "Qnector-0.4.57-win-x64-portable.exe",
+  );
+  expect(selectWindowsAsset(assets, "installed", "0.4.57")).toBeUndefined();
+  expect(selectWindowsAsset(mixedAssets, "installed", "0.4.58")).toBeUndefined();
+});

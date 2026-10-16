@@ -336,7 +336,7 @@ export class DesktopUpdater {
       const latestVersion = normalizeVersion(release.tag_name);
       const currentVersion = normalizeVersion(this.currentVersion);
       this.release = release;
-      this.asset = selectWindowsAsset(release.assets, this.state.mode);
+      this.asset = selectWindowsAsset(release.assets, this.state.mode, latestVersion);
       this.downloadedPath = undefined;
 
       if (compareVersions(latestVersion, currentVersion) <= 0) {

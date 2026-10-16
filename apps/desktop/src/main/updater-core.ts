@@ -38,12 +38,21 @@ export function compareVersions(left: string, right: string): number {
 export function selectWindowsAsset(
   assets: GitHubReleaseAsset[],
   mode: DesktopUpdateMode,
+  expectedVersion?: string,
 ): GitHubReleaseAsset | undefined {
-  const pattern =
-    mode === "installed"
-      ? /^Qnector-.*-win-x64-setup\.exe$/i
-      : /^Qnector-.*-win-x64-portable\.exe$/i;
-  return assets.find((asset) => pattern.test(asset.name));
+  const suffix = mode === "installed" ? "setup.exe" : "portable.exe";
+  const version = expectedVersion === undefined ? undefined : normalizeVersion(expectedVersion);
+  // Never download an obsolete/misnamed asset or a path-like filename from a
+  // release whose tag advertises a different product version.
+  if (version !== undefined && !/^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/i.test(version))
+    return undefined;
+  return assets.find((asset) => {
+    if (!/^Qnector-[a-z0-9.-]+-win-x64-(setup|portable)\.exe$/i.test(asset.name))
+      return false;
+    if (version !== undefined)
+      return asset.name.toLowerCase() === `qnector-${version}-win-x64-${suffix}`.toLowerCase();
+    return asset.name.toLowerCase().endsWith(`-win-x64-${suffix}`);
+  });
 }
 
 export function parseSha256Digest(digest?: string | null): string | undefined {

@@ -58,6 +58,12 @@ describe.skipIf(process.platform !== "win32")(
               body: "integration release",
               assets: [
                 {
+                  name: "Qnector-0.4.5-win-x64-portable.exe",
+                  browser_download_url: `${baseUrl}/wrong-version`,
+                  size: asset.length,
+                  digest: `sha256:${digest}`,
+                },
+                {
                   name: assetName,
                   browser_download_url: `${baseUrl}/asset`,
                   size: asset.length,
@@ -114,6 +120,7 @@ describe.skipIf(process.platform !== "win32")(
       const checked = await updater.check();
       expect(checked.phase).toBe("available");
       expect(checked.latestVersion).toBe("0.4.6");
+      expect(checked.assetName).toBe(assetName);
       expect(checked.canDownload).toBe(true);
 
       const downloaded = await updater.download();
