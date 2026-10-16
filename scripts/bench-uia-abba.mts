@@ -1,3 +1,5 @@
+import {readFileSync,existsSync} from "node:fs";
+import {findVerifiedPackage} from "./package-evidence.mjs";
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import os from "node:os";
@@ -10,7 +12,12 @@ const root=path.resolve(import.meta.dirname,"..");
 const baselineRoot=path.resolve(process.env.QNECTOR_BENCH_BASELINE??"D:\\Projects\\Qnector-PlanMode2");
 const {WindowsUiAutomationService:LegacyService}=await import(pathToFileURL(path.join(baselineRoot,"packages/core/src/ui-automation.ts")).href) as {WindowsUiAutomationService:typeof WindowsUiAutomationService};
 const baseHelper="C:\\Program Files\\Qnector\\resources\\uia-helper\\qnector-uia.exe";
-const candidateHelper=path.join(root,"apps/desktop/release/durable-candidate-20261015-104030/win-unpacked/resources/uia-helper/qnector-uia.exe");
+const candidatePackage=findVerifiedPackage(execFileSync("git",["rev-parse","HEAD"],{cwd:root,encoding:"utf8",windowsHide:true}).trim());
+if(!candidatePackage)throw Error("CANDIDATE_EXACT_COMMIT_PACKAGE_NOT_VERIFIED");
+const candidateHelper=path.join(candidatePackage.packageDirectory,"win-unpacked","resources","uia-helper","qnector-uia.exe");
+if(!existsSync(candidateHelper))throw Error("CANDIDATE_UIA_HELPER_MISSING");
+const baselineProvenance=JSON.parse(readFileSync("C:/Program Files/Qnector/resources/build-provenance.json","utf8")) as {sourceRevision:string;dirtyTree:boolean};
+if(!/^[a-f0-9]{40}$/i.test(baselineProvenance.sourceRevision)||baselineProvenance.dirtyTree)throw Error("BASELINE_PROVENANCE_INVALID");
 const git=(cwd:string)=>execFileSync("git",["rev-parse","HEAD"],{cwd,encoding:"utf8",windowsHide:true}).trim();
 const helpers:{baseline:WindowsUiAutomationService;candidate:WindowsUiAutomationService}={
   baseline:new LegacyService({helperPath:baseHelper}),
@@ -58,7 +65,7 @@ try{
   console.log(JSON.stringify({
     schemaVersion:1,workload:"real-uia-native-helper-list-windows",
     baselineCodeRevision:git(baselineRoot),candidateCodeRevision:git(root),
-    candidatePackagedHelperRevision:"7466deccb16e9579a7230c405ea1e3f8da1d1d6e",
+    candidatePackagedHelperRevision:candidatePackage.revision,baselinePackagedHelperRevision:baselineProvenance.sourceRevision,
     baselineHelper:baseHelper,candidateHelper,
     countWindowsQuery:50,warmupRounds:5,measuredPerVariant:30,coldHelperProcessPerVariant:10,
     identitySha256:canonicalHash,identityProcessId:expectedPid,correctness:"PASS",
