@@ -273,7 +273,7 @@ html[data-motion="off"] *::after {
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(12px);
   color: var(--text-gold);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: color 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .status-dot {
@@ -614,7 +614,7 @@ html[data-motion="off"] *::after {
   font-weight: 600;
   color: var(--text-gold);
   margin-top: 6px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .hold-hint-pill.active {
@@ -700,7 +700,7 @@ html[data-motion="off"] *::after {
   align-items: center;
   gap: 4px;
   box-shadow: 0 2px 8px rgba(230, 186, 80, 0.25);
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   white-space: nowrap;
 }
 
@@ -739,7 +739,7 @@ html[data-motion="off"] *::after {
   justify-content: center;
   gap: 8px;
   box-shadow: 0 6px 20px var(--gold-glow);
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: color 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
 }
@@ -1474,7 +1474,7 @@ html[data-motion="off"] *::after {
   cursor: pointer;
   padding: 4px;
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .btn-drawer-close:hover {
@@ -2169,7 +2169,7 @@ html[data-motion="off"] *::after {
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   gap: 10px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .setting-toggle-card:hover {
@@ -2231,7 +2231,7 @@ html[data-motion="off"] *::after {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .btn-drawer-action:hover {
@@ -2275,7 +2275,7 @@ html[data-motion="off"] *::after {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .memory-summary-box.highlight {

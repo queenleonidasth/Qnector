@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { useRoyalCanvasMotion } from "./royal-motion-clock.js";
+import { MOTION_CHANGE_EVENT, currentMotionQuality, motionBudget } from "./motion-policy.js";
 
 const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url).href;
 
@@ -10,7 +11,7 @@ interface QueenLiquidOrbProps {
   motionEnabled: boolean;
 }
 
-const points = Array.from({ length: 24 }, (_, index) => ({
+const points = Array.from({ length: 36 }, (_, index) => ({
   phase: index * 2.39996,
   radius: 0.18 + ((index * 19) % 61) / 100,
   width: 0.3 + (index % 3) * 0.22,
@@ -42,6 +43,7 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
     const cy = height / 2;
     const radius = Math.min(width, height) * 0.49;
     const time = animated ? seconds : 0;
+    const budget = motionBudget(currentMotionQuality());
     const intensity = stateRef.current.connected ? 1 : 0.52;
     const speed = stateRef.current.holding ? 1.35 : 0.26;
 
@@ -68,7 +70,7 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
     ctx.fillRect(0, 0, width, height);
 
     ctx.lineCap = "round";
-    for (let arc = 0; arc < 7; arc += 1) {
+    for (let arc = 0; arc < budget.orbArcs; arc += 1) {
       const angle = arc * 0.78 + time * speed * (arc % 2 ? -0.49 : 0.46);
       ctx.save();
       ctx.translate(cx, cy);
@@ -89,7 +91,7 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
       ctx.restore();
     }
 
-    for (const point of points) {
+    for (const point of points.slice(0, budget.orbPoints)) {
       const phase = point.phase + time * speed * 0.66;
       const x = cx + Math.cos(phase) * point.radius * radius;
       const y = cy + Math.sin(phase * 1.14) * point.radius * radius * 0.8;
@@ -111,7 +113,7 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
       const rect = parent.getBoundingClientRect();
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+      const dpr = Math.min(window.devicePixelRatio || 1, motionBudget(currentMotionQuality()).maxDpr);
       geometry.current = { width, height };
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
@@ -129,7 +131,9 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
       });
     });
     if (canvas.parentElement) observer.observe(canvas.parentElement);
+    document.documentElement.addEventListener(MOTION_CHANGE_EVENT, resize);
     return () => {
+      document.documentElement.removeEventListener(MOTION_CHANGE_EVENT, resize);
       observer.disconnect();
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
     };

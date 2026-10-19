@@ -77,7 +77,7 @@ describe("Royal Liquid Glass V2.1 production trial", () => {
     expect(app).toContain("animationsEnabled");
     expect(app).toContain("void disconnect()");
     expect(clock).toContain("!document.hidden");
-    expect(clock).toContain("query.matches");
+    expect(clock).toContain("media?.matches");
     expect(css).toContain('html[data-motion="off"]');
     expect(oldCss).toContain('html.qnector-window-paused *');
     expect(oldCss).toContain('html[data-motion="off"] *');

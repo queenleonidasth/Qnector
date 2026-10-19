@@ -1,0 +1,475 @@
+/* QNECTOR Royal Liquid Motion V2.1 — shared production UI language.
+ * Layers are scoped; the functional controls, MCP data and accessibility remain intact.
+ * One primary glass surface per dialog, not dozens of expensive nested backdrops.
+ */
+:root {
+  --motion-press: 120ms;
+  --motion-hover: 175ms;
+  --motion-panel: 270ms;
+  --motion-drawer: 310ms;
+  --motion-ease: cubic-bezier(.16,1,.3,1);
+  --liquid-text: #f5efdf;
+  --liquid-muted: #c6bdb0;
+  --liquid-gold: #f6d694;
+  --liquid-glass-edge: rgba(252,213,145,.35);
+  --liquid-glass-surface: rgba(15,17,23,.78);
+  --liquid-glass-refraction: linear-gradient(143deg,rgba(255,231,179,.085),transparent 24%,transparent 72%,rgba(239,173,76,.068));
+  --liquid-glass-depth: inset 0 1px rgba(255,239,201,.15), inset 0 -1px rgba(255,211,139,.05), 0 16px 38px rgba(0,0,0,.34);
+}
+:where(button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid #ffda91;
+  outline-offset: 2px;
+}
+::selection { background: rgba(248,203,128,.36);color:#fffaf0; }
+:where(input, textarea, select) { accent-color: var(--liquid-gold); }
+:where(.drawer-content,.runtime-scroll,.skills-list,.memory-v2-task-list,.activity-stream)::-webkit-scrollbar-thumb {
+  background: rgba(244,203,132,.35);
+  border-radius: 9px;
+}
+:where(.drawer-content,.runtime-scroll,.skills-list,.activity-stream)::-webkit-scrollbar {
+  width: 7px;
+}
+
+/* Only top-level shells pay the cost of one blur/filter. Other cards use
+   translucent tones + inset edges, keeping GPU use bounded for gameplay. */
+.app-header,
+.hero-glass-section,
+.activity-glass-card,
+.floating-glass-dock,
+.drawer-card,
+.setup-card,
+.activity-detail-card,
+.skills-modal-card,
+.skills-detail-card,
+.skills-editor-card,
+.skills-overlay-content {
+  border-color: var(--liquid-glass-edge);
+  background-image: var(--liquid-glass-refraction);
+  background-color: var(--liquid-glass-surface);
+  box-shadow: var(--liquid-glass-depth);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  backdrop-filter: blur(12px) saturate(130%);
+}
+.app-header,
+.floating-glass-dock {
+  -webkit-backdrop-filter: blur(10px) saturate(118%);
+  backdrop-filter: blur(10px) saturate(118%);
+}
+.drawer-card,
+.setup-card,
+.activity-detail-card {
+  -webkit-backdrop-filter: blur(15px) saturate(132%);
+  backdrop-filter: blur(15px) saturate(132%);
+}
+:where(.app-header,.hero-glass-section,.activity-glass-card,.floating-glass-dock,.drawer-card,.setup-card,.activity-detail-card) {
+  isolation: isolate;
+}
+:where(.drawer-card,.setup-card,.activity-detail-card) > * {
+  position: relative;
+}
+/* Use a single restrained surface reflection; no separate perpetual shimmer. */
+:where(.drawer-card,.setup-card,.activity-detail-card)::before {
+  pointer-events: none;
+  background: linear-gradient(165deg,rgba(255,252,230,.10),transparent 23%,transparent 80%,rgba(251,202,114,.03));
+}
+
+/* Header and dock emphasize location. Transitions target only paint/compositor
+   properties, not dimensions, fonts, layout or all properties indiscriminately. */
+.app-header,
+.hero-glass-section,
+.activity-glass-card {
+  animation: glassSurfaceArrive var(--motion-panel) var(--motion-ease) both;
+}
+@keyframes glassSurfaceArrive {
+  from { opacity: .82; transform: translate3d(0,6px,0); }
+  to { opacity:1; transform: translate3d(0,0,0); }
+}
+.dock-pill-btn,
+.drawer-menu-tabs button {
+  position: relative;
+  transition:
+    color var(--motion-hover) ease,
+    background-color var(--motion-hover) ease,
+    box-shadow var(--motion-hover) ease,
+    border-color var(--motion-hover) ease,
+    transform var(--motion-press) var(--motion-ease);
+}
+.dock-pill-btn:hover:not(:disabled),
+.drawer-menu-tabs button:hover:not(:disabled) {
+  color: #ffe8b8;
+  background-color: rgba(251,210,137,.105);
+}
+.dock-pill-btn:active:not(:disabled),
+.drawer-menu-tabs button:active:not(:disabled) { transform: scale(.965); }
+.dock-pill-btn.active,
+.drawer-menu-tabs button.active,
+.drawer-menu-tabs button[aria-current="page"] {
+  color:#ffe6a8;
+  background: linear-gradient(152deg,rgba(244,191,97,.25),rgba(86,57,28,.19));
+  box-shadow: inset 0 1px rgba(255,235,183,.22),0 4px 13px rgba(0,0,0,.18);
+}
+.drawer-menu-tabs button[aria-current="page"]::after {
+  transform:scaleX(1);
+  transform-origin:center;
+  transition:transform var(--motion-hover) var(--motion-ease);
+}
+/* Retargetable view motion: key changes restart the entrant only. The
+   surrounding backdrop, tabs and card remain in place during rapid clicks. */
+.drawer-page-left { animation: liquidPageFromRight 200ms var(--motion-ease) both; }
+.drawer-page-right { animation: liquidPageFromLeft 200ms var(--motion-ease) both; }
+@keyframes liquidPageFromRight {
+  from { opacity:.72;transform:translate3d(14px,0,0) scale(.996); }
+  to { opacity:1;transform:translate3d(0,0,0) scale(1); }
+}
+@keyframes liquidPageFromLeft {
+  from { opacity:.72;transform:translate3d(-14px,0,0) scale(.996); }
+  to { opacity:1;transform:translate3d(0,0,0) scale(1); }
+}
+.drawer-backdrop::before { animation: liquidBackdropIn 220ms ease-out both; }
+.drawer-backdrop.closing::before {animation: liquidBackdropOut 150ms ease-in both;}
+@keyframes liquidBackdropIn {from{opacity:0}to{opacity:1}}
+@keyframes liquidBackdropOut {from{opacity:1}to{opacity:0}}
+.drawer-card {animation:liquidDrawerIn var(--motion-drawer) var(--motion-ease) both;}
+.drawer-card.closing {animation:liquidDrawerOut 190ms ease-in both;}
+@keyframes liquidDrawerIn {
+  from{transform:translate3d(0,16px,0) scale(.985);opacity:.93}
+  to{transform:translate3d(0,0,0) scale(1);opacity:1}
+}
+@keyframes liquidDrawerOut {
+  from{transform:translate3d(0,0,0) scale(1);opacity:1}
+  to{transform:translate3d(0,12px,0) scale(.985);opacity:0}
+}
+
+/* User input: quiet glass affordances and quick tactile acknowledgment. */
+:where(.btn-drawer-action,.btn-drawer-close,.btn-liquid-action,.btn-update-primary,
+ .btn-update-secondary,.setup-primary,.setup-secondary,.skills-primary,
+ .skills-secondary,.skills-add,.skills-back,.skills-footer button,
+ .activity-detail-close,.skill-toggle,.skills-search button) {
+  transition:
+    background-color var(--motion-hover) ease,
+    color var(--motion-hover) ease,
+    border-color var(--motion-hover) ease,
+    box-shadow var(--motion-hover) ease,
+    transform var(--motion-press) var(--motion-ease);
+}
+:where(.btn-drawer-action,.btn-drawer-close,.btn-liquid-action,.btn-update-primary,
+ .btn-update-secondary,.setup-primary,.setup-secondary,.skills-primary,
+ .skills-secondary,.skills-add,.skills-back,.skills-footer button,
+ .activity-detail-close,.skill-toggle,.skills-search button):hover:not(:disabled) {
+  border-color: rgba(255,222,159,.58);
+  box-shadow: inset 0 1px rgba(255,246,221,.19),0 7px 19px rgba(0,0,0,.18);
+}
+:where(.btn-drawer-action,.btn-drawer-close,.btn-liquid-action,.btn-update-primary,
+ .btn-update-secondary,.setup-primary,.setup-secondary,.skills-primary,
+ .skills-secondary,.skills-add,.skills-back,.skills-footer button,
+ .activity-detail-close,.skill-toggle,.skills-search button):active:not(:disabled) {
+  transform:scale(.976);
+}
+:where(.btn-drawer-action,.btn-drawer-close,.btn-liquid-action,.btn-update-primary,
+ .btn-update-secondary,.setup-primary,.setup-secondary,.skills-primary,
+ .skills-secondary,.skills-add,.skills-back,.skills-footer button,
+ .activity-detail-close,.skill-toggle,.skills-search button):disabled {
+  transform:none;
+  filter:saturate(.65);
+  cursor:not-allowed;
+}
+:where(.drawer-select,.skills-search input,.skill-field input,.skill-field textarea,
+ .setup-field input,.setup-field select,.drawer-content input,.drawer-content textarea) {
+  border-color:rgba(253,213,145,.25);
+  background-color:rgba(9,11,17,.54);
+  color:var(--liquid-text);
+  caret-color:#ffe4ad;
+  transition:border-color var(--motion-hover) ease,box-shadow var(--motion-hover) ease;
+}
+:where(.drawer-select,.skills-search input,.skill-field input,.skill-field textarea,
+ .setup-field input,.drawer-content input,.drawer-content textarea):focus-visible {
+  outline:2px solid rgba(255,220,144,.83);
+  outline-offset:2px;
+}
+
+/* Nested list/card surfaces: refraction from a single inset edge, no nested blur. */
+:where(.setting-toggle-card,.runtime-summary-card,.runtime-section,.runtime-list-row,
+ .memory-v2-box,.memory-v2-task,.memory-v2-event,.memory-summary-box,
+ .skill-row,.skills-panel,.skills-detail-panel,.skills-validation-row,
+ .update-status-panel,.update-version-panel,.activity-item,.setup-link-grid button,
+ .setup-instruction-row,.setup-field) {
+  border-color:rgba(248,202,122,.19);
+  background-color:rgba(20,20,25,.38);
+  box-shadow:inset 0 1px rgba(255,235,187,.055);
+  transition:
+    border-color var(--motion-hover) ease,
+    background-color var(--motion-hover) ease,
+    box-shadow var(--motion-hover) ease,
+    transform var(--motion-press) var(--motion-ease);
+}
+:where(.setting-toggle-card,.runtime-summary-card,.memory-v2-task,.memory-v2-event,
+ .skill-row,.activity-item,.setup-link-grid button):hover {
+  border-color:rgba(255,219,147,.34);
+  background-color:rgba(64,45,24,.25);
+}
+:where(.activity-item,.skill-row,.runtime-list-row):focus-visible {
+  outline:2px solid #ffde99;outline-offset:2px;
+}
+.activity-item.entering {
+  animation:liquidFeedEnter 215ms var(--motion-ease) both;
+}
+@keyframes liquidFeedEnter {
+  from{opacity:.4;transform:translate3d(0,9px,0)}
+  to{opacity:1;transform:translate3d(0,0,0)}
+}
+.activity-item.running {
+  animation:none;
+  border-color:rgba(244,199,113,.38);
+  box-shadow:inset 2px 0 rgba(244,197,110,.68),inset 0 1px rgba(255,243,213,.08);
+}
+.activity-item.running::before {
+  animation:liquidStatusHalo 2.4s ease-in-out infinite;
+  opacity:.5;
+}
+@keyframes liquidStatusHalo {
+  0%,100%{transform:scale(.94);opacity:.2}
+  50%{transform:scale(1.03);opacity:.5}
+}
+.activity-item.failed,.activity-item.error,
+.activity-detail-section.error {
+  border-color:rgba(244,138,132,.35);
+  background-color:rgba(102,34,38,.20);
+}
+.activity-item.succeeded,.runtime-release-status.success {
+  border-color:rgba(117,223,159,.25);
+}
+.runtime-summary-card strong,
+.memory-v2-task-stats,
+.update-progress-inline-heading span,
+.update-progress-inline-meta,
+.motion-telemetry-result {
+  font-variant-numeric:tabular-nums;
+}
+
+/* Motion Quality UI — persisted locally; older animationsEnabled setting wins. */
+.motion-settings-card {
+  display:grid;
+  gap:12px;
+  padding:14px;
+}
+.motion-settings-header {display:grid;gap:4px}
+.motion-settings-header strong {font-size:13px;color:var(--liquid-text)}
+.motion-settings-header small {font-size:11px;color:var(--liquid-muted)}
+.motion-quality-segments {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:3px;
+  padding:3px;
+  border:1px solid rgba(252,213,145,.27);
+  background:rgba(8,10,15,.62);
+  border-radius:11px;
+}
+.motion-quality-segments button {
+  min-width:0;min-height:36px;
+  border:0;border-radius:8px;
+  background:transparent;
+  color:#d3c7b6;
+  font:650 10px var(--font-sans);
+  cursor:pointer;
+  transition:color var(--motion-hover) ease,background-color var(--motion-hover) ease,
+    transform var(--motion-press) var(--motion-ease);
+}
+.motion-quality-segments button:hover:not(:disabled) {
+  color:#ffecbf;background:rgba(255,215,142,.11);
+}
+.motion-quality-segments button:active:not(:disabled) {transform:scale(.96)}
+.motion-quality-segments button[aria-pressed="true"] {
+  color:#24190b;
+  background:linear-gradient(142deg,#ffe6b0,#deab60);
+  box-shadow:inset 0 1px rgba(255,250,224,.54),0 4px 12px rgba(0,0,0,.19);
+}
+.motion-quality-help {
+  min-height:36px;
+  margin:0;
+  font-size:11px;
+  line-height:1.5;
+  color:var(--liquid-muted);
+}
+.motion-telemetry-toggle {
+  display:flex;align-items:center;gap:9px;
+  font-size:11px;color:var(--liquid-text);cursor:pointer;
+}
+.motion-telemetry-toggle input {width:15px;height:15px;flex:none}
+.motion-telemetry-result {
+  padding:8px 10px;
+  border-radius:9px;
+  border:1px solid rgba(247,201,123,.23);
+  background:rgba(4,5,8,.48);
+  color:#f6daa2;font-size:11px;line-height:1.45;
+}
+
+/* Semantic data stays authoritative — no decorative fake download % or
+   repeated rotating loading emblems over determinate progress. */
+.update-progress-track {overflow:hidden}
+.update-progress-track > span {
+  transition:width 185ms linear;
+  background:linear-gradient(90deg,#c1893b,#ffe7af);
+}
+.update-status-panel.downloading .update-status-panel-icon,
+.update-status-panel.ux-busy .update-status-panel-icon {
+  animation:none;
+}
+.update-status-panel.ux-busy:not(.downloading) .update-status-panel-icon {
+  animation:liquidPendingPulse 1.7s ease-in-out infinite;
+}
+@keyframes liquidPendingPulse {
+  0%,100%{opacity:.64;transform:scale(.98)}
+  50%{opacity:1;transform:scale(1.035)}
+}
+.update-restart-card {
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+  border-color:rgba(248,203,130,.38);
+  box-shadow:var(--liquid-glass-depth);
+}
+.update-status-badge.error,
+.setup-error {color:#ffd2cc}
+
+/* Setup is a deliberate multistep operation. Short changes, no input reset,
+   no fabricated progress or indefinite overlay once operation terminates. */
+.setup-card {animation:liquidDialogOpen 325ms var(--motion-ease) both;}
+.activity-detail-card {animation:liquidDialogOpen 255ms var(--motion-ease) both;}
+@keyframes liquidDialogOpen {
+  from{opacity:.84;transform:translate3d(0,11px,0) scale(.989)}
+  to{opacity:1;transform:translate3d(0,0,0) scale(1)}
+}
+.setup-step-badge,
+.setup-progress-step,
+.setup-link-grid button {
+  transition:
+    color var(--motion-hover) ease,
+    border-color var(--motion-hover) ease,
+    background-color var(--motion-hover) ease,
+    transform var(--motion-press) var(--motion-ease);
+}
+.setup-link-grid button:active:not(:disabled) {transform:scale(.985)}
+
+/* Skill and Memory: reveal only newly mounted content, never loops on data. */
+.skill-row {animation:liquidFeedEnter 170ms var(--motion-ease) both;}
+.skill-row:nth-child(n+5) {animation-delay:0ms}
+.memory-v2-task,.memory-v2-event {animation:liquidListReveal 195ms var(--motion-ease) both}
+@keyframes liquidListReveal {
+  from{opacity:.72;transform:translate3d(0,5px,0)}
+  to{opacity:1;transform:translate3d(0,0,0)}
+}
+.memory-v2-box,.memory-summary-box {
+  color:var(--liquid-text);
+}
+.memory-v2-meta,.memory-v2-task-stats,.memory-box-subtext {
+  color:var(--liquid-muted);
+}
+
+/* Quality budgets: native rAF cadence remains the same at every moving profile.
+   Only amount/blur/particles change, never deliberately 30 or 42 FPS. */
+html[data-motion-quality="eco"] :where(.drawer-card,.setup-card,.activity-detail-card,
+ .hero-glass-section,.activity-glass-card,.floating-glass-dock,.app-header) {
+  -webkit-backdrop-filter:blur(5px);
+  backdrop-filter:blur(5px);
+}
+html[data-motion-quality="eco"] .queen-orb-float {
+  animation-duration:9s;
+}
+html[data-motion-quality="off"] .queen-orb-float,
+html[data-motion-quality="reduced"] .queen-orb-float,
+html[data-motion-quality="off"] .plasma-aura,
+html[data-motion-quality="reduced"] .plasma-aura {
+  animation:none!important;
+}
+html[data-motion-quality="off"] :where(.app-header,.hero-glass-section,
+ .activity-glass-card,.drawer-card,.drawer-page,.skill-row,.activity-item.entering,
+ .memory-v2-task,.memory-v2-event,.setup-card,.activity-detail-card) {
+  animation:none!important;
+}
+html[data-motion-quality="reduced"] :where(.app-header,.hero-glass-section,
+ .activity-glass-card,.drawer-page,.skill-row,.activity-item.entering,
+ .memory-v2-task,.memory-v2-event,.setup-card,.activity-detail-card) {
+  animation:none!important;
+}
+html[data-motion-quality="off"] :where(.btn-liquid-action,.btn-drawer-action,
+ .dock-pill-btn,.drawer-menu-tabs button,.motion-quality-segments button) {
+  transition:none!important;
+}
+html[data-motion-quality="reduced"] :where(.drawer-card,.setup-card,.activity-detail-card) {
+  animation:none!important;
+}
+
+/* The four quality segment controls remain responsive in every state. */
+@media(max-width:470px) {
+  .motion-quality-segments button {min-height:38px;font-size:10px;padding:4px 2px}
+  .motion-settings-card {padding:10px}
+}
+@media(prefers-reduced-motion:reduce) {
+  .drawer-page-left,.drawer-page-right,
+  .setup-card,.activity-detail-card,
+  .memory-v2-task,.memory-v2-event,
+  .skill-row,.activity-item.entering {
+    animation:none!important;
+  }
+  .activity-item.running::before,
+  .update-status-panel.ux-busy .update-status-panel-icon {animation:none!important}
+}
+
+
+/* Stable virtual positioning lives on the outer row. Inner button can
+ * independently animate feedback without overwriting the scroll transform. */
+.activity-virtual-row {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  right: 2px;
+  height: 44px;
+  transform-origin: top center;
+}
+.activity-virtual-row > .activity-item {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  width: 100%;
+  height: 44px;
+  will-change: auto;
+  transform-origin: center;
+}
+.activity-virtual-row > .activity-item.entering {
+  animation: liquidFeedEnter 215ms var(--motion-ease) both;
+}
+.activity-virtual-row > .activity-item:active:not(:disabled) {
+  transform: scale(.992);
+}
+html[data-motion-quality="reduced"] .activity-virtual-row > .activity-item.entering,
+html[data-motion-quality="off"] .activity-virtual-row > .activity-item.entering {
+  animation: none !important;
+}
+
+
+/* Precise one-stroke SVG vocabulary across header and dock. Avoid colored
+ * platform emoji, whose pixels and baselines do not match Liquid Glass. */
+.royal-inline-icon {
+  display:inline-block;
+  flex:none;
+  vertical-align:middle;
+  color:currentColor;
+  filter:drop-shadow(0 0 2px rgba(243,188,101,.11));
+}
+.drawer-title {
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+}
+.drawer-title > .royal-inline-icon {
+  color:#f9d997;
+}
+.dock-pill-btn > span:first-child {
+  display:inline-grid;
+  place-items:center;
+}
+.floating-glass-dock.dashboard-dock .dock-pill-btn > span:first-child {
+  width:18px;
+  height:18px;
+  flex:0 0 18px;
+}

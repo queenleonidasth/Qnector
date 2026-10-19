@@ -302,39 +302,39 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 
 ### Phase 0 — Baseline & Design Specification
 - [ ] **AR-01** — Capture screenshot/video baseline for Dashboard, Drawer, Memory, Skills, Runtime, Settings, Setup, Updater and all connection states; record sizes and paths. **Evidence:** _pending_
-- [ ] **AR-02** — Map all 42 current CSS keyframes and other transitions/Canvas/rAF handlers to owners, selectors and event triggers. **Evidence:** _pending_
-- [ ] **AR-03** — Freeze design tokens, motion style hierarchy, safe durations/easing, accessible fallback states. **Evidence:** _pending_
-- [ ] **AR-04** — Document exact state transition diagrams for Orb connect/disconnect, task status, setup and updater. **Evidence:** _pending_
+- [x] **AR-02** — Map all 42 current CSS keyframes and other transitions/Canvas/rAF handlers to owners, selectors and event triggers. **Evidence:** royal-motion-keyframe-inventory.md and 90-reference source mapping
+- [x] **AR-03** — Freeze design tokens, motion style hierarchy, safe durations/easing, accessible fallback states. **Evidence:** royal-motion-system.css token palette; state-contracts.md
+- [x] **AR-04** — Document exact state transition diagrams for Orb connect/disconnect, task status, setup and updater. **Evidence:** royal-motion-state-contracts.md connection/drawer/setup/update diagrams
 - [ ] **AR-05** — Record real Windows Electron CPU/GPU/frame-time baseline including visible/minimized/hidden and game-coexistence tests. **Evidence:** _pending_
-- [ ] **AR-06** — Approve canonical mapping and mockup; note any final visual adjustments without erasing original requirements. **Evidence:** _pending_
+- [x] **AR-06** — Approve canonical mapping and mockup; note any final visual adjustments without erasing original requirements. **Evidence:** approved Queen Liquid Glass HTML V2.1 and user design feedback
 
 ### Phase 1 — Motion Foundation
-- [ ] **AR-07** — Implement typed motion tokens; unit tests for semantic categories/timings. **Evidence:** _pending_
-- [ ] **AR-08** — Implement central Motion Controller and motion quality provider with unchanged boolean-off config semantics. **Evidence:** _pending_
-- [ ] **AR-09** — Create reusable CSS/WAAPI presets for press/hover/enter/exit/status/loop, with centralized theme values. **Evidence:** _pending_
-- [ ] **AR-10** — Implement interrupt/reverse/retarget/cancel with cleanup on unmount and repeated state changes. **Evidence:** _pending_
-- [ ] **AR-11** — Unify visibility, adaptive quality and OS reduced-motion policies across Electron/renderer. **Evidence:** _pending_
-- [ ] **AR-12** — Add opt-in QC instrumentation for frame time, dropped frames and animation counts; production disabled by default. **Evidence:** _pending_
+- [x] **AR-07** — Implement typed motion tokens; unit tests for semantic categories/timings. **Evidence:** motion-policy.ts and motion-policy.test.ts
+- [x] **AR-08** — Implement central Motion Controller and motion quality provider with unchanged boolean-off config semantics. **Evidence:** motion-policy.ts, royal-motion-clock.ts, native controls and QA
+- [x] **AR-09** — Create reusable CSS/WAAPI presets for press/hover/enter/exit/status/loop, with centralized theme values. **Evidence:** royal-motion-system.css shared transitions for press/hover/enter/exit/status
+- [x] **AR-10** — Implement interrupt/reverse/retarget/cancel with cleanup on unmount and repeated state changes. **Evidence:** 40 rapid native route retargets; rAF pause/cancel cleanup
+- [x] **AR-11** — Unify visibility, adaptive quality and OS reduced-motion policies across Electron/renderer. **Evidence:** native window visibility/OS reduce/quality/old boolean-off tested
+- [x] **AR-12** — Add opt-in QC instrumentation for frame time, dropped frames and animation counts; production disabled by default. **Evidence:** opt-in local-only native telemetry FPS/P95/missed frames
 
 ### Phase 2 — Ambient & Brand Motion
-- [ ] **AR-13** — Retire **falling Matrix text** from production background and replace with **Liquid Silk Ribbon / Aurora Canvas**, adaptive frame scheduling, DPR bounds and resize/visibility safeguards; retain old Matrix implementation only for reference and rollback if needed. **Evidence:** _pending_
-- [ ] **AR-14** — Implement coordinated refracted waves, glass caustic glow, suspended particles and layered ambient lighting as one GPU/CPU-budgeted system; no duplicated loops and no text rain. **Evidence:** _pending_
-- [ ] **AR-15** — Rework Header, Logo and Dashboard entrances with the user's actual `icon-256_square.png` Queen brand mark (no crown-only placeholder); glass material consistency across menus. **Evidence:** _pending_
-- [ ] **AR-16** — Rework Orb as premium multi-layer liquid glass with living light filaments and internal caustics, outer orbit, and a **free-floating Queen portrait blended directly into the internal glass layer, with no square icon tile, frame, rectangular background or bezel**; preserve connected/idle quality and connection-specific intensity. **Evidence:** _pending_
-- [ ] **AR-17** — Implement 3-second hold-to-disconnect with **zero visible track/dot when idle**, a real hold-only visible radial progress ring, early-release/pointer-cancel reset, keyboard hold, synthetic click suppression, accurate disconnect/reconnect and verified success burst. **Evidence:** _pending_
+- [x] **AR-13** — Retire **falling Matrix text** from production background and replace with **Liquid Silk Ribbon / Aurora Canvas**, adaptive frame scheduling, DPR bounds and resize/visibility safeguards; retain old Matrix implementation only for reference and rollback if needed. **Evidence:** royal-silk-background.tsx replaces runtime Matrix, DPR and visibility QA
+- [x] **AR-14** — Implement coordinated refracted waves, glass caustic glow, suspended particles and layered ambient lighting as one GPU/CPU-budgeted system; no duplicated loops and no text rain. **Evidence:** bounded Silk/caustic/particles and Queen Orb share one native rAF
+- [x] **AR-15** — Rework Header, Logo and Dashboard entrances with the user's actual `icon-256_square.png` Queen brand mark (no crown-only placeholder); glass material consistency across menus. **Evidence:** Queen PNG in header, Liquid Glass top-level materials, native images
+- [x] **AR-16** — Rework Orb as premium multi-layer liquid glass with living light filaments and internal caustics, outer orbit, and a **free-floating Queen portrait blended directly into the internal glass layer, with no square icon tile, frame, rectangular background or bezel**; preserve connected/idle quality and connection-specific intensity. **Evidence:** frameless sharp Queen Orb, Canvas flow and native Electron preview
+- [x] **AR-17** — Implement 3-second hold-to-disconnect with **zero visible track/dot when idle**, a real hold-only visible radial progress ring, early-release/pointer-cancel reset, keyboard hold, synthetic click suppression, accurate disconnect/reconnect and verified success burst. **Evidence:** native 3s hold/cancel/rejected backend and hidden idle ring QC
 - [ ] **AR-18** — Benchmark full/balanced/eco/off ambient quality and tune budgets to protect gaming performance. **Evidence:** _pending_
 
 ### Phase 3 — Navigation & Layout
-- [ ] **AR-19** — Replace dock hover/press/indicator animations with shared presets and accessible active semantics. **Evidence:** _pending_
-- [ ] **AR-20** — Rework drawer open/close with reliable completion, no missing keyframes, accessible focus and Escape. **Evidence:** _pending_
-- [ ] **AR-21** — Replace drawer tab timeout blocking with retargetable route transitions; preserve fast-click behavior. **Evidence:** _pending_
-- [ ] **AR-22** — Consolidate shared Backdrop/Modal/Popover motion and safe click-outside/keyboard behavior. **Evidence:** _pending_
+- [x] **AR-19** — Replace dock hover/press/indicator animations with shared presets and accessible active semantics. **Evidence:** royal-icons.tsx and dock hover/press/selection/focus CSS
+- [x] **AR-20** — Rework drawer open/close with reliable completion, no missing keyframes, accessible focus and Escape. **Evidence:** reversible drawer open/close and focus/Escape native QC
+- [x] **AR-21** — Replace drawer tab timeout blocking with retargetable route transitions; preserve fast-click behavior. **Evidence:** 40 instant retargeted tab clicks without 200ms lock and scroll restore
+- [x] **AR-22** — Consolidate shared Backdrop/Modal/Popover motion and safe click-outside/keyboard behavior. **Evidence:** shared modal/backdrop glass + existing keyboard/focus/click-outside QA
 - [ ] **AR-23** — Implement optional Shared Element list-to-detail transitions with fallback for virtualized rows. **Evidence:** _pending_
-- [ ] **AR-24** — Verify rapid nav, direction changes, focus, scrolled content persistence, keyboard and reduced mode. **Evidence:** _pending_
+- [x] **AR-24** — Verify rapid nav, direction changes, focus, scrolled content persistence, keyboard and reduced mode. **Evidence:** native multi-viewport drawer navigation, focus and scroll retention
 
 ### Phase 4 — Microinteractions & Screens
-- [ ] **AR-25** — Rework shared buttons/switches/checkboxes/dropdowns; remove transition:all where harmful. **Evidence:** _pending_
-- [ ] **AR-26** — Rework Live Activity entrance/running/error/success/detail; separate virtualization transforms. **Evidence:** _pending_
+- [x] **AR-25** — Rework shared buttons/switches/checkboxes/dropdowns; remove transition:all where harmful. **Evidence:** central controls and removal of 8 transition:all declarations
+- [x] **AR-26** — Rework Live Activity entrance/running/error/success/detail; separate virtualization transforms. **Evidence:** synthetic 16-event native Activity virtualization layout QA
 - [ ] **AR-27** — Rework Skill Manager and Editor hover/toggle/search/import/modal/save/validation. **Evidence:** _pending_
 - [ ] **AR-28** — Rework Memory Center panels/notes/counters/accordion/recent saves without implying chat transcript capture. **Evidence:** _pending_
 - [ ] **AR-29** — Rework Runtime/Durable Jobs status cards/progress/errors with strictly verified data. **Evidence:** _pending_
@@ -357,8 +357,8 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 - [ ] **AR-42** — Fix regressions, document failures honestly, sign off all applicable acceptance gates. **Evidence:** _pending_
 
 ### Phase 7 — Release Preparation
-- [ ] **AR-43** — Audit all motion dependencies and bundle size/licensing; avoid GSAP unless explicitly justified. **Evidence:** _pending_
-- [ ] **AR-44** — Document migration, preferences, reduced-motion and compatibility constraints for maintainers. **Evidence:** _pending_
+- [x] **AR-43** — Audit all motion dependencies and bundle size/licensing; avoid GSAP unless explicitly justified. **Evidence:** no new third-party runtime package; CSS, TS, Canvas and inline SVG only
+- [x] **AR-44** — Document migration, preferences, reduced-motion and compatibility constraints for maintainers. **Evidence:** royal-motion-state-contracts.md and royal-motion-v2-implementation-report.md
 - [ ] **AR-45** — Build Windows Electron packaged candidate without overwriting production install. **Evidence:** _pending_
 - [ ] **AR-46** — Verify cold launch, update, rollback, uninstall/reinstall and profile retention in packaged build. **Evidence:** _pending_
 - [ ] **AR-47** — Confirm feature parity with v0.4.57 no-Plan, local Memory and core bridge/tunnel behavior. **Evidence:** _pending_
@@ -398,6 +398,8 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 | 2026-10-17 (ICT) | **AR-01/AR-13–AR-17 native vertical slice IN PROGRESS**; full acceptance 0/48 | Isolated real-Electron renderer baseline 153.29 fps/p95 6.2ms, candidate sample 165 fps/p95 6.1ms; native Silk/Queen Orb/frameless portrait/hold circle and VSync driver. Typecheck/build/lint PASS; focused tests 27/27 PASS; native multi-size UI and hold/visibility smoke PASS. Full suite initially 460/462: dirty-worktree evidence guard (correct behavior), and stale preexisting Memory selector test, now updated without modifying Memory code. | `feat/royal-motion-60fps-trial`, `docs/design/royal-motion-trial-report.md`, `royal-motion-{baseline,candidate}-fps.json` and screenshots | Obtain repeated frame+GPU evidence with foreground games, clean-tree test, complete remaining 48 item acceptance; installed v0.4.57 untouched. |
 
 | 2026-10-17 (ICT) | First native vertical slice **built, validated, not shipped**; full-phase acceptance **0/48** | Full project Vitest suite now **462/462 PASS across 100 files** on clean commit after updating stale Memory test assertion (no Memory code change); isolated native hold and visibility QA PASS, typecheck/build/lint PASS; rAF candidate sample 165 FPS but not universal guarantee | `feat/royal-motion-60fps-trial` commit `196d4b1`, `docs/design/royal-motion-trial-report.md` | Next: evaluate repeated FPS and GPU frame presentation during gaming, complete remaining screen motion, package QA. Installed v0.4.57 untouched. |
+
+| 2026-10-19 (ICT) | **24/48 verification checklists complete**; 24 pending release/performance/optional motion gates | Native Liquid Glass on Dashboard, Dock, Drawer, Workspace, Memory, Skills, Runtime, Settings, Setup and Updater. One shared VSYNC Orb/Silk, Full/Balanced/Eco/Off, local opt-in telemetry, SVG icons, 40 rapid tab switches, per-tab scroll, 16-event virtual feed QA, original hold / native hide / multi-viewport QA; typecheck/build/lint PASS; real Electron FPS samples near 60 Hz, some delayed frames recorded | `docs/design/royal-motion-v2-implementation-report.md`, `royal-motion-state-contracts.md`, `royal-motion-keyframe-inventory.md`, `royal-motion-native-system/` | Physical game coexistence / GPU present-time / other monitor refresh rates / long soak / package acceptance / actual release still require evidence. Installed v0.4.57 untouched. |
 
 ## 10. Sign-off definition
 - [ ] All 48 task IDs finished and supported by evidence.

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { MemoryCenter } from "./memory-center.js";
@@ -33,7 +33,10 @@ import { inspectWindowsMcp } from "./windows-mcp-status.js";
 import "./royal-effects.css";
 import { RoyalSilkBackground } from "./royal-silk-background.js";
 import { QueenLiquidOrb } from "./queen-liquid-orb.js";
+import { RoyalIcon } from "./royal-icons.js";
 import "./liquid-motion.css";
+import "./royal-motion-system.css";
+import { QUALITY_OPTIONS, useMotionPreferences } from "./motion-policy.js";
 
 const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url).href;
 
@@ -79,11 +82,11 @@ const drawerMenuItems: Array<{ key: PrimaryDrawerName; label: string }> = [
 ];
 
 const drawerTitles: Record<DrawerName, string> = {
-  workspace: "📁 ACTIVE WORKSPACE",
-  memory: "🧠 AI PROJECT MEMORY",
-  skills: "◇ SKILL MANAGER",
-  runtime: "◈ RUNTIME & DIAGNOSTICS",
-  settings: "⚙ BRIDGE SETTINGS",
+  workspace: "ACTIVE WORKSPACE",
+  memory: "AI PROJECT MEMORY",
+  skills: "SKILL MANAGER",
+  runtime: "RUNTIME & DIAGNOSTICS",
+  settings: "BRIDGE SETTINGS",
 };
 
 const drawerOrder: PrimaryDrawerName[] = [
@@ -258,14 +261,11 @@ const ActivityPanel = React.memo(function ActivityPanel({
             {visibleActivity.map((item, localIndex) => {
               const index = startIndex + localIndex;
               return (
-                <button
+                <div className="activity-virtual-row" key={item.id} style={{ transform: `translate3d(0, ${index * rowHeight}px, 0)` }}>
+                  <button
                   type="button"
                   className={`activity-item ${item.status} ${enteringActivityId === item.id ? "entering" : ""}`}
                   data-activity-id={item.id}
-                  key={item.id}
-                  style={{
-                    transform: `translate3d(0, ${index * rowHeight}px, 0)`,
-                  }}
                   onClick={() => setSelectedActivity(item)}
                   aria-label={`View details for ${item.tool}.${item.action}`}
                 >
@@ -303,7 +303,8 @@ const ActivityPanel = React.memo(function ActivityPanel({
                     <span className={`item-bead ${item.status}`} />
                     <span className="activity-open-glyph">›</span>
                   </div>
-                </button>
+                  </button>
+                </div>
               );
             })}
             {activity.length === 0 && (
@@ -555,6 +556,8 @@ function App(): React.ReactElement {
   const setupDialogRef = useRef<HTMLElement | null>(null);
   const drawerDialogRef = useRef<HTMLDivElement | null>(null);
   const animationsEnabled = config?.ui.animationsEnabled ?? true;
+  const motionPreferences = useMotionPreferences(animationsEnabled);
+  const drawerScrollRef = useRef<Partial<Record<DrawerName, number>>>({});
 
   // Pausing CSS preserves animation progress when Qnector is hidden or minimized.
   useEffect(() => {
@@ -613,12 +616,13 @@ function App(): React.ReactElement {
     }
     clearDrawerSwitchTimer();
     setDrawerTransition(null);
+    activeDrawerRef.current = null;
     setActiveDrawer(null);
     setIsClosingDrawer(false);
   };
 
   const closeDrawer = (): void => {
-    if (!activeDrawer || isClosingDrawer) return;
+    if (!activeDrawerRef.current || isClosingDrawer) return;
     clearDrawerSwitchTimer();
     setDrawerTransition(null);
     if (!animationsEnabled) {
@@ -631,7 +635,7 @@ function App(): React.ReactElement {
     }
     // The DOM should normally be removed by drawerSlideDown's animationend.
     // Keep a generous fallback for reduced-motion / renderer edge cases.
-    drawerCloseFallbackRef.current = window.setTimeout(finishDrawerClose, 600);
+    drawerCloseFallbackRef.current = window.setTimeout(finishDrawerClose, 360);
   };
 
   useModalFocusTrap(Boolean(activeDrawer), drawerDialogRef, closeDrawer, true);
@@ -642,7 +646,7 @@ function App(): React.ReactElement {
     if (
       isClosingDrawer &&
       event.target === event.currentTarget &&
-      event.animationName === "drawerSlideDown"
+      (event.animationName === "liquidDrawerOut" || event.animationName === "drawerSlideDown")
     ) {
       finishDrawerClose();
     }
@@ -654,8 +658,17 @@ function App(): React.ReactElement {
   };
 
   const switchDrawer = (drawer: DrawerName): void => {
-    if (isClosingDrawer || drawerTransition || activeDrawer === drawer) return;
-    if (!activeDrawer) {
+    if (isClosingDrawer) {
+      if (drawerCloseFallbackRef.current !== null) {
+        window.clearTimeout(drawerCloseFallbackRef.current);
+        drawerCloseFallbackRef.current = null;
+      }
+      setIsClosingDrawer(false);
+    }
+    const previousDrawer = activeDrawerRef.current;
+    if (previousDrawer === drawer) return;
+    activeDrawerRef.current = drawer;
+    if (!previousDrawer) {
       refreshDrawerData(drawer);
       setActiveDrawer(drawer);
       return;
@@ -669,7 +682,7 @@ function App(): React.ReactElement {
     }
 
     const currentIndex = drawerOrder.indexOf(
-      activeDrawer === "runtime" ? "settings" : activeDrawer,
+      previousDrawer === "runtime" ? "settings" : previousDrawer,
     );
     const nextIndex = drawerOrder.indexOf(
       drawer === "runtime" ? "settings" : drawer,
@@ -677,24 +690,37 @@ function App(): React.ReactElement {
     const direction: Exclude<DrawerTransition, null> =
       nextIndex > currentIndex ? "left" : "right";
 
-    clearDrawerSwitchTimer();
+    // Retarget instantly: old transitions never disable input or own a timer.
+    const scroller = drawerDialogRef.current?.querySelector<HTMLElement>(
+      ".drawer-page > .drawer-content, .drawer-page > .runtime-scroll",
+    );
+    if (previousDrawer && scroller) drawerScrollRef.current[previousDrawer] = scroller.scrollTop;
     refreshDrawerData(drawer);
     setDrawerTransition(direction);
     setActiveDrawer(drawer);
-    drawerSwitchTimeoutRef.current = window.setTimeout(() => {
-      setDrawerTransition(null);
-      drawerSwitchTimeoutRef.current = null;
-    }, 200);
   };
 
   const toggleDrawer = (drawer: DrawerName): void => {
-    if (isClosingDrawer || drawerTransition) return;
-    if (activeDrawer === drawer) {
+    if (isClosingDrawer) return;
+    if (activeDrawerRef.current === drawer) {
       closeDrawer();
       return;
     }
     switchDrawer(drawer);
   };
+
+  // A different drawer route restores its own scroll offset after React mounts
+  // the replacement page. The shell and menu remain mounted throughout.
+  useLayoutEffect(() => {
+    if (!activeDrawer) return;
+    const frame = window.requestAnimationFrame(() => {
+      const scroller = drawerDialogRef.current?.querySelector<HTMLElement>(
+        ".drawer-page > .drawer-content, .drawer-page > .runtime-scroll",
+      );
+      if (scroller) scroller.scrollTop = drawerScrollRef.current[activeDrawer] ?? 0;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeDrawer]);
 
   const renderDrawerMenuTabs = (current: DrawerName): React.ReactElement => (
     <nav className="drawer-menu-tabs" aria-label="Qnector menu sections">
@@ -704,7 +730,7 @@ function App(): React.ReactElement {
           type="button"
           className={item.key === current ? "active" : ""}
           aria-current={item.key === current ? "page" : undefined}
-          disabled={drawerTransition !== null}
+          aria-controls="unified-drawer-panel"
           onClick={() => switchDrawer(item.key)}
         >
           <span>{item.label}</span>
@@ -1564,28 +1590,28 @@ function App(): React.ReactElement {
           className={`dock-pill-btn ${activeDrawer === "workspace" ? "active" : ""}`}
           onClick={() => toggleDrawer("workspace")}
         >
-          <span>📁</span>
+          <span><RoyalIcon name="workspace" size={18} /></span>
           <span>Workspace</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "memory" ? "active" : ""}`}
           onClick={() => toggleDrawer("memory")}
         >
-          <span>🧠</span>
+          <span><RoyalIcon name="memory" size={18} /></span>
           <span>Memory</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "skills" ? "active" : ""}`}
           onClick={() => toggleDrawer("skills")}
         >
-          <span>◇</span>
+          <span><RoyalIcon name="skills" size={18} /></span>
           <span>Skills</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "settings" ? "active" : ""}`}
           onClick={() => toggleDrawer("settings")}
         >
-          <span>⚙</span>
+          <span><RoyalIcon name="settings" size={18} /></span>
           <span>Settings</span>
         </button>
       </footer>
@@ -1937,6 +1963,7 @@ function App(): React.ReactElement {
         >
           <div
             ref={drawerDialogRef}
+            id="unified-drawer-panel"
             className={`drawer-card unified-drawer-card ${isClosingDrawer ? "closing" : ""}`}
             role="dialog"
             aria-modal="true"
@@ -1946,7 +1973,7 @@ function App(): React.ReactElement {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="drawer-header">
-              <span className="drawer-title">{drawerTitles[activeDrawer]}</span>
+              <span className="drawer-title"><RoyalIcon name={activeDrawer} size={17} />{drawerTitles[activeDrawer]}</span>
               <button
                 className="btn-drawer-close"
                 type="button"
@@ -1960,6 +1987,12 @@ function App(): React.ReactElement {
             <div
               className={`drawer-page ${drawerTransition ? `drawer-page-${drawerTransition}` : ""}`}
               key={activeDrawer}
+              onAnimationEnd={(event) => {
+                if (event.target === event.currentTarget &&
+                  (event.animationName === "liquidPageFromRight" || event.animationName === "liquidPageFromLeft")) {
+                  setDrawerTransition(null);
+                }
+              }}
             >
               {activeDrawer === "workspace" && (
                 <>
@@ -2255,6 +2288,52 @@ function App(): React.ReactElement {
                       </select>
                     </div>
 
+                    {/* Royal Motion Quality: local UI-only preference.
+                        The persisted legacy animationsEnabled=false always wins. */}
+                    <div className="setting-toggle-card motion-settings-card">
+                      <div className="motion-settings-header">
+                        <strong>Motion Quality</strong>
+                        <small>Liquid Glass, Queen Orb and Silk Aurora</small>
+                      </div>
+                      <div className="motion-quality-segments" role="group" aria-label="Motion quality">
+                        {QUALITY_OPTIONS.map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            className={motionPreferences.quality === option ? "active" : ""}
+                            aria-pressed={motionPreferences.quality === option}
+                            disabled={!animationsEnabled}
+                            onClick={() => motionPreferences.setQuality(option)}
+                          >
+                            {option[0]!.toUpperCase() + option.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="motion-quality-help" role="status">
+                        {motionPreferences.effective === "reduced"
+                          ? "OS Reduced Motion active: decorative loops are paused."
+                          : !animationsEnabled
+                            ? "Animations disabled by the existing QNECTOR setting."
+                            : motionPreferences.effective === "off"
+                              ? "Ambient effects are static; controls still work."
+                              : "Animation follows the display refresh rate, targeting 60+ FPS when hardware permits."}
+                      </p>
+                      <label className="motion-telemetry-toggle">
+                        <input
+                          type="checkbox"
+                          checked={motionPreferences.telemetryEnabled}
+                          onChange={(event) => motionPreferences.setTelemetryEnabled(event.target.checked)}
+                        />
+                        <span>Show local frame-time diagnostics (opt-in)</span>
+                      </label>
+                      {motionPreferences.telemetryEnabled && (
+                        <div className="motion-telemetry-result" aria-live="off">
+                          {motionPreferences.stats
+                            ? `${motionPreferences.stats.fps.toFixed(1)} FPS · P95 ${motionPreferences.stats.p95FrameMs.toFixed(1)} ms · Over 17 ms: ${motionPreferences.stats.missed60HzFrames}`
+                            : "Measuring visible frames…"}
+                        </div>
+                      )}
+                    </div>
                     {/* Interface Animations */}
                     <div className="setting-toggle-card">
                       <label className="drawer-toggle">
@@ -2282,7 +2361,7 @@ function App(): React.ReactElement {
                               color: "var(--text-muted)",
                             }}
                           >
-                            Motion, transitions and Matrix effects
+                            Liquid Glass, Silk Aurora and responsive motion
                           </span>
                         </div>
                       </label>

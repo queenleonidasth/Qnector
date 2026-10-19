@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "observedProfiles": [
+    {
+      "profile": "full",
+      "orbMoved": true
+    },
+    {
+      "profile": "balanced",
+      "orbMoved": true
+    },
+    {
+      "profile": "eco",
+      "orbMoved": true
+    },
+    {
+      "profile": "off",
+      "orbMoved": false
+    }
+  ],
+  "fpsText": "60.0 FPS · P95 16.8 ms · Over 17 ms: 0",
+  "retargetedSwitches": 40,
+  "settingsScrollRestored": true,
+  "portraitPx": 256,
+  "screenshots": [
+    "activity-feed.png",
+    "dashboard.png",
+    "settings-balanced.png",
+    "settings-eco.png",
+    "settings-full.png",
+    "settings-off.png",
+    "settings-return.png",
+    "telemetry.png"
+  ],
+  "errors": []
+}

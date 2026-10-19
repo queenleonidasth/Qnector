@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { useRoyalCanvasMotion } from "./royal-motion-clock.js";
+import { MOTION_CHANGE_EVENT, currentMotionQuality, motionBudget } from "./motion-policy.js";
 
 interface RoyalSilkBackgroundProps {
   isConnected: boolean;
@@ -7,7 +8,7 @@ interface RoyalSilkBackgroundProps {
   motionEnabled: boolean;
 }
 
-const dust = Array.from({ length: 30 }, (_, index) => ({
+const dust = Array.from({ length: 45 }, (_, index) => ({
   x: ((index * 91.71) % 1000) / 1000,
   y: ((index * 173.83 + 29) % 1000) / 1000,
   phase: index * 1.17,
@@ -36,6 +37,7 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
     if (!width || !height) return;
 
     const time = animated ? seconds : 0;
+    const budget = motionBudget(currentMotionQuality());
     const strength = connectionRef.current ? 1 : 0.55;
     const ctx = context;
     ctx.clearRect(0, 0, width, height);
@@ -60,7 +62,7 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
 
     ctx.strokeStyle = light;
     ctx.lineCap = "round";
-    for (let band = 0; band < 6; band += 1) {
+    for (let band = 0; band < budget.ribbons; band += 1) {
       const baseline = height * (0.18 + band * 0.124);
       const amplitude = height * (0.039 + (band % 3) * 0.013);
       const offset = band * 0.78 + time * (0.14 + band * 0.015);
@@ -79,7 +81,7 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
     }
     ctx.globalAlpha = strength;
 
-    for (const dot of dust) {
+    for (const dot of dust.slice(0, budget.dust)) {
       const x = dot.x * width + Math.sin(time * 0.19 + dot.phase) * 9;
       const y = dot.y * height + Math.cos(time * 0.16 + dot.phase) * 7;
       ctx.globalAlpha = strength * (0.18 + 0.32 * (0.5 + 0.5 * Math.sin(dot.phase + time * 0.65)));
@@ -100,7 +102,7 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
       const rect = target.getBoundingClientRect();
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const dpr = Math.min(window.devicePixelRatio || 1, motionBudget(currentMotionQuality()).maxDpr);
       metricsRef.current = { width, height };
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
@@ -119,7 +121,9 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
       });
     });
     if (canvas.parentElement) observer.observe(canvas.parentElement);
+    document.documentElement.addEventListener(MOTION_CHANGE_EVENT, resize);
     return () => {
+      document.documentElement.removeEventListener(MOTION_CHANGE_EVENT, resize);
       observer.disconnect();
       if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
     };

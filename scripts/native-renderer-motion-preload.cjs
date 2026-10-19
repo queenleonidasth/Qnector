@@ -73,6 +73,7 @@ function callTool(tool,input){
 const noop=()=>()=>{};
 let previewVisible=true;
 const visibilityListeners=new Set();
+const activityListeners=new Set();
 const prevent=async()=>{throw new Error("QC_FIXTURE_BLOCKS_MUTATING_ACTIONS")};
 const api={
  getWindowVisible:async()=>previewVisible,onWindowVisible:(callback)=>{visibilityListeners.add(callback);return()=>visibilityListeners.delete(callback);},
@@ -82,7 +83,7 @@ const api={
  tunnelIdConfigured:false,runtimeApiKeyConfigured:false,bridge}),
  getUpdateState:async()=>({status:"idle",phase:"idle"}),
  callMemory:async()=>result("recall",memory),callTool,
- onRuntimeReady:noop,onStatus:noop,onActivity:noop,onMemory:noop,onProcess:noop,onUpdate:noop,
+ onRuntimeReady:noop,onStatus:noop,onActivity:(listener)=>{activityListeners.add(listener);return()=>activityListeners.delete(listener);},onMemory:noop,onProcess:noop,onUpdate:noop,
  getActivity:async()=>[],getProcesses:async()=>[],durableJobs:async()=>({state:"ready",jobs:[],health:{state:"ready",jobHostEnabled:true,protocol:1}}),
  durableOutput:async()=>({text:"",complete:true,nextCursor:0}),
  getProcessOutput:async()=>({text:"",state:"exited",cursor:0,nextCursor:0,truncated:false}),
@@ -94,4 +95,4 @@ const api={
  openTerminal:prevent,
 };
 contextBridge.exposeInMainWorld("qnector",api);
-contextBridge.exposeInMainWorld("__qcFixture",{getCallCount:()=>callCount,failRuntimeOnce:()=>{failNextRuntime=true;},setWindowVisible:(value)=>{previewVisible=Boolean(value);for(const callback of visibilityListeners)callback(previewVisible);}});
+contextBridge.exposeInMainWorld("__qcFixture",{getCallCount:()=>callCount,failRuntimeOnce:()=>{failNextRuntime=true;},setWindowVisible:(value)=>{previewVisible=Boolean(value);for(const callback of visibilityListeners)callback(previewVisible);},emitActivityBurst:(count)=>{for(let i=0;i<count;i++){const entry={id:"qc-motion-"+i+"-"+Date.now(),timestamp:new Date(Date.now()+i).toISOString(),tool:"files",action:"read",argsSummary:"synthetic event "+i,status:i%3===0?"running":"success",durationMs:i*2};for(const callback of activityListeners)callback(entry)}}});

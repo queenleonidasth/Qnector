@@ -1,0 +1,19 @@
+{
+  "source": "actual Electron renderer under synthetic mutation-blocked bridge",
+  "measure": "rAF callback cadence, not GPU-present FPS",
+  "observedAt": "2026-10-19T04:31:05.581Z",
+  "display": "475x865",
+  "quality": "off",
+  "frames": 232,
+  "sampleMs": 3918,
+  "averageCallbackFps": 59.21,
+  "p50Ms": 16.7,
+  "p95Ms": 16.8,
+  "p99Ms": 17.7,
+  "worstMs": 50,
+  "over17Ms": 3,
+  "over25Ms": 2,
+  "activeQuality": "off",
+  "windowVisibility": "visible",
+  "errors": []
+}
