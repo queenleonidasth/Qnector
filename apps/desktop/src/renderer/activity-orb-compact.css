@@ -544,3 +544,93 @@ html[data-motion-quality="reduced"] .activity-result-pill.running::before {
 .orb-eclipse-plane.alternate {
   z-index: 3;
 }
+
+/* Compact orbital containment / deliberate disconnect interaction (2026-10-22).
+   Keep the central portrait untransformed; effects are decorative descendants. */
+:root { --parity-orb-size: clamp(132px, 19vh, 168px); }
+.orb-stage {
+  height: calc(var(--parity-orb-size) + 42px);
+  margin-top: 3px;
+  overflow: hidden;
+  overflow: clip;
+  border-radius: 28px;
+  isolation: isolate;
+  position: relative;
+}
+.orb-eclipse-plane,
+.orb-eclipse-plane.alternate {
+  display: none !important;
+}
+/* Two restrained, short orbital accents replace long elliptical trails. */
+.orb-astral-orbit {
+  width: calc(var(--parity-orb-size) + 24px);
+  height: calc(var(--parity-orb-size) + 24px);
+  background: conic-gradient(from 12deg,
+    transparent 0 8%, rgba(255,236,176,.94) 9% 17%, transparent 18% 52%,
+    rgba(247,187,90,.60) 54% 61%, transparent 63% 100%);
+  -webkit-mask: radial-gradient(circle, transparent 67%, #000 68% 69.5%, transparent 71%);
+  mask: radial-gradient(circle, transparent 67%, #000 68% 69.5%, transparent 71%);
+  filter: drop-shadow(0 0 5px rgba(255,206,117,.50));
+  animation-duration: 28s;
+}
+.orb-astral-orbit.inner {
+  width: calc(var(--parity-orb-size) + 8px);
+  height: calc(var(--parity-orb-size) + 8px);
+  opacity: .48;
+  animation-duration: 38s;
+}
+.orb-comet-track { opacity: .30; }
+.charge-svg-ring {
+  width: calc(var(--parity-orb-size) + 29px);
+  height: calc(var(--parity-orb-size) + 29px);
+  filter: none;
+}
+.charge-svg-ring.active {
+  filter: drop-shadow(0 0 4px rgba(255,220,148,.62));
+}
+/* Charge buildup follows the real hold state, without altering button transform
+   or resetting canvas motion when the mouse is released. */
+.orb-stage::before,
+.orb-stage::after {
+  content: "";
+  position: absolute;
+  width: calc(var(--parity-orb-size) + 13px);
+  height: calc(var(--parity-orb-size) + 13px);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 8;
+  opacity: 0;
+  border: 1px solid rgba(255,232,166,.85);
+  box-shadow: 0 0 14px rgba(254,192,88,.30), inset 0 0 12px rgba(255,234,162,.12);
+}
+.orb-stage:has(.glass-sphere-enclosure.holding)::before {
+  animation: royalHoldShock 1050ms cubic-bezier(.19,1,.22,1) infinite;
+}
+.orb-stage:has(.glass-sphere-enclosure.holding)::after {
+  animation: royalHoldShock 1050ms cubic-bezier(.19,1,.22,1) 525ms infinite;
+}
+.orb-stage:has(.glass-sphere-enclosure.holding) .orb-astral-orbit {
+  filter: drop-shadow(0 0 8px rgba(255,225,155,.83));
+  animation-duration: 7s;
+}
+.orb-stage:has(.glass-sphere-enclosure.holding) .orb-astral-orbit.inner {
+  animation-duration: 10s;
+}
+@keyframes royalHoldShock {
+  0% { opacity: 0; transform: scale(.88); }
+  18% { opacity: .82; }
+  100% { opacity: 0; transform: scale(1.13); }
+}
+@media (max-height: 760px) {
+  :root { --parity-orb-size: clamp(128px, 20vh, 144px); }
+  .orb-stage { height: calc(var(--parity-orb-size) + 30px); margin-top: 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-stage::before, .orb-stage::after { animation: none !important; }
+}
+html[data-motion="off"] .orb-stage::before,
+html[data-motion="off"] .orb-stage::after,
+html[data-motion-quality="off"] .orb-stage::before,
+html[data-motion-quality="off"] .orb-stage::after,
+html[data-motion-quality="reduced"] .orb-stage::before,
+html[data-motion-quality="reduced"] .orb-stage::after { animation: none !important; }
