@@ -49,6 +49,16 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(preview).not.toContain('badge.textContent="SIMULATED - NO LIVE MCP DATA"');
     expect(preview).not.toContain("z-index:99999");
   });
+  it("keeps status pills uniform and the dashboard focused on Open ChatGPT", async () => {
+    const css = await read("activity-orb-compact.css");
+    const jsx = await read("renderer.tsx");
+    expect(css).toContain("width: 58px;");
+    expect(css).toContain("min-width: 58px;");
+    expect(css).toContain("max-width: 58px;");
+    expect(jsx).not.toContain("LINK STABLE");
+    expect(jsx).not.toContain('className="endpoint-glass-box"');
+    expect(jsx).toContain("OPEN CHATGPT");
+  });
   it("shows real Skill names in each task row without hover", async () => {
     const jsx = await read("renderer.tsx");
     const css = await read("activity-orb-compact.css");

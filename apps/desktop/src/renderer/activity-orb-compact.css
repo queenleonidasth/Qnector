@@ -283,7 +283,12 @@
   font-size: 9px;
 }
 .activity-result-pill {
-  min-width: 50px;
+  box-sizing: border-box;
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
+  flex: 0 0 58px;
+  white-space: nowrap;
   min-height: 20px;
   display: inline-grid;
   place-items: center;
@@ -479,7 +484,7 @@
 @media (max-width: 440px) {
   .activity-item .item-right {gap:3px}
   .activity-entry-time {flex-basis:44px;font-size:9px}
-  .activity-result-pill {min-width:45px;padding:3px 4px;font-size:7.5px}
+  .activity-result-pill {width:58px;min-width:58px;max-width:58px;padding:3px 4px;font-size:7.5px}
   .activity-glass-card {padding-inline:8px}
 }
 @media (prefers-reduced-motion: reduce) {

@@ -563,7 +563,7 @@ function registerIpc(): void {
   ipcMain.handle("bridge:disconnect", () => disconnectBridge());
   ipcMain.handle("bridge:copy-url", () => copyUrl());
   ipcMain.handle("bridge:open-chatgpt", () =>
-    shell.openExternal("https://chatgpt.com/plugins").then(() => undefined),
+    shell.openExternal("https://chatgpt.com/").then(() => undefined),
   );
   ipcMain.handle("workspace:choose", () => chooseWorkspace());
   ipcMain.handle("workspace:set", (_event, workspace: string) =>

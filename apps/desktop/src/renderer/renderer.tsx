@@ -534,7 +534,6 @@ function App(): React.ReactElement {
     useState(false);
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [copied, setCopied] = useState(false);
 
   // 3-second hold-to-disconnect state
   const holdStartRef = React.useRef<number | null>(null);
@@ -1074,12 +1073,6 @@ function App(): React.ReactElement {
     }
   };
 
-  const copyLink = async (): Promise<void> => {
-    await window.qnector.copyMcpUrl();
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  };
-
   const openChatGPT = async (): Promise<void> => {
     await window.qnector.openChatGpt();
   };
@@ -1270,17 +1263,6 @@ function App(): React.ReactElement {
   const disconnectRingActive = isHolding || isDisconnecting;
   const disconnectRingProgress = isDisconnecting ? 1 : holdProgressRef.current;
   // Visual background no longer uses legacy Matrix deceleration.
-
-  const effectiveUrl =
-    bridge.publicUrl ?? (isConnected ? status?.localUrl : undefined);
-
-  const displayUrl =
-    bridge.publicUrl ??
-    (isConnecting
-      ? "https://tunnel.mcp.local/connecting…"
-      : isConnected
-        ? (status?.localUrl ?? "http://127.0.0.1:8787/mcp")
-        : "Connect to generate MCP link");
 
   const updateAttention =
     updateState?.phase === "available" ||
@@ -1511,10 +1493,7 @@ function App(): React.ReactElement {
             </div>
           </div>
 
-          <div className={`hero-connection-badge ${bridge.state}`} aria-label={isConnected ? "Bridge connected" : isConnecting ? "Bridge connecting" : "Bridge disconnected"}>
-            <span className="hero-link-dot" />
-            {isConnected ? "LINK STABLE" : isConnecting ? "ESTABLISHING LINK" : "LINK OFFLINE"}
-          </div>
+          {/* Connection status is already shown by the header ACTIVE indicator. */}
           <h2 className="hero-state-title">
             {isHolding
               ? <>DISCONNECTING (<span ref={titleCountdownRef}>3.0</span>s)</>
@@ -1536,23 +1515,6 @@ function App(): React.ReactElement {
                   : "Expose local computer & workspace to ChatGPT"}
           </p>
 
-          <div className="endpoint-glass-box">
-            <span className="endpoint-link-icon">🔗</span>
-            <span
-              className={`endpoint-url-text ${!effectiveUrl ? "placeholder" : ""}`}
-              title={effectiveUrl}
-            >
-              {displayUrl}
-            </span>
-            <button
-              className={`btn-gold-copy ${copied ? "copied" : ""}`}
-              disabled={!effectiveUrl}
-              onClick={() => void copyLink()}
-            >
-              <span>{copied ? "COPIED ✓" : "COPY"}</span>
-            </button>
-          </div>
-
           {isConnected ? (
             <button
               className="btn-liquid-action"
@@ -1560,7 +1522,7 @@ function App(): React.ReactElement {
               disabled={isDisconnecting}
               onClick={() => void openChatGPT()}
             >
-              <span>↗ Open in ChatGPT</span>
+              <span>↗ OPEN CHATGPT</span>
             </button>
           ) : (
             <button
