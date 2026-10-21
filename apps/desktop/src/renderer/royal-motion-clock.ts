@@ -76,8 +76,10 @@ function tick(time: number): void {
 }
 function refresh(): void {
   stopLoop();
-  staticPaint();
+  // Never insert a static zero-phase frame during a live state transition.
+  // Hold and disconnect retain their preceding compositor frame.
   if (isMoving()) frame = requestAnimationFrame(tick);
+  else staticPaint();
 }
 function onNativeVisibility(next: boolean): void {
   hasNativeVisibility = true;

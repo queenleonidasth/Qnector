@@ -549,7 +549,7 @@ function App(): React.ReactElement {
   const titleCountdownRef = useRef<HTMLSpanElement | null>(null);
   const hintCountdownRef = useRef<HTMLSpanElement | null>(null);
   const [isHolding, setIsHolding] = useState(false);
-  const [burstFlash, setBurstFlash] = useState(false);
+  // Keep the completion transition on the existing orb rather than mounting a burst overlay.
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupStep, setSetupStep] = useState(0);
   const [setupInfo, setSetupInfo] = useState<ConnectionSetupStatus>();
@@ -969,8 +969,7 @@ function App(): React.ReactElement {
         holdStartRef.current = null;
         didLongPressRef.current = true;
         setIsHolding(false);
-        setBurstFlash(true);
-        window.setTimeout(() => setBurstFlash(false), 700);
+        // The completed charge ring now fades out without a one-frame burst overlay.
         window.setTimeout(() => { didLongPressRef.current = false; }, 1000);
         void disconnect();
       }
@@ -1476,7 +1475,7 @@ function App(): React.ReactElement {
 
             <div className={`plasma-aura ${isConnected ? "active" : ""}`} />
 
-            {burstFlash && <div className="burst-flash-ring" />}
+            {/* No flashing burst layer: the orb stays on one continuous surface. */}
 
             <div
               className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}

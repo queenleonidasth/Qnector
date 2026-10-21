@@ -37,6 +37,16 @@ async function check(width,height) {
  fs.writeFileSync(dest,(await win.webContents.capturePage()).toPNG());
 
  const emblemBefore=before.image;
+ // Resize the *live* native window rather than reconstructing the renderer.
+ // The silk canvas must keep its node and a painted frame at the new size.
+ await evaluate('window.__motionSilkCanvas = document.querySelector(".liquid-silk-canvas")');
+ win.setSize(width+20,height+14);
+ await sleep(180);
+ const resized=await evaluate('(()=>{const c=document.querySelector(".liquid-silk-canvas");const pixel=c.getContext("2d").getImageData(Math.floor(c.width/2),Math.floor(c.height/2),1,1).data;return {same:window.__motionSilkCanvas===c,alpha:pixel[3],width:c.width,height:c.height}})()');
+ assert.equal(resized.same,true,"Silk canvas remounted during live resize");
+ assert.ok(resized.alpha>0,"Silk canvas blank after live resize");
+ assert.ok(resized.width>0&&resized.height>0,"Silk backing store missing after resize");
+ win.setSize(width,height);
  await sleep(650);
  const after=await evaluate(metricsExpr);
  assert.ok(Math.abs(after.image.x-emblemBefore.x)<0.02 && Math.abs(after.image.y-emblemBefore.y)<0.02,"Queen logo moves with orbital animation");
@@ -50,6 +60,12 @@ async function check(width,height) {
  assert.equal(populated.timelineNodes,populated.count);
  assert.equal(populated.timestamps,populated.count);
  assert.equal(populated.statusPills,populated.count);
+ // Confirm the running state actually renders a 2px sweep and a bright
+ // signal badge in Chromium, rather than the legacy 92px yellow halo.
+ const runningStyle=await evaluate('(()=>{const row=document.querySelector(".activity-item"),pill=row?.querySelector(".activity-result-pill");if(!row||!pill)return null;const oldRow=row.classList.contains("running"),oldPill=pill.classList.contains("running");row.classList.add("running");pill.classList.add("running");const stripe=getComputedStyle(row,"::before"),beacon=getComputedStyle(pill,"::before");const result={stripeHeight:parseFloat(stripe.height),stripeWidth:parseFloat(stripe.width),stripeAnimation:stripe.animationName,beaconWidth:parseFloat(beacon.width),beaconBackground:beacon.backgroundColor};row.classList.toggle("running",oldRow);pill.classList.toggle("running",oldPill);return result})()');
+ assert.ok(runningStyle&&runningStyle.stripeHeight<=3,"Legacy oversized running ring still visible "+JSON.stringify(runningStyle));
+ assert.ok(runningStyle.stripeWidth>=25&&runningStyle.stripeAnimation.includes("royalTaskProgressSweep"),"Running progress sweep absent "+JSON.stringify(runningStyle));
+ assert.ok(runningStyle.beaconWidth>=5,"Running signal beacon absent "+JSON.stringify(runningStyle));
  const activeImage=path.join(out,"v23-compact-live-"+width+"x"+height+".png");
  fs.writeFileSync(activeImage,(await win.webContents.capturePage()).toPNG());
  const result={width,height,orb:before.orb,feed:before.feed,activity:before.activity,dock:before.dock,portrait:before.image,portraitUnfiltered:before.logoStyle,overlap:false,populated,preview:activeImage};

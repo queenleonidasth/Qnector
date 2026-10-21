@@ -19,6 +19,29 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(style).toContain(".orb-stage");
     expect(style).toContain("z-index: 3");
   });
+  it("preserves continuous silk and orb visuals across resize and disconnect", async () => {
+    const silk = await read("royal-silk-background.tsx");
+    const orb = await read("queen-liquid-orb.tsx");
+    const clock = await read("royal-motion-clock.ts");
+    const renderer = await read("renderer.tsx");
+    expect(silk).toContain("lastAnimatedSecondsRef.current");
+    expect(silk).toContain("if (canvas.width === pixelWidth && canvas.height === pixelHeight) return");
+    expect(silk).not.toContain("draw(0, false)");
+    expect(orb).toContain("orbit.phase += delta * orbit.speed");
+    expect(orb).toContain("useRoyalCanvasMotion(draw, motionEnabled)");
+    expect(orb).not.toContain("const angleTime = time * speed");
+    expect(clock).toContain("if (isMoving()) frame = requestAnimationFrame(tick)");
+    expect(renderer).not.toContain("setBurstFlash(true)");
+  });
+  it("replaces the right-side flashing yellow ring with an active status and slim progress rail", async () => {
+    const css = await read("activity-orb-compact.css");
+    expect(css).toContain(".activity-virtual-row > .activity-item.running::before");
+    expect(css).toContain("royalTaskProgressSweep");
+    expect(css).toContain(".activity-result-pill.running::before");
+    expect(css).toContain("@keyframes royalRunningBadgeBreathe");
+    expect(css).toContain("prefers-reduced-motion: reduce");
+    expect(css).toContain('html[data-motion="off"] .activity-result-pill.running');
+  });
   it("allocates true viewport area to real virtualized Activity, not decoration", async () => {
     const jsx = await read("renderer.tsx");
     const css = await read("activity-orb-compact.css");

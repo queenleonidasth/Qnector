@@ -303,9 +303,60 @@
   color: #90ebaf;
 }
 .activity-result-pill.running {
-  border-color: rgba(243,182,69,.44);
-  background: rgba(92,62,18,.46);
-  color: #ffe09a;
+  position: relative;
+  padding-left: 15px;
+  border-color: rgba(255,207,118,.78);
+  background: linear-gradient(110deg,rgba(112,72,20,.76),rgba(55,40,24,.75));
+  color: #fff1c5;
+  box-shadow: inset 0 1px rgba(255,239,203,.16),0 0 12px rgba(242,169,53,.20);
+  animation: royalRunningBadgeBreathe 2.35s ease-in-out infinite;
+}
+.activity-result-pill.running::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: #ffe6a3;
+  box-shadow: 0 0 6px #ffbf55,0 0 11px rgba(255,192,96,.45);
+  animation: royalRunningSignal 2.35s ease-in-out infinite;
+}
+/* Small progress line replaces the 92px flashing yellow circle at the right. */
+.activity-virtual-row > .activity-item.running {
+  border-color: rgba(251,205,123,.58);
+  background: linear-gradient(96deg,rgba(71,46,21,.58),rgba(18,21,26,.70));
+  box-shadow: inset 2px 0 rgba(255,213,137,.96),0 0 12px rgba(240,162,49,.11);
+}
+.activity-virtual-row > .activity-item.running::before {
+  width: 42%;
+  height: 2px;
+  left: -42%;
+  right: auto;
+  top: auto;
+  bottom: 0;
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(90deg,transparent,#f7b851,#fff1c4,transparent);
+  box-shadow: 0 0 8px rgba(248,198,107,.55);
+  opacity: 1;
+  animation: royalTaskProgressSweep 2.25s linear infinite;
+}
+@keyframes royalTaskProgressSweep {
+  from {transform:translateX(0);opacity:.65}
+  20%,85% {opacity:1}
+  to {transform:translateX(340%);opacity:.65}
+}
+@keyframes royalRunningBadgeBreathe {
+  0%,100% {border-color:rgba(255,207,118,.64);box-shadow:inset 0 1px rgba(255,239,203,.13),0 0 10px rgba(242,169,53,.17)}
+  50% {border-color:rgba(255,228,163,.98);box-shadow:inset 0 1px rgba(255,239,203,.21),0 0 17px rgba(242,169,53,.40)}
+}
+@keyframes royalRunningSignal {
+  0%,100% {opacity:.72;transform:scale(.88)}
+  50% {opacity:1;transform:scale(1.08)}
 }
 .activity-result-pill.error {
   border-color: rgba(247,105,112,.35);
@@ -384,6 +435,20 @@
 @media (prefers-reduced-motion: reduce) {
   .glass-sphere-enclosure,
   .queen-orb-portrait {transition:none!important}
+  .activity-virtual-row > .activity-item.running::before,
+  .activity-result-pill.running,
+  .activity-result-pill.running::before {animation:none!important}
+}
+html[data-motion="off"] .activity-virtual-row > .activity-item.running::before,
+html[data-motion="off"] .activity-result-pill.running,
+html[data-motion="off"] .activity-result-pill.running::before,
+html[data-motion-quality="off"] .activity-virtual-row > .activity-item.running::before,
+html[data-motion-quality="off"] .activity-result-pill.running,
+html[data-motion-quality="off"] .activity-result-pill.running::before,
+html[data-motion-quality="reduced"] .activity-virtual-row > .activity-item.running::before,
+html[data-motion-quality="reduced"] .activity-result-pill.running,
+html[data-motion-quality="reduced"] .activity-result-pill.running::before {
+  animation: none !important;
 }
 
 /* The legacy 620px layout scaled the entire Orb stage to 78%, which

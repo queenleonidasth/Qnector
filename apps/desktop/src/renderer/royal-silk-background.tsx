@@ -32,6 +32,7 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
 }: RoyalSilkBackgroundProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const geometry = useRef({ width: 0, height: 0 });
+  const lastAnimatedSecondsRef = useRef(0);
   const connectedRef = useRef(isConnected);
   connectedRef.current = isConnected;
 
@@ -43,7 +44,8 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
     if (w < 1 || h < 1) return;
 
     const budget = motionBudget(currentMotionQuality());
-    const time = animated ? seconds : 0;
+    if (animated) lastAnimatedSecondsRef.current = seconds;
+    const time = lastAnimatedSecondsRef.current;
     const strength = connectedRef.current ? 1 : 0.55;
     ctx.clearRect(0, 0, w, h);
 
@@ -125,10 +127,14 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
       const height = Math.max(1, rect.height);
       const dpr = Math.min(window.devicePixelRatio || 1, motionBudget(currentMotionQuality()).maxDpr);
       geometry.current = { width, height };
-      canvas.width = Math.max(1, Math.round(width * dpr));
-      canvas.height = Math.max(1, Math.round(height * dpr));
+      const pixelWidth = Math.max(1, Math.round(width * dpr));
+      const pixelHeight = Math.max(1, Math.round(height * dpr));
+      // Reassigning the same canvas size clears its bitmap unnecessarily.
+      if (canvas.width === pixelWidth && canvas.height === pixelHeight) return;
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
       canvas.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw(0, false);
+      draw(lastAnimatedSecondsRef.current, false);
     };
     resize();
     let resizeFrame: number | null = null;

@@ -111,7 +111,7 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(text).toContain('item.status === "running" ? "RUNNING"');
     const compactCss = await readFile(new URL("./activity-orb-compact.css", import.meta.url), "utf8");
     expect(compactCss).toContain(".activity-result-pill.running");
-    expect(compactCss).toContain("color: #ffe09a;");
+    expect(compactCss).toContain("color: #fff1c5;");
     expect(css).toContain(".activity-item.running::before");
     expect(css).toContain(
       "animation: royalActivityRipple 1.8s ease-out infinite;",

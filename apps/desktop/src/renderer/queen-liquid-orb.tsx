@@ -35,6 +35,7 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
 }: QueenLiquidOrbProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const geometry = useRef({ width: 0, height: 0 });
+  const orbitRef = useRef({ lastSeconds: null as number | null, phase: 0, speed: 0.16, glow: connected ? 1 : 0.55 });
   const stateRef = useRef({ connected, holding, disconnecting });
   stateRef.current = { connected, holding, disconnecting };
 
@@ -46,10 +47,20 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
     if (w < 1 || h < 1) return;
 
     const budget = motionBudget(currentMotionQuality());
-    const time = animated ? seconds : 0;
-    const speed = stateRef.current.holding ? 0.29 : 0.16;
-    const angleTime = time * speed;
-    const glow = stateRef.current.connected ? 1 : 0.55;
+    // Integrated orbital phase prevents a position jump when hold/release
+    // changes speed. Glow eases instead of snapping as the bridge disconnects.
+    const orbit = orbitRef.current;
+    if (animated) {
+      const delta = Math.max(0, Math.min(0.05, seconds - (orbit.lastSeconds ?? seconds)));
+      const blend = 1 - Math.exp(-delta * 5);
+      const targetSpeed = stateRef.current.holding || stateRef.current.disconnecting ? 0.29 : 0.16;
+      orbit.speed += (targetSpeed - orbit.speed) * blend;
+      orbit.phase += delta * orbit.speed;
+      orbit.glow += ((stateRef.current.connected ? 1 : 0.55) - orbit.glow) * blend;
+      orbit.lastSeconds = seconds;
+    }
+    const angleTime = orbit.phase;
+    const glow = orbit.glow;
     const centerX = w * 0.5;
     const centerY = h * 0.5;
     const radius = Math.min(w, h) * 0.5 - 0.5;
@@ -146,8 +157,11 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
       const height = Math.max(1, rect.height);
       const dpr = Math.min(window.devicePixelRatio || 1, motionBudget(currentMotionQuality()).maxDpr);
       geometry.current = { width, height };
-      canvas.width = Math.max(1, Math.round(width * dpr));
-      canvas.height = Math.max(1, Math.round(height * dpr));
+      const pixelWidth = Math.max(1, Math.round(width * dpr));
+      const pixelHeight = Math.max(1, Math.round(height * dpr));
+      if (canvas.width === pixelWidth && canvas.height === pixelHeight) return;
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
       canvas.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
       draw(0, false);
     };
@@ -166,7 +180,8 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
     };
   }, [draw]);
 
-  useRoyalCanvasMotion(draw, motionEnabled && !disconnecting);
+  // Do not freeze the canvas at the instant the user releases the 3s hold.
+  useRoyalCanvasMotion(draw, motionEnabled);
 
   return (
     <div className="queen-orb-visual" aria-hidden="true">
