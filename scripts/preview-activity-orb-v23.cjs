@@ -10,7 +10,7 @@ let win;
 app.on("window-all-closed",()=>app.quit());
 app.whenReady().then(async()=>{
  win=new BrowserWindow({
-  title:"QNECTOR V2.3 - Activity First + Sharp Queen (SIMULATED DATA)",
+  title:"QNECTOR Preview - SIMULATED DATA",
   width:475,height:900,minWidth:420,minHeight:620,
   show:false,frame:true,autoHideMenuBar:true,backgroundColor:"#07090d",
   webPreferences:{
@@ -25,7 +25,7 @@ app.whenReady().then(async()=>{
  );
  await win.loadFile(path.join(root,"apps","desktop","index.html"));
  await win.webContents.executeJavaScript(
-  '(()=>{document.title="QNECTOR V2.3 - Activity First + Sharp Queen (SIMULATED DATA)";const badge=document.createElement("div");badge.textContent="SIMULATED - NO LIVE MCP DATA";badge.style.cssText="position:fixed;right:18px;top:1px;z-index:99999;pointer-events:none;font:8px Segoe UI,sans-serif;letter-spacing:.055em;color:#e9d9bc;opacity:.80";document.body.appendChild(badge);window.__qcFixture.emitActivityBurst(18,true)})()',
+  '(()=>{document.title="QNECTOR Preview - SIMULATED DATA";window.__qcFixture.emitActivityBurst(18,true)})()',
   true,
  );
  win.show();

@@ -42,6 +42,13 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(css).toContain("prefers-reduced-motion: reduce");
     expect(css).toContain('html[data-motion="off"] .activity-result-pill.running');
   });
+  it("keeps the isolated synthetic preview identified without overlaying the real header", async () => {
+    const preview = await read("../../../../scripts/preview-activity-orb-v23.cjs");
+    expect(preview).toContain('title:"QNECTOR Preview - SIMULATED DATA"');
+    expect(preview).toContain("window.__qcFixture.emitActivityBurst(18,true)");
+    expect(preview).not.toContain('badge.textContent="SIMULATED - NO LIVE MCP DATA"');
+    expect(preview).not.toContain("z-index:99999");
+  });
   it("shows real Skill names in each task row without hover", async () => {
     const jsx = await read("renderer.tsx");
     const css = await read("activity-orb-compact.css");
