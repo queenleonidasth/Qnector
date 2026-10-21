@@ -270,7 +270,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
                   className={`activity-item ${item.status} ${enteringActivityId === item.id ? "entering" : ""}`}
                   data-activity-id={item.id}
                   onClick={() => setSelectedActivity(item)}
-                  aria-label={`View details for ${item.tool}.${item.action}, ${item.status}`}
+                  aria-label={`View details for ${item.tool}.${item.action}, ${item.status}, ${item.skillTrace?.skills.length ? `Skills: ${item.skillTrace.skills.join(", ")}` : "direct tool call"}`}
                 >
                   <time className="activity-entry-time" dateTime={item.timestamp}>
                     {formatTime(item.timestamp)}
@@ -283,24 +283,9 @@ const ActivityPanel = React.memo(function ActivityPanel({
                       {item.tool}.{item.action}
                     </div>
                     <div className="item-args">{item.argsSummary || "—"}</div>
+
                   </div>
                   <div className="item-right">
-                    {item.skillTrace && item.skillTrace.skills.length > 0 && (
-                      <span
-                        className="activity-skill-badge"
-                        title={`Skill context: ${item.skillTrace.skills.join(", ")}`}
-                      >
-                        SKILL {item.skillTrace.skills.length}
-                      </span>
-                    )}
-                    {!item.skillTrace?.skills.length && (
-                      <span
-                        className="activity-direct-badge"
-                        title="Direct tool call; no Skill activated"
-                      >
-                        DIRECT TOOL
-                      </span>
-                    )}
                     <span className={`activity-result-pill ${item.status}`}>
                       {item.status === "running" ? "RUNNING" : item.status.toUpperCase()}
                     </span>
@@ -308,6 +293,18 @@ const ActivityPanel = React.memo(function ActivityPanel({
                       <span className="activity-duration">{item.durationMs}ms</span>
                     )}
                     <span className="activity-open-glyph">›</span>
+                  </div>
+                  <div className="activity-skill-inline">
+                    {item.skillTrace?.skills.length ? (
+                      <>
+                        <span className="activity-skill-badge">SKILL</span>
+                        <span className="activity-skill-names" title={item.skillTrace.skills.join(", ")}>
+                          {item.skillTrace.skills.join(" · ")}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="activity-direct-badge">DIRECT TOOL</span>
+                    )}
                   </div>
                   </button>
                 </div>

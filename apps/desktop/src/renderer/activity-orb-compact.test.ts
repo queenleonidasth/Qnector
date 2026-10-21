@@ -42,6 +42,19 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(css).toContain("prefers-reduced-motion: reduce");
     expect(css).toContain('html[data-motion="off"] .activity-result-pill.running');
   });
+  it("shows real Skill names in each task row without hover", async () => {
+    const jsx = await read("renderer.tsx");
+    const css = await read("activity-orb-compact.css");
+    expect(jsx).toContain('className="activity-skill-inline"');
+    expect(jsx).toContain('className="activity-skill-names"');
+    expect(jsx).toContain('item.skillTrace.skills.join(" · ")');
+    expect(jsx).toContain('className="activity-direct-badge">DIRECT TOOL</span>');
+    expect(jsx).not.toContain('SKILL {item.skillTrace.skills.length}');
+    expect(css).toContain(".activity-skill-inline .activity-skill-names");
+    expect(css).toContain("opacity: 1;");
+    expect(css).not.toContain(".activity-item:hover .activity-skill-badge");
+    expect(css).not.toContain(".activity-item:focus-visible .activity-skill-badge");
+  });
   it("allocates true viewport area to real virtualized Activity, not decoration", async () => {
     const jsx = await read("renderer.tsx");
     const css = await read("activity-orb-compact.css");

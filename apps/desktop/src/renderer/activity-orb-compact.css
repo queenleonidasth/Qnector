@@ -372,22 +372,72 @@
   width: 7px;
   font-size: 12px;
 }
-.activity-item .activity-skill-badge,
-.activity-item .activity-direct-badge {
-  position: absolute;
-  right: 6px;
-  top: -1px;
-  opacity: 0;
-  transform: translateY(-3px);
-  transition: opacity 140ms ease, transform 140ms ease;
-  pointer-events: none;
+/* Skill provenance is part of each task row, not a hover-only floating label.
+ * A full-width second row shows actual Skill names, including while running. */
+.activity-virtual-row > .activity-item {
+  display: grid;
+  grid-template-columns: 44px 14px minmax(0, 1fr) max-content;
+  grid-template-rows: minmax(0, 1fr) 14px;
+  column-gap: 6px;
+  row-gap: 1px;
+  align-items: center;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
-.activity-item:hover .activity-skill-badge,
-.activity-item:hover .activity-direct-badge,
-.activity-item:focus-visible .activity-skill-badge,
-.activity-item:focus-visible .activity-direct-badge {
+.activity-virtual-row .activity-entry-time {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+.activity-virtual-row .activity-entry-rail {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+.activity-virtual-row .item-left {
+  grid-column: 3;
+  grid-row: 1;
+  gap: 2px;
+}
+.activity-virtual-row .item-right {
+  grid-column: 4;
+  grid-row: 1;
+}
+.activity-virtual-row .activity-skill-inline {
+  grid-column: 3 / 5;
+  grid-row: 2;
+}
+.activity-skill-inline {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  gap: 5px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.activity-skill-inline .activity-skill-badge,
+.activity-skill-inline .activity-direct-badge {
+  position: static;
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-height: 13px;
+  padding: 0 4px;
   opacity: 1;
-  transform: translateY(-15px);
+  transform: none;
+  transition: none;
+  pointer-events: none;
+  font-size: 8px;
+}
+.activity-skill-inline .activity-skill-names {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffe0a0;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .005em;
 }
 .empty-activity {
   min-height: min(100%, 80px);

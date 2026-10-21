@@ -25,7 +25,7 @@ app.whenReady().then(async()=>{
  );
  await win.loadFile(path.join(root,"apps","desktop","index.html"));
  await win.webContents.executeJavaScript(
-  '(()=>{document.title="QNECTOR V2.3 - Activity First + Sharp Queen (SIMULATED DATA)";const badge=document.createElement("div");badge.textContent="SIMULATED - NO LIVE MCP DATA";badge.style.cssText="position:fixed;right:18px;top:1px;z-index:99999;pointer-events:none;font:8px Segoe UI,sans-serif;letter-spacing:.055em;color:#e9d9bc;opacity:.80";document.body.appendChild(badge);window.__qcFixture.emitActivityBurst(18)})()',
+  '(()=>{document.title="QNECTOR V2.3 - Activity First + Sharp Queen (SIMULATED DATA)";const badge=document.createElement("div");badge.textContent="SIMULATED - NO LIVE MCP DATA";badge.style.cssText="position:fixed;right:18px;top:1px;z-index:99999;pointer-events:none;font:8px Segoe UI,sans-serif;letter-spacing:.055em;color:#e9d9bc;opacity:.80";document.body.appendChild(badge);window.__qcFixture.emitActivityBurst(18,true)})()',
   true,
  );
  win.show();

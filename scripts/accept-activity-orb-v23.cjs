@@ -52,7 +52,7 @@ async function check(width,height) {
  assert.ok(Math.abs(after.image.x-emblemBefore.x)<0.02 && Math.abs(after.image.y-emblemBefore.y)<0.02,"Queen logo moves with orbital animation");
  await evaluate('(()=>{const orb=document.querySelector(".glass-sphere-enclosure");orb.classList.add("holding");return getComputedStyle(orb).transform})()').then(s=>assert.equal(s,"none","Hold still scales original crest"));
  await evaluate('document.querySelector(".glass-sphere-enclosure").classList.remove("holding")');
- await evaluate("window.__qcFixture.emitActivityBurst(16)");
+ await evaluate("window.__qcFixture.emitActivityBurst(16,true)");
  await sleep(2450);
  const populated=await evaluate('(()=>{const nodes=[...document.querySelectorAll(".activity-virtual-row")];return {count:nodes.length,y:nodes.map(n=>Math.round(n.getBoundingClientRect().y)),timelineNodes:document.querySelectorAll(".activity-entry-rail").length,timestamps:document.querySelectorAll("time.activity-entry-time").length,statusPills:document.querySelectorAll(".activity-result-pill").length,streamScrollHeight:document.querySelector(".activity-stream")?.scrollHeight,streamHeight:document.querySelector(".activity-stream")?.clientHeight}})()');
  assert.ok(populated.count>0,"Activity synthetic events did not show");
@@ -60,6 +60,17 @@ async function check(width,height) {
  assert.equal(populated.timelineNodes,populated.count);
  assert.equal(populated.timestamps,populated.count);
  assert.equal(populated.statusPills,populated.count);
+ // The actual activated Skill names and direct-call provenance must be
+ // visible in the row without pointer hover, including at 420px.
+ const provenance=await evaluate('(()=>{const rows=[...document.querySelectorAll(".activity-item")];const skill=rows.find(r=>r.querySelector(".activity-skill-names"));const direct=rows.find(r=>r.querySelector(".activity-direct-badge"));if(!skill||!direct)return null;const line=skill.querySelector(".activity-skill-inline");const names=skill.querySelector(".activity-skill-names");const label=skill.querySelector(".activity-skill-badge");const bounds=names.getBoundingClientRect(),row=skill.getBoundingClientRect();return {text:names.textContent.trim(),label:label.textContent.trim(),display:getComputedStyle(line).display,opacity:getComputedStyle(label).opacity,withinRow:bounds.top>=row.top&&bounds.bottom<=row.bottom,unclipped:names.scrollWidth<=names.clientWidth+1,aria:skill.getAttribute("aria-label"),direct:direct.querySelector(".activity-direct-badge").textContent.trim()}})()');
+ assert.ok(provenance,"Skill and direct activity samples not both rendered");
+ assert.ok(provenance.text.includes("electron-best-practices")&&provenance.text.includes("typescript-best-practices"),"Actual Skill names missing "+JSON.stringify(provenance));
+ assert.equal(provenance.display,"flex","Skill information only visible on hover");
+ assert.equal(provenance.opacity,"1","Skill badge is hidden until hover");
+ assert.ok(provenance.withinRow,"Skill provenance overflows its task row");
+ assert.ok(provenance.unclipped,"Activated Skill names are truncated at "+width+"px: "+JSON.stringify(provenance));
+ assert.ok(provenance.aria.includes("Skills: electron-best-practices, typescript-best-practices"),"Screen reader cannot identify active Skills");
+ assert.equal(provenance.direct,"DIRECT TOOL");
  // Confirm the running state actually renders a 2px sweep and a bright
  // signal badge in Chromium, rather than the legacy 92px yellow halo.
  const runningStyle=await evaluate('(()=>{const row=document.querySelector(".activity-item"),pill=row?.querySelector(".activity-result-pill");if(!row||!pill)return null;const oldRow=row.classList.contains("running"),oldPill=pill.classList.contains("running");row.classList.add("running");pill.classList.add("running");const stripe=getComputedStyle(row,"::before"),beacon=getComputedStyle(pill,"::before");const result={stripeHeight:parseFloat(stripe.height),stripeWidth:parseFloat(stripe.width),stripeAnimation:stripe.animationName,beaconWidth:parseFloat(beacon.width),beaconBackground:beacon.backgroundColor};row.classList.toggle("running",oldRow);pill.classList.toggle("running",oldPill);return result})()');
