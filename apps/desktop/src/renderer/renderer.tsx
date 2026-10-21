@@ -34,8 +34,10 @@ import "./royal-effects.css";
 import { RoyalSilkBackground } from "./royal-silk-background.js";
 import { QueenLiquidOrb } from "./queen-liquid-orb.js";
 import { RoyalIcon } from "./royal-icons.js";
+import { useGlassRefraction } from "./glass-refraction.js";
 import "./liquid-motion.css";
 import "./royal-motion-system.css";
+import "./mockup-parity.css";
 import { QUALITY_OPTIONS, useMotionPreferences } from "./motion-policy.js";
 
 const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url).href;
@@ -498,6 +500,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
 });
 
 function App(): React.ReactElement {
+  useGlassRefraction();
   const [status, setStatus] = useState<
     | (ServerStatus & { publicUrl?: string; bridge: TransportSnapshot })
     | undefined
@@ -1343,6 +1346,11 @@ function App(): React.ReactElement {
 
   return (
     <div className="app-container">
+        <RoyalSilkBackground
+          isConnected={isConnected}
+          frozen={matrixFrozenAfterDisconnect}
+          motionEnabled={animationsEnabled}
+        />
       {error && (
         <div className="error-toast" role="alert" aria-live="assertive">
           <span>{error}</span>
@@ -1424,12 +1432,13 @@ function App(): React.ReactElement {
 
       <main className="app-main">
         <section className="glass-card hero-glass-section">
-          <RoyalSilkBackground
-            isConnected={isConnected}
-            frozen={matrixFrozenAfterDisconnect}
-            motionEnabled={animationsEnabled}
-          />
+
           <div className="orb-stage">
+            <div className="orb-astral-orbit" aria-hidden="true" />
+            <div className="orb-astral-orbit inner" aria-hidden="true" />
+            <div className="orb-eclipse-plane" aria-hidden="true" />
+            <div className="orb-eclipse-plane alternate" aria-hidden="true" />
+            <div className="orb-comet-track" aria-hidden="true" />
             <svg
               className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}
               viewBox="0 0 130 130"
@@ -1502,16 +1511,20 @@ function App(): React.ReactElement {
             </div>
           </div>
 
+          <div className={`hero-connection-badge ${bridge.state}`} aria-label={isConnected ? "Bridge connected" : isConnecting ? "Bridge connecting" : "Bridge disconnected"}>
+            <span className="hero-link-dot" />
+            {isConnected ? "LINK STABLE" : isConnecting ? "ESTABLISHING LINK" : "LINK OFFLINE"}
+          </div>
           <h2 className="hero-state-title">
             {isHolding
               ? <>DISCONNECTING (<span ref={titleCountdownRef}>3.0</span>s)</>
               : isDisconnecting
                 ? "DISCONNECTING…"
                 : isConnected
-                  ? "BRIDGE: ACTIVE"
+                  ? "Your bridge is online."
                   : isConnecting
                     ? "ESTABLISHING BRIDGE…"
-                    : "BRIDGE: DORMANT"}
+                    : "Your bridge is offline."}
           </h2>
           <p className="hero-state-sub">
             {isHolding

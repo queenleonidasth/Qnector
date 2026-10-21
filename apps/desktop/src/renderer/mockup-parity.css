@@ -1,0 +1,517 @@
+/* V2.1 MOCKUP PARITY — deliberately reconciles the approved HTML with
+ * the real narrow QNECTOR Electron window and real MCP/UI state.
+ * The HTML preview never ran at native VSYNC; this implementation does.
+ * Imported LAST so earlier legacy royal-effects cannot reposition the scene. */
+
+:root {
+  --parity-gold: #ffd68b;
+  --parity-ivory: #f6f1e8;
+  --parity-muted: #cfc6b5;
+  --parity-orb-size: clamp(190px, calc(38vh - 52px), 269px);
+}
+
+body { background: #07090d; }
+.app-container {
+  max-width: none;
+  background: transparent;
+  padding: 12px 12px 10px;
+  isolation: isolate;
+}
+.app-container::before { content: none; }
+.app-container::after { opacity: .08; }
+.app-container > .royal-silk-layer {
+  position: absolute !important;
+  inset: -12px -12px -10px !important;
+  z-index: -1;
+  display: block;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  border-radius: 0;
+  pointer-events: none;
+  overflow: hidden;
+  contain: paint;
+}
+.app-container > .royal-silk-layer .liquid-silk-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.app-container > .royal-silk-layer .royal-silk-vignette {
+  background:
+    linear-gradient(to bottom, rgba(6, 8, 12, .17), transparent 17%, transparent 67%, rgba(6, 8, 12, .27)),
+    radial-gradient(ellipse at 50% 52%, transparent 25%, rgba(5, 8, 12, .22) 93%);
+}
+.app-header, .app-main, .floating-glass-dock {
+  position: relative;
+  z-index: 2;
+}
+
+/* APPROVED GLASS MATERIAL: wide dark glass, an upper-left refraction, a
+ * hairline gilded meniscus and actual offset depth (not flat gray cards). */
+.app-header,
+.activity-glass-card,
+.floating-glass-dock,
+.drawer-card,
+.setup-card,
+.activity-detail-card {
+  background-color: rgba(13, 16, 22, .70);
+  background-image: linear-gradient(134deg, rgba(65, 48, 29, .36), rgba(16, 18, 23, .60) 30%, rgba(10, 13, 20, .77) 73%, rgba(78, 46, 20, .28));
+  border: 1px solid rgba(247, 206, 133, .42);
+  box-shadow:
+    inset 0 1px rgba(255, 246, 221, .19),
+    inset 0 0 18px rgba(255, 226, 164, .042),
+    0 16px 48px rgba(0, 0, 0, .34),
+    0 2px 16px rgba(219, 155, 63, .08);
+  -webkit-backdrop-filter: blur(17px) saturate(135%);
+  backdrop-filter: blur(17px) saturate(135%);
+}
+.app-header {
+  flex: 0 0 70px;
+  min-height: 70px;
+  border-radius: 18px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  animation: parityGlassArrive 450ms cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes parityGlassArrive {
+  from {opacity:.88;transform:translate3d(0,7px,0)}
+  to {opacity:1;transform:translate3d(0,0,0)}
+}
+.brand-crest {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(252, 217, 146, .62);
+  background: linear-gradient(140deg, rgba(128, 89, 40, .58), #0a0d12 65%);
+  box-shadow: inset 0 1px rgba(255, 250, 221, .26), 0 0 16px rgba(255, 180, 65, .13);
+}
+.brand-queen-mark {width:91%;height:91%;object-fit:contain}
+.brand-title {font-size:18px;letter-spacing:.23em;color:var(--parity-ivory)}
+.brand-tag {font-size:9px;letter-spacing:.19em;color:var(--parity-gold)}
+.status-pill {
+  background: rgba(9, 17, 15, .60);
+  border-color: rgba(113, 217, 151, .37);
+  color: #9ce5b5;
+  border-radius: 50px;
+  box-shadow: 0 0 11px rgba(48, 184, 107, .085), inset 0 1px rgba(212,255,222,.13);
+}
+.status-dot {box-shadow:0 0 10px rgba(66,232,148,.50)}
+
+.app-main {
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+/* There is intentionally no frosted rectangle around the Orb. The approved
+ * reference uses a cinematic background, with ACTIVITY as the first glass panel. */
+.hero-glass-section {
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 0;
+  overflow: visible;
+  padding: 0 8px 4px;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  animation: none !important;
+}
+.hero-glass-section::before,.hero-glass-section::after {content:none!important}
+.orb-stage {
+  --orbit-radius:var(--parity-orb-size);
+  width: min(100%, 380px);
+  height: calc(var(--parity-orb-size) + 18px);
+  min-height: 0;
+  margin: clamp(9px, calc((100vh - 650px) * .23), 49px) 0 4px;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  isolation: isolate;
+  flex: 0 0 auto;
+}
+.plasma-aura, .plasma-aura.active {
+  position: absolute;
+  inset: auto;
+  width: calc(var(--parity-orb-size) + 72px);
+  height: calc(var(--parity-orb-size) + 72px);
+  z-index: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255, 225, 144, .31), rgba(174, 91, 30, .12) 36%, transparent 69%) !important;
+  filter: blur(28px) !important;
+  animation: parityAuraBreathe 7s ease-in-out infinite !important;
+  transform-origin: center;
+  pointer-events: none;
+}
+@keyframes parityAuraBreathe {
+  0%,100% {opacity:.56;transform:scale(.98)}
+  50% {opacity:.92;transform:scale(1.06)}
+}
+.glass-sphere-enclosure {
+  width: var(--parity-orb-size);
+  height: var(--parity-orb-size);
+  z-index: 4;
+  position: relative;
+  flex: none;
+  overflow: visible;
+  padding: 9px;
+  border: 1px solid rgba(255, 238, 192, .72) !important;
+  background:
+    conic-gradient(from 32deg,rgba(255,250,232,.59),rgba(35,45,60,.22) 12%,rgba(221,164,65,.29) 23%,rgba(255,246,212,.76) 36%,rgba(19,25,32,.51) 49%,rgba(232,175,75,.37) 61%,rgba(255,245,210,.44) 80%,rgba(255,232,162,.70)) !important;
+  box-shadow:
+    0 0 3px 1px rgba(255,232,190,.39),
+    inset 0 0 18px rgba(255,243,194,.27),
+    0 0 28px rgba(230,150,53,.31),
+    0 0 78px rgba(224,155,67,.17) !important;
+  touch-action: none;
+  animation: none !important;
+  transition: transform 200ms cubic-bezier(.16,1,.3,1),filter 200ms ease !important;
+}
+.glass-sphere-enclosure:focus-visible {outline:2px solid #ffe3a1;outline-offset:15px}
+.glass-sphere-enclosure:hover {transform:scale(1.014)}
+.glass-sphere-enclosure.holding {transform:scale(.971)}
+.queen-orb-visual {inset:0;border-radius:50%;pointer-events:none}
+.queen-orb-float {
+  inset: 9px;
+  overflow: visible;
+  border-radius: 50%;
+  animation: parityOrbFloat 7.5s ease-in-out infinite !important;
+  will-change: transform;
+}
+@keyframes parityOrbFloat {
+  0%,100% {transform:translate3d(0,2px,0)}
+  50% {transform:translate3d(0,-4px,0)}
+}
+.queen-orb-inner-glass {
+  inset:0;
+  border-radius:50%;
+  border:1px solid rgba(255,238,194,.35);
+  background: radial-gradient(circle at 31% 16%,rgba(242,248,255,.31),transparent 43%),
+    conic-gradient(from 20deg,rgba(238,241,228,.40),rgba(54,70,83,.24) 15%,rgba(221,157,75,.36) 38%,rgba(23,27,35,.68) 59%,rgba(242,200,136,.45));
+  box-shadow:inset 8px 5px 22px rgba(255,239,190,.23),inset -12px -16px 28px rgba(4,9,18,.86),0 0 3px rgba(255,244,218,.75);
+}
+.queen-orb-fluid {
+  inset:1.5%;
+  width:97%;
+  height:97%;
+}
+.queen-orb-portrait {
+  width:56%;
+  height:56%;
+  filter:contrast(1.08) saturate(1.12) brightness(1.07)
+    drop-shadow(0 0 9px rgba(250,204,130,.42));
+  mix-blend-mode:normal;
+}
+.queen-orb-reflection {
+  background:
+    radial-gradient(ellipse at 24% 12%,rgba(245,252,255,.30),transparent 43%),
+    linear-gradient(145deg,rgba(255,246,208,.10),transparent 31%,transparent 75%,rgba(255,202,98,.06));
+  -webkit-mask-image:radial-gradient(circle,transparent 0 35%,rgba(0,0,0,.24) 58%,#000 91%);
+  mask-image:radial-gradient(circle,transparent 0 35%,rgba(0,0,0,.24) 58%,#000 91%);
+}
+.orb-astral-orbit {
+  position:absolute;
+  width:calc(var(--parity-orb-size) + 52px);
+  height:calc(var(--parity-orb-size) + 52px);
+  border-radius:50%;
+  pointer-events:none;
+  z-index:2;
+  background:conic-gradient(from 11deg,transparent 0 9%,rgba(255,237,181,.59) 10%,transparent 11% 26%,rgba(246,192,107,.42) 28%,transparent 30% 57%,rgba(253,198,101,.36) 59%,transparent 62%);
+  -webkit-mask:radial-gradient(circle,transparent 69.1%,#000 69.8% 70.7%,transparent 71.7%);
+  mask:radial-gradient(circle,transparent 69.1%,#000 69.8% 70.7%,transparent 71.7%);
+  filter:drop-shadow(0 0 15px rgba(250,193,90,.60));
+  animation:parityOrbitSpin 34s linear infinite;
+}
+.orb-astral-orbit.inner {
+  width:calc(var(--parity-orb-size) + 29px);
+  height:calc(var(--parity-orb-size) + 29px);
+  opacity:.67;
+  animation:parityOrbitSpinReverse 47s linear infinite;
+  -webkit-mask:radial-gradient(circle,transparent 68.2%,#000 69% 69.8%,transparent 70.8%);
+  mask:radial-gradient(circle,transparent 68.2%,#000 69% 69.8%,transparent 70.8%);
+}
+.orb-eclipse-plane {
+  position:absolute;
+  width:calc(var(--parity-orb-size) + 70px);
+  height:calc(var(--parity-orb-size) * .46);
+  border:1px solid rgba(255,221,139,.42);
+  border-radius:50%;
+  pointer-events:none;
+  z-index:6;
+  transform:rotate(-13deg);
+  box-shadow:0 0 7px rgba(255,201,88,.27),inset 0 0 4px rgba(255,209,107,.17);
+  opacity:.78;
+}
+.orb-eclipse-plane.alternate {
+  width:calc(var(--parity-orb-size) + 65px);
+  height:calc(var(--parity-orb-size) * .44);
+  transform:rotate(24deg);
+  opacity:.25;
+}
+.orb-comet-track {
+  position:absolute;
+  width:calc(var(--parity-orb-size) + 40px);
+  height:calc(var(--parity-orb-size) + 40px);
+  z-index:5;
+  border-radius:50%;
+  pointer-events:none;
+  background:conic-gradient(from 15deg,transparent 0 74%,rgba(255,235,178,.36) 80%,transparent 83% 100%);
+  -webkit-mask:radial-gradient(circle,transparent 72%,#000 73.2% 74%,transparent 75%);
+  mask:radial-gradient(circle,transparent 72%,#000 73.2% 74%,transparent 75%);
+  animation:parityOrbitSpin 22s linear infinite;
+}
+@keyframes parityOrbitSpin {to{transform:rotate(360deg)}}
+@keyframes parityOrbitSpinReverse {to{transform:rotate(-360deg)}}
+
+/* Ring is centered on the BIG orb and completely absent until hold starts.
+ * Keep the existing backend-authoritative three-second release semantics. */
+.charge-svg-ring {
+  position:absolute;
+  top:50%;
+  left:50%;
+  width:calc(var(--parity-orb-size) + 55px);
+  height:calc(var(--parity-orb-size) + 55px);
+  transform:translate(-50%,-50%) rotate(-90deg);
+  z-index:10;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  filter:none;
+  transition:opacity 130ms ease;
+}
+.charge-svg-ring.active {
+  visibility:visible;
+  opacity:1;
+  filter:drop-shadow(0 0 7px rgba(255,210,137,.76));
+}
+.charge-track {stroke:rgba(255,237,190,.34)}
+.charge-meter {stroke:#ffe8b0;stroke-linecap:butt}
+.burst-flash-ring {
+  width:var(--parity-orb-size);
+  height:var(--parity-orb-size);
+  inset:auto;
+  z-index:7;
+}
+
+/* Link state and typography match the conceptual hierarchy, not the old
+ * tiny all-caps warning label or flat gray microcopy. */
+.hero-connection-badge {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  flex:0 0 auto;
+  width:auto;
+  min-height:33px;
+  padding:8px 16px;
+  border-radius:999px;
+  border:1px solid rgba(255,212,137,.48);
+  background:linear-gradient(110deg,rgba(85,64,39,.58),rgba(17,20,24,.86));
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  box-shadow:0 0 17px rgba(234,160,58,.20),inset 0 1px rgba(255,255,255,.14);
+  color:#9af3be;
+  font-size:10px;
+  letter-spacing:.19em;
+  font-weight:750;
+  margin:6px 0 0;
+}
+.hero-link-dot {
+  display:inline-block;
+  width:8px;height:8px;
+  flex:none;
+  border-radius:50%;
+  background:#48ee9b;
+  box-shadow:0 0 10px rgba(66,232,148,.48);
+}
+.hero-connection-badge.connecting {color:var(--parity-gold)}
+.hero-connection-badge.connecting .hero-link-dot{background:var(--parity-gold)}
+.hero-connection-badge.disconnected, .hero-connection-badge.error {color:#ffb4aa}
+.hero-connection-badge.disconnected .hero-link-dot,.hero-connection-badge.error .hero-link-dot{background:#f39189}
+.hero-state-title {
+  font:400 clamp(22px, 5.6vw, 29px)/1.14 Georgia,Constantia,serif;
+  letter-spacing:-.015em;
+  color:var(--parity-ivory);
+  text-transform:none;
+  margin:11px 0 4px;
+  text-shadow:0 2px 22px rgba(0,0,0,.78);
+}
+.hero-state-sub {
+  color:#dfd4c2;
+  font-size:12px;
+  line-height:1.45;
+  margin-bottom:11px;
+  text-shadow:0 2px 13px rgba(0,0,0,.65);
+}
+.endpoint-glass-box {
+  width:100%;
+  min-height:41px;
+  margin:0 0 9px;
+  border-radius:13px;
+  background:linear-gradient(150deg,rgba(11,12,17,.78),rgba(42,31,21,.50));
+  border:1px solid rgba(250,218,163,.33);
+  box-shadow:inset 0 1px rgba(255,250,233,.12),0 5px 15px rgba(0,0,0,.14);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+}
+.endpoint-link-icon {filter:saturate(.6)}
+.btn-liquid-action {
+  min-height:44px;
+  border-radius:13px;
+  background:linear-gradient(135deg,#f6d28c,#ffe5ab 43%,#d5a55a)!important;
+  border:1px solid rgba(255,231,178,.87);
+  box-shadow:0 5px 21px rgba(244,188,91,.25),inset 0 1px rgba(255,255,255,.66);
+  color:#261809;
+  font-weight:710;
+  animation:none!important;
+}
+.btn-liquid-action:hover:not(:disabled){
+  box-shadow:0 7px 30px rgba(244,188,91,.36),inset 0 1px rgba(255,255,255,.78);
+}
+.hold-hint-pill {
+  min-height:19px;
+  margin-top:7px;
+  font-size:10px;
+  border-color:rgba(255,221,162,.28);
+  background:rgba(21,20,21,.57);
+  color:var(--parity-muted);
+}
+
+/* Activity is the lower first glass panel, not a competing second hero card.
+ * It remains scrollable and virtualized when the real bridge sends events. */
+.activity-glass-card {
+  flex:1 1 auto;
+  min-height:64px;
+  border-radius:17px;
+  padding:13px 15px;
+  animation:none!important;
+}
+.card-eyebrow {
+  font:400 18px/1.2 Constantia,Georgia,serif;
+  letter-spacing:0;
+  text-transform:none;
+  color:var(--parity-ivory);
+}
+.card-eyebrow-row {margin-bottom:8px}
+.floating-glass-dock {
+  flex:0 0 65px;
+  height:65px;
+  border-radius:17px;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  padding:5px;
+  gap:4px;
+  margin-top:9px;
+  animation:none!important;
+}
+.floating-glass-dock::after {display:none}
+.floating-glass-dock.dashboard-dock .dock-pill-btn,
+.dock-pill-btn {
+  min-height:52px;
+  height:52px;
+  padding:6px 3px;
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  justify-content:center;
+  align-items:center;
+  border-radius:11px;
+  font-size:10px;
+}
+.floating-glass-dock.dashboard-dock .dock-pill-btn > span:first-child,
+.dock-pill-btn > span:first-child{
+  width:20px;height:20px;flex:0 0 20px;
+}
+.floating-glass-dock.dashboard-dock .dock-pill-btn > span:last-child{
+  color:var(--parity-muted);
+  font-size:10px;
+}
+.dock-pill-btn.active {
+  border:1px solid rgba(255,218,146,.41);
+  background:linear-gradient(145deg,rgba(249,204,124,.36),rgba(85,57,32,.24));
+  box-shadow:inset 0 1px rgba(255,240,202,.24),0 4px 16px rgba(246,174,73,.14);
+}
+.dock-pill-btn.active span:last-child{color:#ffe7ad}
+
+/* Keep legacy settings, focus, modal truth and screen-reader semantics intact. */
+.drawer-card,.setup-card,.activity-detail-card {border-radius:18px}
+:where(.drawer-card,.setup-card,.activity-detail-card)::before{
+  content:"";pointer-events:none;
+  background:radial-gradient(240px 170px at 13% 3%,rgba(255,224,162,.11),transparent 83%);
+}
+@media(max-height:760px) {
+  .app-container {padding:8px 11px}
+  .app-header{min-height:57px;flex-basis:57px;padding:6px 12px;margin-bottom:3px}
+  .brand-crest {width:37px;height:37px}
+  .orb-stage {margin-top:6px;margin-bottom:0}
+  .hero-state-title{font-size:22px;margin-top:6px}
+  .hero-state-sub{font-size:11px;margin-bottom:6px}
+  .hero-connection-badge{min-height:28px;padding:5px 12px}
+  .endpoint-glass-box{min-height:35px;margin-bottom:6px}
+  .btn-liquid-action{min-height:38px}
+  .hold-hint-pill{margin-top:4px}
+  .floating-glass-dock{height:57px;flex-basis:57px;margin-top:3px}
+  .floating-glass-dock.dashboard-dock .dock-pill-btn,.dock-pill-btn{height:46px;min-height:46px}
+}
+@media(max-height:640px) {
+  :root {--parity-orb-size:175px}
+  .hero-state-sub{display:none}
+  .activity-glass-card{min-height:44px;padding:8px 12px}
+  .hold-hint-pill:not(.active){display:none}
+  .orb-eclipse-plane{opacity:.50}
+}
+@media(prefers-reduced-motion:reduce) {
+  .orb-astral-orbit,.orb-comet-track,.queen-orb-float,.plasma-aura {animation:none!important}
+  .glass-sphere-enclosure{transition:none}
+}
+html[data-motion="off"] .orb-astral-orbit,
+html[data-motion="off"] .orb-comet-track,
+html[data-motion="off"] .queen-orb-float,
+html[data-motion-quality="off"] .orb-astral-orbit,
+html[data-motion-quality="off"] .orb-comet-track,
+html[data-motion-quality="off"] .queen-orb-float,
+html[data-motion-quality="reduced"] .orb-astral-orbit,
+html[data-motion-quality="reduced"] .orb-comet-track,
+html[data-motion-quality="reduced"] .queen-orb-float{
+  animation:none!important;
+}
+html[data-motion-quality="eco"] .orb-astral-orbit.inner {animation:none!important}
+html[data-motion-quality="eco"] .orb-eclipse-plane.alternate {opacity:.12}
+
+/* The old hero title used transparent text filled by a gold background image.
+ * Override both, otherwise its authored ivory is never painted. */
+.hero-glass-section .hero-state-title {
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+  -webkit-text-fill-color: var(--parity-ivory) !important;
+  color: var(--parity-ivory) !important;
+  text-shadow: 0 2px 18px rgba(2, 3, 6, .90);
+}
+
+/* Pointer-positioned gold refraction from the approved HTML mockup.
+ * The pointer listener is throttled to one paint per native frame. */
+.app-header,
+.floating-glass-dock,
+.activity-glass-card,
+.drawer-card,
+.setup-card,
+.activity-detail-card {
+  background-image:
+    radial-gradient(260px 170px at var(--glass-x, 18%) var(--glass-y, 4%),
+      rgba(255, 224, 162, .12), transparent 83%),
+    linear-gradient(134deg, rgba(65, 48, 29, .34),
+      rgba(16, 18, 23, .64) 30%, rgba(10, 13, 20, .77) 73%, rgba(78, 46, 20, .25));
+}
+
+/* Empty Activity still needs human-readable contrast against a moving silk scene. */
+.activity-glass-card .empty-activity {
+  color: #d2cabd;
+  font-size: 11px;
+  line-height: 1.45;
+  text-shadow: 0 1px 10px rgba(1, 2, 6, .75);
+}
+.activity-glass-card .empty-spark {
+  color: #fbd998;
+  filter: drop-shadow(0 0 5px rgba(231, 173, 78, .30));
+}

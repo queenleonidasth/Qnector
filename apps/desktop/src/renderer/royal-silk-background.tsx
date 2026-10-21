@@ -8,16 +8,22 @@ interface RoyalSilkBackgroundProps {
   motionEnabled: boolean;
 }
 
-const dust = Array.from({ length: 45 }, (_, index) => ({
-  x: ((index * 91.71) % 1000) / 1000,
-  y: ((index * 173.83 + 29) % 1000) / 1000,
-  phase: index * 1.17,
-  size: 0.48 + (index % 5) * 0.22,
-}));
+const motes = Array.from({ length: 90 }, (_, index) => {
+  const seed = (index * 57.7 + 17) % 1000;
+  return {
+    angle: (seed * 0.071) % (Math.PI * 2),
+    radius: 22 + (seed * 0.61) % 330,
+    size: 0.5 + (seed % 7) * 0.18,
+    drift: 0.22 + (seed % 9) * 0.07,
+    phase: seed,
+  };
+});
 
 /**
- * Production candidate: no Matrix text glyphs or forced sub-60 FPS timers.
- * Keep the total per-frame paths bounded for use beside fullscreen games.
+ * Full-window silk from the user-approved V2.1 HTML, not a tiny Canvas occupying
+ * 150px in the hero flex layout. Three translucent bands per path give the
+ * cinematic, refractive light; Quality budgets adjust density and DPR.
+ * All painters share the existing visible-only native VSYNC clock.
  */
 export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
   isConnected,
@@ -25,70 +31,85 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
   motionEnabled,
 }: RoyalSilkBackgroundProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const metricsRef = useRef({ width: 0, height: 0 });
-  const connectionRef = useRef(isConnected);
-  connectionRef.current = isConnected;
+  const geometry = useRef({ width: 0, height: 0 });
+  const connectedRef = useRef(isConnected);
+  connectedRef.current = isConnected;
 
-  const draw = useCallback((seconds: number, animated: boolean) => {
+  const draw = useCallback((seconds: number, animated: boolean): void => {
     const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d", { alpha: true });
-    if (!context) return;
-    const { width, height } = metricsRef.current;
-    if (!width || !height) return;
+    const ctx = canvas?.getContext("2d", { alpha: true });
+    if (!ctx) return;
+    const { width: w, height: h } = geometry.current;
+    if (w < 1 || h < 1) return;
 
-    const time = animated ? seconds : 0;
     const budget = motionBudget(currentMotionQuality());
-    const strength = connectionRef.current ? 1 : 0.55;
-    const ctx = context;
-    ctx.clearRect(0, 0, width, height);
+    const time = animated ? seconds : 0;
+    const strength = connectedRef.current ? 1 : 0.55;
+    ctx.clearRect(0, 0, w, h);
 
-    const aura = ctx.createRadialGradient(
-      width * 0.5, height * 0.49, 0,
-      width * 0.5, height * 0.49, width * 0.70,
-    );
-    aura.addColorStop(0, "rgba(219, 143, 51, 0.17)");
-    aura.addColorStop(0.65, "rgba(137, 90, 38, 0.07)");
-    aura.addColorStop(1, "rgba(0, 0, 0, 0)");
+    const backdrop = ctx.createRadialGradient(w * 0.5, h * 0.42, 0, w * 0.5, h * 0.42, w * 0.76);
+    backdrop.addColorStop(0, "rgba(178,103,37,.25)");
+    backdrop.addColorStop(0.36, "rgba(68,45,35,.11)");
+    backdrop.addColorStop(1, "rgba(7,9,13,0)");
     ctx.globalAlpha = strength;
-    ctx.fillStyle = aura;
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = backdrop;
+    ctx.fillRect(0, 0, w, h);
 
-    const light = ctx.createLinearGradient(0, height * 0.25, width, height * 0.8);
-    light.addColorStop(0, "rgba(246, 200, 125, 0)");
-    light.addColorStop(0.23, "rgba(246, 198, 108, 0.52)");
-    light.addColorStop(0.53, "rgba(255, 233, 164, 0.74)");
-    light.addColorStop(0.83, "rgba(214, 150, 68, 0.50)");
-    light.addColorStop(1, "rgba(248, 184, 98, 0)");
+    // Warm-silver silk reflection: broad translucent ribbons, a blurred inner
+    // strand, and a sharp filament. Preserve this hierarchy in every profile.
+    const gradient = ctx.createLinearGradient(0, 0, w, h);
+    gradient.addColorStop(0, "rgba(201,132,56,0)");
+    gradient.addColorStop(0.16, "rgba(255,211,142,.62)");
+    gradient.addColorStop(0.39, "rgba(190,115,38,.80)");
+    gradient.addColorStop(0.58, "rgba(255,243,196,.95)");
+    gradient.addColorStop(0.82, "rgba(211,151,72,.68)");
+    gradient.addColorStop(1, "rgba(250,196,111,0)");
 
-    ctx.strokeStyle = light;
-    ctx.lineCap = "round";
-    for (let band = 0; band < budget.ribbons; band += 1) {
-      const baseline = height * (0.18 + band * 0.124);
-      const amplitude = height * (0.039 + (band % 3) * 0.013);
-      const offset = band * 0.78 + time * (0.14 + band * 0.015);
-      ctx.beginPath();
-      for (let x = -20; x <= width + 20; x += 13) {
-        const xx = x / Math.max(1, width);
-        const y = baseline +
-          Math.sin(xx * Math.PI * (1.6 + band * 0.10) + offset) * amplitude +
-          Math.sin(xx * Math.PI * 3.1 - time * 0.095 + band) * amplitude * 0.27;
-        if (x === -20) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+    for (let i = 0; i < Math.min(budget.ribbons, 7); i += 1) {
+      const lower = i % 2 === 0;
+      const mid = h * (lower ? 0.72 : 0.31);
+      const yBase = mid + (i - 3) * h * 0.087;
+      const amplitude = h * (0.055 + (i % 3) * 0.024);
+      const frequency = 0.72 + i * 0.16;
+      const phase = i * 0.92 + (i % 2 ? Math.PI : 0);
+      const path = new Path2D();
+      for (let x = -30; x <= w + 40; x += 13) {
+        const normalized = x / w;
+        const bend = Math.sin(normalized * frequency * Math.PI * 2 + phase + (time + i * 0.64) * 0.09) * amplitude;
+        const bend2 = Math.sin(normalized * Math.PI * 2.7 - time * 0.06 + phase * 0.44) * amplitude * 0.32;
+        const y = yBase + bend + bend2;
+        if (x === -30) path.moveTo(x, y);
+        else path.lineTo(x, y);
       }
-      ctx.globalAlpha = strength * (band % 2 === 0 ? 0.36 : 0.25);
-      ctx.lineWidth = band % 3 === 0 ? 3.5 : 1.6;
-      ctx.stroke();
+      // Three passes use one calculated path rather than recomputing it.
+      const layers = budget.ribbons >= 6
+        ? [{ width: 67, opacity: 0.065 }, { width: 26, opacity: 0.13 }, { width: 3.2, opacity: 0.66 }]
+        : [{ width: 35, opacity: 0.045 }, { width: 2.5, opacity: 0.48 }];
+      ctx.strokeStyle = gradient;
+      ctx.lineCap = "round";
+      for (const layer of layers) {
+        ctx.globalAlpha = strength * layer.opacity;
+        ctx.lineWidth = layer.width;
+        ctx.stroke(path);
+      }
     }
-    ctx.globalAlpha = strength;
 
-    for (const dot of dust.slice(0, budget.dust)) {
-      const x = dot.x * width + Math.sin(time * 0.19 + dot.phase) * 9;
-      const y = dot.y * height + Math.cos(time * 0.16 + dot.phase) * 7;
-      ctx.globalAlpha = strength * (0.18 + 0.32 * (0.5 + 0.5 * Math.sin(dot.phase + time * 0.65)));
-      ctx.fillStyle = "rgb(255, 218, 143)";
+    for (let i = 0; i < Math.min(budget.dust, motes.length); i += 1) {
+      const p = motes[i]!;
+      const x = ((p.radius / 360) * w + Math.sin(p.angle + time * 0.11 * p.drift) * 44 + w) % w;
+      const y = ((p.phase * 0.77 / 1000) * h + Math.cos(p.angle + time * 0.09 * p.drift) * 27 + h) % h;
+      const twinkle = 0.40 + 0.60 * Math.max(0, Math.sin(p.angle * 2 + time * 0.8));
+      ctx.globalAlpha = twinkle * 0.64 * strength;
+      ctx.fillStyle = i % 7 === 0 ? "#fff3cf" : "#e9ad62";
       ctx.beginPath();
-      ctx.arc(x, y, dot.size, 0, Math.PI * 2);
+      ctx.arc(x, y, p.size, 0, Math.PI * 2);
       ctx.fill();
+      if (i % 12 === 0) {
+        ctx.globalAlpha = 0.075 * strength;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size * 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.globalAlpha = 1;
   }, []);
@@ -97,28 +118,23 @@ export const RoyalSilkBackground = React.memo(function RoyalSilkBackground({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const resize = (): void => {
-      const target = canvas.parentElement;
-      if (!target) return;
-      const rect = target.getBoundingClientRect();
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const rect = parent.getBoundingClientRect();
       const width = Math.max(1, rect.width);
       const height = Math.max(1, rect.height);
       const dpr = Math.min(window.devicePixelRatio || 1, motionBudget(currentMotionQuality()).maxDpr);
-      metricsRef.current = { width, height };
+      geometry.current = { width, height };
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
-      const ctx = canvas.getContext("2d");
-      ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw(performance.now() / 1000, false);
+      canvas.getContext("2d")?.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw(0, false);
     };
     resize();
-    // Defer canvas resize writes out of the ResizeObserver delivery phase.
     let resizeFrame: number | null = null;
     const observer = new ResizeObserver(() => {
       if (resizeFrame !== null) return;
-      resizeFrame = requestAnimationFrame(() => {
-        resizeFrame = null;
-        resize();
-      });
+      resizeFrame = requestAnimationFrame(() => { resizeFrame = null; resize(); });
     });
     if (canvas.parentElement) observer.observe(canvas.parentElement);
     document.documentElement.addEventListener(MOTION_CHANGE_EVENT, resize);
