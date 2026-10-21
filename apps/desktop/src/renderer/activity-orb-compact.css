@@ -381,7 +381,7 @@
  * A full-width second row shows actual Skill names, including while running. */
 .activity-virtual-row > .activity-item {
   display: grid;
-  grid-template-columns: 44px 14px minmax(0, 1fr) max-content;
+  grid-template-columns: 44px 14px minmax(0, 1fr) 112px;
   grid-template-rows: minmax(0, 1fr) 14px;
   column-gap: 6px;
   row-gap: 1px;
@@ -405,6 +405,22 @@
 .activity-virtual-row .item-right {
   grid-column: 4;
   grid-row: 1;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 7px;
+  gap: 3px;
+  width: 112px;
+  min-width: 112px;
+  margin-left: 0;
+  justify-items: center;
+}
+.activity-virtual-row .activity-duration {
+  min-width: 0;
+  justify-self: end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.activity-virtual-row .activity-open-glyph {
+  justify-self: end;
 }
 .activity-virtual-row .activity-skill-inline {
   grid-column: 3 / 5;
