@@ -27,22 +27,30 @@ const completed={
  "24":"native multi-viewport drawer navigation, focus and scroll retention",
  "25":"central controls and removal of 8 transition:all declarations",
  "26":"synthetic 16-event native Activity virtualization layout QA",
+ "31":"native Setup Escape/focus and Back-Continue retains typed inputs (motion-reduced-off-matrix.json)",
+ "32":"required field validation, synthetic pending submit, rejected request and retry enabled",
+ "34":"six synthetic updater phase transitions, no duplicate download spinner",
+ "35":"37pct backend-provided determinate download, checksum-verification boundary + updater e2e tests",
+ "37":"five views x four motion states + Setup and native hide/resume QA",
+ "39":"120s native stress: 3720 synthetic events, 288 route interactions, bounded rows and plateaued memory",
  "43":"no new third-party runtime package; CSS, TS, Canvas and inline SVG only",
+ "45":"2026-10-21 unsigned internal setup+portable candidate, 19 clean-source gates and package-acceptance.json (revision 0bfab3f; latest focus fix needs repack)",
  "44":"royal-motion-state-contracts.md and royal-motion-v2-implementation-report.md"
 };
 const source=fs.readFileSync(file,"utf8");
 let marked=0;
 const next=source.split(/\r?\n/).map(line=>{
- const m=line.match(/^- \[ \] \*\*AR-(\d{2})\*\*/);
- if(!m||!(m[1] in completed))return line;
- if(!line.includes("**Evidence:** _pending_"))throw Error("Task evidence format changed: AR-"+m[1]);
+ const m=line.match(/^- \[(x| )\] \*\*AR-(\d{2})\*\*/);
+ if(!m||!(m[2] in completed))return line;
+ if(m[1]==="x")return line;
+ if(!line.includes("**Evidence:** _pending_"))throw Error("Task evidence format changed: AR-"+m[2]);
  marked++;
- return line.replace("- [ ]","- [x]").replace("**Evidence:** _pending_","**Evidence:** "+completed[m[1]]);
+ return line.replace("- [ ]","- [x]").replace("**Evidence:** _pending_","**Evidence:** "+completed[m[2]]);
 }).join("\n");
 const found=(next.match(/\*\*AR-\d{2}\*\*/g)||[]).length;
 const checked=(next.match(/^- \[x\] \*\*AR-/gm)||[]).length;
 const pending=(next.match(/^- \[ \] \*\*AR-/gm)||[]).length;
-if(found!==48||marked!==Object.keys(completed).length||checked!==marked||pending!==48-marked)
+if(found!==48||checked!==Object.keys(completed).length||pending!==48-checked)
  throw Error("Checklist invariant failed: "+JSON.stringify({found,marked,checked,pending}));
 fs.writeFileSync(file,next,"utf8");
-console.log(JSON.stringify({found,verifiedComplete:checked,remainingPending:pending}));
+console.log(JSON.stringify({found,newlyMarked:marked,verifiedComplete:checked,remainingPending:pending}));

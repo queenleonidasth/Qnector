@@ -81,7 +81,20 @@ export function useModalFocusTrap(
           '[role="dialog"][aria-modal="true"]',
         ),
       );
-      const topmostDialog = modalDialogs.at(-1);
+      // A Setup dialog has z-index 1400 but renders before the Drawer (50).
+      // Compare actual overlay layers, not DOM order, for Tab and Escape.
+      const topmostDialog = modalDialogs.reduce<HTMLElement | undefined>(
+        (topmost, candidate) => {
+          if (!topmost) return candidate;
+          const getLayer = (element: HTMLElement): number => {
+            const overlay = element.parentElement ?? element;
+            const value = Number.parseInt(getComputedStyle(overlay).zIndex, 10);
+            return Number.isFinite(value) ? value : 0;
+          };
+          return getLayer(candidate) >= getLayer(topmost) ? candidate : topmost;
+        },
+        undefined,
+      );
       if (topmostDialog && topmostDialog !== dialog) return;
 
       if (event.key === "Escape" && closeOnEscape) {

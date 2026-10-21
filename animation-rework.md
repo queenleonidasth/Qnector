@@ -341,17 +341,17 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 - [ ] **AR-30** — Rework Typography/Toast/Tooltip/validation and keyboard focus feedback across all views. **Evidence:** _pending_
 
 ### Phase 5 — Setup & Update States
-- [ ] **AR-31** — Rework Setup open/close and step transitions preserving typed inputs. **Evidence:** _pending_
-- [ ] **AR-32** — Rework form validation, pending state, inline error and submission interactions. **Evidence:** _pending_
+- [x] **AR-31** — Rework Setup open/close and step transitions preserving typed inputs. **Evidence:** native Setup Escape/focus and Back-Continue retains typed inputs (motion-reduced-off-matrix.json)
+- [x] **AR-32** — Rework form validation, pending state, inline error and submission interactions. **Evidence:** required field validation, synthetic pending submit, rejected request and retry enabled
 - [ ] **AR-33** — Rework setup successful/failed states with accurate completed-step feedback. **Evidence:** _pending_
-- [ ] **AR-34** — Rework updater checking/downloading states; avoid multiple simultaneous spinners. **Evidence:** _pending_
-- [ ] **AR-35** — Implement determinate progress-to-success only for real percentages and verified update success. **Evidence:** _pending_
+- [x] **AR-34** — Rework updater checking/downloading states; avoid multiple simultaneous spinners. **Evidence:** six synthetic updater phase transitions, no duplicate download spinner
+- [x] **AR-35** — Implement determinate progress-to-success only for real percentages and verified update success. **Evidence:** 37pct backend-provided determinate download, checksum-verification boundary + updater e2e tests
 - [ ] **AR-36** — Rework restart overlay/indeterminate progress, preserve recovery messages and no false restart completion. **Evidence:** _pending_
 
 ### Phase 6 — QA & Performance
-- [ ] **AR-37** — Execute reduced-motion and animation-off matrix across every screen/event. **Evidence:** _pending_
+- [x] **AR-37** — Execute reduced-motion and animation-off matrix across every screen/event. **Evidence:** five views x four motion states + Setup and native hide/resume QA
 - [ ] **AR-38** — Test 60/120/144/165 Hz where available, DPI/zoom/window scaling and different frame budgets. **Evidence:** _pending_
-- [ ] **AR-39** — Stress rapid interactions and long-running activity feeds; detect memory/timer/rAF leaks. **Evidence:** _pending_
+- [x] **AR-39** — Stress rapid interactions and long-running activity feeds; detect memory/timer/rAF leaks. **Evidence:** 120s native stress: 3720 synthetic events, 288 route interactions, bounded rows and plateaued memory
 - [ ] **AR-40** — Capture before/after CPU/GPU/frame-time including percentiles and screenshot/video evidence. **Evidence:** _pending_
 - [ ] **AR-41** — Measure minimized/hidden/game-foreground behavior and frame pacing; tune or disable high-cost effects. **Evidence:** _pending_
 - [ ] **AR-42** — Fix regressions, document failures honestly, sign off all applicable acceptance gates. **Evidence:** _pending_
@@ -359,7 +359,7 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 ### Phase 7 — Release Preparation
 - [x] **AR-43** — Audit all motion dependencies and bundle size/licensing; avoid GSAP unless explicitly justified. **Evidence:** no new third-party runtime package; CSS, TS, Canvas and inline SVG only
 - [x] **AR-44** — Document migration, preferences, reduced-motion and compatibility constraints for maintainers. **Evidence:** royal-motion-state-contracts.md and royal-motion-v2-implementation-report.md
-- [ ] **AR-45** — Build Windows Electron packaged candidate without overwriting production install. **Evidence:** _pending_
+- [x] **AR-45** — Build Windows Electron packaged candidate without overwriting production install. **Evidence:** 2026-10-21 unsigned internal setup+portable candidate, 19 clean-source gates and package-acceptance.json (revision 0bfab3f; latest focus fix needs repack)
 - [ ] **AR-46** — Verify cold launch, update, rollback, uninstall/reinstall and profile retention in packaged build. **Evidence:** _pending_
 - [ ] **AR-47** — Confirm feature parity with v0.4.57 no-Plan, local Memory and core bridge/tunnel behavior. **Evidence:** _pending_
 - [ ] **AR-48** — Publish release-candidate evidence and version plan only after all required gates; no silent GitHub release. **Evidence:** _pending_
@@ -411,3 +411,25 @@ Special acceptance: keep focus usable during mid-animation, don't start a new ba
 
 ---
 **Exact references:** https://motion-reference.takayustudio.jp/ (live catalog), main source apps/desktop/src/renderer, mockup docs/design/animation-rework-mockup.html. Screen mockup interactions are illustrative only.
+
+## 2026-10-21: Native integration checkpoint — 31/48 verified
+
+Six additional checklist items (AR-31, AR-32, AR-34, AR-35, AR-37,
+AR-39) now have synthetic native Electron test evidence. Focus-trap
+stacking was corrected to route Escape to the actual topmost Setup
+modal. The 20-screen Motion Matrix also verifies Setup form state
+preservation, submission rejection, and six truthful Updater states.
+A two-minute synthetic soak delivered 3,720 events and approximately
+288 rapid menu interactions with a stable post-warm-up memory plateau.
+Full results and limitations are in
+docs/design/royal-motion-v2-implementation-report.md.
+
+The 2026-10-21 internal Windows package on revision 0bfab3f passed
+19 release gates with clean-source SHA-256 attestation. Its installer
+and portable binaries are **unsigned**, and it predates the later modal
+focus fix. A new package is required for the updated source.
+
+Do not mark the remaining physical/game/host/rollback acceptance gates
+complete without directly observing them. Do not overwrite installed
+QNECTOR v0.4.57 or publish another public artifact under the same
+version without an explicit version/signing plan.

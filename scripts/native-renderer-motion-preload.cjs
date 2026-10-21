@@ -73,6 +73,8 @@ function callTool(tool,input){
 const noop=()=>()=>{};
 let previewVisible=true;
 const visibilityListeners=new Set();
+const updateListeners=new Set();
+let fixtureUpdate={phase:"idle",mode:"development",currentVersion:"0.4.57",canDownload:false,canInstall:false};
 const activityListeners=new Set();
 const prevent=async()=>{throw new Error("QC_FIXTURE_BLOCKS_MUTATING_ACTIONS")};
 const api={
@@ -81,18 +83,30 @@ const api={
  getStatus:async()=>status,getConfig:async()=>config,getConnectionSetup:async()=>({
  mode:"local-only",setupCompleted:true,clientPath:"",clientAvailable:true,profile:"qc",
  tunnelIdConfigured:false,runtimeApiKeyConfigured:false,bridge}),
- getUpdateState:async()=>({status:"idle",phase:"idle"}),
+ getUpdateState:async()=>({...fixtureUpdate}),
  callMemory:async()=>result("recall",memory),callTool,
- onRuntimeReady:noop,onStatus:noop,onActivity:(listener)=>{activityListeners.add(listener);return()=>activityListeners.delete(listener);},onMemory:noop,onProcess:noop,onUpdate:noop,
+ onRuntimeReady:noop,onStatus:noop,onActivity:(listener)=>{activityListeners.add(listener);return()=>activityListeners.delete(listener);},onMemory:noop,onProcess:noop,onUpdate:(listener)=>{updateListeners.add(listener);return()=>updateListeners.delete(listener);},
  getActivity:async()=>[],getProcesses:async()=>[],durableJobs:async()=>({state:"ready",jobs:[],health:{state:"ready",jobHostEnabled:true,protocol:1}}),
  durableOutput:async()=>({text:"",complete:true,nextCursor:0}),
  getProcessOutput:async()=>({text:"",state:"exited",cursor:0,nextCursor:0,truncated:false}),
  connect:prevent,disconnect:prevent,chooseWorkspace:prevent,setWorkspace:prevent,
- chooseSkillImport:prevent,updateConfig:prevent,stopProcess:prevent,cancelDurableJob:prevent,
+ chooseSkillImport:prevent,updateConfig:async(patch)=>{
+   if(patch?.transport){
+    // Simulated credential submission never reaches a real tunnel or disk.
+    await new Promise(resolve=>setTimeout(resolve,500));
+    throw new Error("QC_FIXTURE_BLOCKS_MUTATING_ACTIONS");
+   }
+   // Synthetic QC permits only the existing animation toggle, never a live machine mutation.
+   if(!patch||Object.keys(patch).some(k=>k!=="ui")||!patch.ui||
+      Object.keys({...config.ui,...patch.ui}).some(k=>k!=="animationsEnabled"&&patch.ui[k]!==config.ui[k]))
+     throw new Error("QC_FIXTURE_BLOCKS_MUTATING_ACTIONS");
+   config.ui={...config.ui,animationsEnabled:Boolean(patch.ui.animationsEnabled)};
+   return {...config,ui:{...config.ui}};
+  },stopProcess:prevent,cancelDurableJob:prevent,
  exportActivity:prevent,exportMemory:prevent,
  copyMcpUrl:async()=>status.localUrl,openChatGpt:prevent,openPath:prevent,openUrl:prevent,
  checkForUpdates:async()=>({status:"idle"}),downloadUpdate:prevent,installUpdate:prevent,openUpdateRelease:prevent,
  openTerminal:prevent,
 };
 contextBridge.exposeInMainWorld("qnector",api);
-contextBridge.exposeInMainWorld("__qcFixture",{getCallCount:()=>callCount,failRuntimeOnce:()=>{failNextRuntime=true;},setWindowVisible:(value)=>{previewVisible=Boolean(value);for(const callback of visibilityListeners)callback(previewVisible);},emitActivityBurst:(count)=>{for(let i=0;i<count;i++){const entry={id:"qc-motion-"+i+"-"+Date.now(),timestamp:new Date(Date.now()+i).toISOString(),tool:"files",action:"read",argsSummary:"synthetic event "+i,status:i%3===0?"running":"success",durationMs:i*2};for(const callback of activityListeners)callback(entry)}}});
+contextBridge.exposeInMainWorld("__qcFixture",{getCallCount:()=>callCount,failRuntimeOnce:()=>{failNextRuntime=true;},emitUpdate:(patch)=>{fixtureUpdate={...fixtureUpdate,...patch};for(const listener of updateListeners)listener({...fixtureUpdate});},setWindowVisible:(value)=>{previewVisible=Boolean(value);for(const callback of visibilityListeners)callback(previewVisible);},emitActivityBurst:(count)=>{for(let i=0;i<count;i++){const entry={id:"qc-motion-"+i+"-"+Date.now(),timestamp:new Date(Date.now()+i).toISOString(),tool:"files",action:"read",argsSummary:"synthetic event "+i,status:i%3===0?"running":"success",durationMs:i*2};for(const callback of activityListeners)callback(entry)}}});

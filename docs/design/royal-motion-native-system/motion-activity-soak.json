@@ -1,0 +1,155 @@
+{
+  "ok": true,
+  "seconds": 120,
+  "eventsSent": 3720,
+  "routeInteractions": 288,
+  "privateMemoryDeltaKb": 84368,
+  "samples": [
+    {
+      "index": 0,
+      "ms": 2,
+      "eventsSent": 0,
+      "privateKb": 49768,
+      "residentKb": 105528,
+      "rows": 0,
+      "ids": [],
+      "quality": "balanced",
+      "overflow": false
+    },
+    {
+      "index": 1,
+      "ms": 20252,
+      "eventsSent": 632,
+      "privateKb": 148200,
+      "residentKb": 217340,
+      "rows": 10,
+      "ids": [
+        "qc-motion-3-1792557163272",
+        "qc-motion-2-1792557163272",
+        "qc-motion-1-1792557163272",
+        "qc-motion-0-1792557163272",
+        "qc-motion-3-1792557163021",
+        "qc-motion-2-1792557163021",
+        "qc-motion-1-1792557163021",
+        "qc-motion-0-1792557163021",
+        "qc-motion-3-1792557162756",
+        "qc-motion-2-1792557162756"
+      ],
+      "quality": "balanced",
+      "overflow": false
+    },
+    {
+      "index": 2,
+      "ms": 40260,
+      "eventsSent": 1256,
+      "privateKb": 140048,
+      "residentKb": 210136,
+      "rows": 10,
+      "ids": [
+        "qc-motion-3-1792557183265",
+        "qc-motion-2-1792557183265",
+        "qc-motion-1-1792557183265",
+        "qc-motion-0-1792557183265",
+        "qc-motion-3-1792557183013",
+        "qc-motion-2-1792557183013",
+        "qc-motion-1-1792557183013",
+        "qc-motion-0-1792557183013",
+        "qc-motion-3-1792557182749",
+        "qc-motion-2-1792557182749"
+      ],
+      "quality": "balanced",
+      "overflow": false
+    },
+    {
+      "index": 3,
+      "ms": 60428,
+      "eventsSent": 1880,
+      "privateKb": 139600,
+      "residentKb": 209592,
+      "rows": 10,
+      "ids": [
+        "qc-motion-4-1792557203351",
+        "qc-motion-3-1792557203351",
+        "qc-motion-2-1792557203351",
+        "qc-motion-1-1792557203351",
+        "qc-motion-0-1792557203350",
+        "qc-motion-3-1792557203100",
+        "qc-motion-2-1792557203100",
+        "qc-motion-1-1792557203100",
+        "qc-motion-0-1792557203100",
+        "qc-motion-3-1792557202848"
+      ],
+      "quality": "balanced",
+      "overflow": false
+    },
+    {
+      "index": 4,
+      "ms": 80433,
+      "eventsSent": 2496,
+      "privateKb": 133476,
+      "residentKb": 208684,
+      "rows": 10,
+      "ids": [
+        "qc-motion-3-1792557223395",
+        "qc-motion-2-1792557223395",
+        "qc-motion-1-1792557223395",
+        "qc-motion-0-1792557223395",
+        "qc-motion-3-1792557223144",
+        "qc-motion-2-1792557223144",
+        "qc-motion-1-1792557223144",
+        "qc-motion-0-1792557223144",
+        "qc-motion-4-1792557222878",
+        "qc-motion-3-1792557222878"
+      ],
+      "quality": "balanced",
+      "overflow": false
+    },
+    {
+      "index": 5,
+      "ms": 100574,
+      "eventsSent": 3120,
+      "privateKb": 134420,
+      "residentKb": 209704,
+      "rows": 10,
+      "ids": [
+        "qc-motion-3-1792557243494",
+        "qc-motion-2-1792557243494",
+        "qc-motion-1-1792557243494",
+        "qc-motion-0-1792557243494",
+        "qc-motion-3-1792557243242",
+        "qc-motion-2-1792557243242",
+        "qc-motion-1-1792557243242",
+        "qc-motion-0-1792557243242",
+        "qc-motion-3-1792557242991",
+        "qc-motion-2-1792557242991"
+      ],
+      "quality": "balanced",
+      "overflow": false
+    },
+    {
+      "index": 6,
+      "ms": 120245,
+      "eventsSent": 3720,
+      "privateKb": 134136,
+      "residentKb": 209428,
+      "rows": 10,
+      "ids": [
+        "qc-motion-4-1792557263172",
+        "qc-motion-3-1792557263172",
+        "qc-motion-2-1792557263172",
+        "qc-motion-1-1792557263172",
+        "qc-motion-0-1792557263172",
+        "qc-motion-3-1792557262920",
+        "qc-motion-2-1792557262920",
+        "qc-motion-1-1792557262920",
+        "qc-motion-0-1792557262920",
+        "qc-motion-3-1792557262668"
+      ],
+      "quality": "balanced",
+      "overflow": false
+    }
+  ],
+  "errors": [],
+  "measuredAt": "2026-10-21T04:34:27.094Z",
+  "limitation": "Synthetic 120s soak, not a 20-minute real-game GPU-present or memory-leak guarantee."
+}

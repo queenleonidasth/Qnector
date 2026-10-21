@@ -58,3 +58,48 @@ Evidence: docs/design/royal-motion-native-system/profile-*-fps.json, scripts/ben
 ## Practical operating policy
 
 Motion Quality Full draws more detail, Balanced is default, Eco draws fewer particles/lines at full native VSync, Off is a static canvas. OS Reduced Motion forces static decoration. The original global Interface Animations toggle still wins. Native window minimized/hidden pauses continuous drawing and preserves actual task completion/error feedback.
+
+
+## 2026-10-21 continuation — native gates and regression fix
+
+The 2026-10-19 packaging attempt had left an empty candidate folder.
+A fresh production packaging pipeline completed on 2026-10-21:
+apps/desktop/release/durable-candidate-20261021-112222, built from exact Git
+revision 0bfab3f32d9c5d75d1301a1ab067ae43f4198925. Its
+package-acceptance.json attests 19 release gates including daemon recovery,
+MCP/stdio parity and package resource hashes. **Both executables report
+NotSigned via Windows Authenticode checks**. No installed version changed.
+
+**Later UI bug found by independent native QC:** Setup Wizard renders earlier
+in the DOM than the Settings Drawer, but its overlay z-index is 1400 versus
+the Drawer's 50. The original focus trap used last DOM dialog rather than
+actual stacking, letting the Drawer intercept Escape while Setup was open.
+modal-accessibility.ts now compares computed overlay z-index and picks the
+visible topmost dialog. The first packaged candidate predates this fix:
+repackage after the final clean source commit.
+
+A new native synthetic QC script, scripts/accept-royal-motion-matrix.cjs,
+passes 20 combinations of five drawers and Balanced/Quality Off/legacy
+global Animations Off/OS Reduced Motion. It confirms hidden canvas pause
+and resume, a working Setup Escape, form values retained after Back/Continue,
+required Tunnel ID validation, synthetic pending submit and rejection with
+button reenabled, and six Updater phases. The determinate download is
+exactly 37% when fixture-reported, and the status icon does not compete with
+the progress bar. No real credentials, tunnel or updater are touched.
+Evidence: docs/design/royal-motion-native-system/motion-reduced-off-matrix.json.
+
+The native 120-second activity/navigation soak observed 3720 synthetic
+events and around 288 rapid route interactions. Virtualization remained
+10 visible rows with no duplicate IDs, overflow or console errors.
+Renderer private memory (Electron AppMetrics, kB) was cold 49,768,
+warm-up peak 148,200, and plateaued around 133k–140k thereafter.
+This does NOT prove 20-minute memory leak freedom or GPU presentation
+under a real foreground game. Evidence:
+docs/design/royal-motion-native-system/motion-activity-soak.json.
+
+Current checklist: 31/48 checked based on evidence. Remaining release
+gates need native monitor refresh variants, physical game coexistence,
+20-minute soak, real user profile update/rollback validation, and full
+authenticated ChatGPT host and tunnel integrations. No same-version
+GitHub release should be published without a distinct version plan and
+authentic code-signing status.

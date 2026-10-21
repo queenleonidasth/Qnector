@@ -1,0 +1,186 @@
+{
+  "ok": true,
+  "screen": {
+    "width": 435,
+    "height": 900
+  },
+  "snapshots": {
+    "balanced": [
+      {
+        "name": "Workspace",
+        "quality": "balanced",
+        "title": "ACTIVE WORKSPACE"
+      },
+      {
+        "name": "Memory",
+        "quality": "balanced",
+        "title": "AI PROJECT MEMORY"
+      },
+      {
+        "name": "Skills",
+        "quality": "balanced",
+        "title": "SKILL MANAGER"
+      },
+      {
+        "name": "Settings",
+        "quality": "balanced",
+        "title": "BRIDGE SETTINGS"
+      },
+      {
+        "name": "Runtime",
+        "quality": "balanced",
+        "title": "RUNTIME & DIAGNOSTICS"
+      }
+    ],
+    "full": {
+      "quality": "full",
+      "legacy": "on",
+      "reduced": false,
+      "modal": true
+    },
+    "eco": {
+      "quality": "eco",
+      "legacy": "on",
+      "reduced": false,
+      "modal": true
+    },
+    "off": {
+      "quality": "off",
+      "legacy": "on",
+      "reduced": false,
+      "modal": true
+    },
+    "offPages": [
+      {
+        "name": "Workspace",
+        "quality": "off",
+        "title": "ACTIVE WORKSPACE"
+      },
+      {
+        "name": "Memory",
+        "quality": "off",
+        "title": "AI PROJECT MEMORY"
+      },
+      {
+        "name": "Skills",
+        "quality": "off",
+        "title": "SKILL MANAGER"
+      },
+      {
+        "name": "Settings",
+        "quality": "off",
+        "title": "BRIDGE SETTINGS"
+      },
+      {
+        "name": "Runtime",
+        "quality": "off",
+        "title": "RUNTIME & DIAGNOSTICS"
+      }
+    ],
+    "legacyOffPages": [
+      {
+        "name": "Workspace",
+        "quality": "off",
+        "title": "ACTIVE WORKSPACE"
+      },
+      {
+        "name": "Memory",
+        "quality": "off",
+        "title": "AI PROJECT MEMORY"
+      },
+      {
+        "name": "Skills",
+        "quality": "off",
+        "title": "SKILL MANAGER"
+      },
+      {
+        "name": "Settings",
+        "quality": "off",
+        "title": "BRIDGE SETTINGS"
+      },
+      {
+        "name": "Runtime",
+        "quality": "off",
+        "title": "RUNTIME & DIAGNOSTICS"
+      }
+    ],
+    "reducedPages": [
+      {
+        "name": "Workspace",
+        "quality": "reduced",
+        "title": "ACTIVE WORKSPACE"
+      },
+      {
+        "name": "Memory",
+        "quality": "reduced",
+        "title": "AI PROJECT MEMORY"
+      },
+      {
+        "name": "Skills",
+        "quality": "reduced",
+        "title": "SKILL MANAGER"
+      },
+      {
+        "name": "Settings",
+        "quality": "reduced",
+        "title": "BRIDGE SETTINGS"
+      },
+      {
+        "name": "Runtime",
+        "quality": "reduced",
+        "title": "RUNTIME & DIAGNOSTICS"
+      }
+    ],
+    "nativeHideResume": true,
+    "setup": {
+      "label": "Qnector OpenAI Tunnel connection setup",
+      "count": 4,
+      "overflow": false,
+      "credentialsRetained": true,
+      "requiredFieldError": "Enter the Tunnel ID created in OpenAI Tunnels management.",
+      "pendingSubmission": true,
+      "rejectedSubmission": true
+    },
+    "updater": [
+      {
+        "badge": "Checking",
+        "progress": null,
+        "primary": "↻ Checking…",
+        "iconAnimation": "none"
+      },
+      {
+        "badge": "Update available",
+        "progress": null,
+        "primary": "Download v0.4.58",
+        "iconAnimation": "none"
+      },
+      {
+        "badge": "Downloading",
+        "progress": "37%",
+        "primary": "Downloading 37%",
+        "iconAnimation": "none"
+      },
+      {
+        "badge": "Ready to install",
+        "progress": null,
+        "primary": "Restart & Update",
+        "iconAnimation": "none"
+      },
+      {
+        "badge": "Needs attention",
+        "progress": null,
+        "primary": "Retry",
+        "iconAnimation": "none"
+      },
+      {
+        "badge": "Up to date",
+        "progress": null,
+        "primary": "Check Again",
+        "iconAnimation": "none"
+      }
+    ]
+  },
+  "noRemoteWrites": true,
+  "consoleErrors": [],
+  "at": "2026-10-21T04:35:18.370Z"
+}
