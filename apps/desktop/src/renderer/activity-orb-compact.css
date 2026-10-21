@@ -1,0 +1,410 @@
+/* Royal Liquid Glass V2.3 — Activity-first dashboard.
+ * Approved UI direction (2026-10-21): more usable feed, a smaller orb, no
+ * optical resampling of the Queen crest during mouse/hold interactions.
+ * Imported after mockup-parity.css. No native bridge/state behavior changes.
+ */
+
+/* Prioritize actual tool events over oversized decorative whitespace. */
+:root {
+  --parity-orb-size: clamp(146px, 22vh, 192px);
+  --activity-line-height: 58px;
+}
+.app-container {
+  padding: 9px 9px 8px;
+}
+.app-header {
+  min-height: 63px;
+  flex-basis: 63px;
+  padding: 7px 13px;
+  margin-bottom: 4px;
+}
+.brand-crest {
+  width: 40px;
+  height: 40px;
+}
+.app-main {
+  gap: 5px;
+}
+.hero-glass-section {
+  padding: 0 6px 2px;
+}
+.orb-stage {
+  height: calc(var(--parity-orb-size) + 12px);
+  margin: 5px 0 0;
+}
+.plasma-aura,
+.plasma-aura.active {
+  width: calc(var(--parity-orb-size) + 67px);
+  height: calc(var(--parity-orb-size) + 67px);
+}
+/* The outer button cannot scale its image descendant. Scale/hover is expressed
+ * with a sharper rim and outer glow, so no visual state resamples logo pixels. */
+.glass-sphere-enclosure,
+.glass-sphere-enclosure:hover,
+.glass-sphere-enclosure:active,
+.glass-sphere-enclosure.holding,
+.glass-sphere-enclosure.disconnecting {
+  transform: none !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease !important;
+  filter: none !important;
+}
+.glass-sphere-enclosure:hover,
+.glass-sphere-enclosure:focus-visible {
+  box-shadow:
+    0 0 4px 1px rgba(255,236,197,.55),
+    inset 0 0 20px rgba(255,240,192,.25),
+    0 0 35px rgba(238,170,67,.43),
+    0 0 69px rgba(224,155,67,.18) !important;
+}
+.glass-sphere-enclosure.holding {
+  border-color: rgba(255,244,202,.97) !important;
+  box-shadow:
+    0 0 5px 2px rgba(255,235,179,.64),
+    inset 0 0 20px rgba(255,240,192,.31),
+    0 0 42px rgba(252,184,78,.53) !important;
+}
+
+/* Separate crest image from liquid-glass float. The orb's caustics still
+ * animate at native VSYNC, but the emblem is never in a translated ancestor.
+ * Contrast/saturate/drop-shadow CSS filters on the bitmap were also a source
+ * of GPU intermediate-surface softening: shift glow onto a separate pseudo. */
+.queen-orb-visual {
+  overflow: visible;
+  contain: layout;
+}
+.queen-orb-emblem-layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 9;
+  pointer-events: none;
+  overflow: visible;
+  transform: none !important;
+  filter: none !important;
+  opacity: 1;
+}
+.queen-orb-emblem-layer::before {
+  content: "";
+  position: absolute;
+  width: 64%;
+  height: 64%;
+  border-radius: 50%;
+  background: radial-gradient(circle,rgba(252,208,117,.26),rgba(198,126,41,.10) 54%,transparent 75%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+.queen-orb-emblem-layer > .queen-orb-portrait {
+  display: block;
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  left: auto !important;
+  width: 65%;
+  height: 65%;
+  object-fit: contain;
+  aspect-ratio: 1;
+  max-width: none;
+  max-height: none;
+  transform: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  mix-blend-mode: normal;
+  image-rendering: auto;
+  will-change: auto;
+  opacity: 1;
+  backface-visibility: visible;
+  box-shadow: none;
+}
+
+/* Tighten the stack from status to call-to-action without shrinking tap area
+ * excessively; every saved vertical pixel becomes an Activity Feed pixel. */
+.hero-connection-badge {
+  margin: 0;
+  min-height: 27px;
+  padding: 5px 13px;
+  font-size: 9px;
+  letter-spacing: .16em;
+}
+.hero-glass-section .hero-state-title {
+  font-size: clamp(21px, 5.3vw, 26px);
+  margin: 6px 0 2px;
+}
+.hero-state-sub {
+  margin-bottom: 7px;
+  font-size: 11px;
+}
+.endpoint-glass-box {
+  min-height: 39px;
+  margin-bottom: 6px;
+}
+.btn-liquid-action {
+  min-height: 41px;
+}
+.hold-hint-pill {
+  min-height: 18px;
+  margin-top: 4px;
+}
+
+/* Expand and widen the useful region of the Live Activity Feed. */
+.activity-glass-card {
+  flex: 1 1 auto;
+  min-height: 72px;
+  padding: 11px 12px 10px;
+  border-radius: 17px;
+  width: 100%;
+  max-width: none;
+}
+.activity-glass-card .card-eyebrow-row {
+  margin-bottom: 9px;
+}
+.activity-glass-card .card-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+.activity-glass-card .card-eyebrow .royal-inline-icon {
+  width: 17px;
+  height: 17px;
+  color: #f6ce81;
+}
+.live-badge {
+  padding: 5px 9px;
+  border: 1px solid rgba(77,229,148,.35);
+  background: rgba(11,44,28,.56);
+  border-radius: 999px;
+  font-size: 10px;
+  color: #a4f1bf;
+}
+.live-beacon {
+  width: 7px;
+  height: 7px;
+  background: #60e69d;
+  box-shadow: 0 0 9px rgba(82,241,156,.7);
+}
+/* The previous gradient mask hid the first 14px and the last 22px of an
+ * already-small list. Make genuine entries fully legible and keep scrolling. */
+.activity-stream {
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(237,193,124,.30) transparent;
+}
+.activity-virtual-row {
+  top: 0;
+  height: calc(var(--activity-line-height) - 4px);
+}
+.activity-virtual-row > .activity-item {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  height: calc(var(--activity-line-height) - 5px);
+  min-height: 0;
+  padding: 7px 6px 7px 7px;
+  background: rgba(12,15,20,.48);
+  border: 1px solid rgba(245,210,147,.11);
+  border-radius: 10px;
+  box-shadow: inset 0 1px rgba(255,246,215,.04);
+}
+.activity-virtual-row > .activity-item:hover {
+  background: rgba(63,46,27,.39);
+  border-color: rgba(246,211,153,.41);
+}
+.activity-entry-time {
+  flex: 0 0 48px;
+  align-self: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: #bcb4a8;
+  white-space: nowrap;
+}
+.activity-entry-rail {
+  flex: 0 0 14px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  isolation: isolate;
+}
+.activity-entry-rail::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  bottom: -7px;
+  left: 50%;
+  width: 2px;
+  background: linear-gradient(180deg,rgba(240,198,123,.05),rgba(252,210,133,.15),rgba(240,198,123,.05));
+  transform: translateX(-50%);
+  z-index: -1;
+}
+.activity-entry-rail .item-bead {
+  display: block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  box-shadow: 0 0 8px currentColor;
+  background: currentColor;
+  border: 1px solid rgba(255,255,255,.2);
+}
+.activity-entry-rail.success {color: #6af0a3}
+.activity-entry-rail.running {color: #f8c56b}
+.activity-entry-rail.error {color: #ff8c8c}
+.activity-item .item-left {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 4px;
+  padding: 0 0 0 2px;
+  justify-content: center;
+}
+.activity-item .item-title {
+  color: #f4efe4;
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.15;
+}
+.activity-item .item-args {
+  font-family: var(--font-sans);
+  color: #bfb6a7;
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+.activity-item .item-right {
+  gap: 5px;
+  margin-left: auto;
+  font-size: 9px;
+}
+.activity-result-pill {
+  min-width: 50px;
+  min-height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 3px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(246,205,137,.35);
+  background: rgba(67,50,31,.27);
+  color: #f6dfab;
+  text-transform: uppercase;
+  letter-spacing: .035em;
+  font-size: 8px;
+  font-weight: 750;
+}
+.activity-result-pill.success {
+  border-color: rgba(83,222,135,.29);
+  background: rgba(15,69,38,.49);
+  color: #90ebaf;
+}
+.activity-result-pill.running {
+  border-color: rgba(243,182,69,.44);
+  background: rgba(92,62,18,.46);
+  color: #ffe09a;
+}
+.activity-result-pill.error {
+  border-color: rgba(247,105,112,.35);
+  background: rgba(89,29,31,.38);
+  color: #ffb6b3;
+}
+.activity-duration {
+  color: rgba(219,208,192,.67);
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+}
+.activity-item .activity-open-glyph {
+  width: 7px;
+  font-size: 12px;
+}
+.activity-item .activity-skill-badge,
+.activity-item .activity-direct-badge {
+  position: absolute;
+  right: 6px;
+  top: -1px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  pointer-events: none;
+}
+.activity-item:hover .activity-skill-badge,
+.activity-item:hover .activity-direct-badge,
+.activity-item:focus-visible .activity-skill-badge,
+.activity-item:focus-visible .activity-direct-badge {
+  opacity: 1;
+  transform: translateY(-15px);
+}
+.empty-activity {
+  min-height: min(100%, 80px);
+  padding: 16px 8px 10px;
+  text-align: center;
+}
+.floating-glass-dock {
+  flex: 0 0 61px;
+  height: 61px;
+  margin-top: 5px;
+  padding: 5px;
+}
+.floating-glass-dock.dashboard-dock .dock-pill-btn,
+.dock-pill-btn {
+  min-height: 49px;
+  height: 49px;
+}
+
+/* Small 420x620 windows retain usable tool access and readable controls. */
+@media (max-height: 760px) {
+  :root { --parity-orb-size: clamp(138px, 22vh, 163px); }
+  .app-container { padding: 7px 8px 6px; }
+  .app-header { min-height: 55px; flex-basis: 55px; margin-bottom: 2px; }
+  .brand-crest { width: 36px; height: 36px; }
+  .orb-stage { height: calc(var(--parity-orb-size) + 8px); margin: 2px 0 0; }
+  .hero-glass-section .hero-state-title {font-size: 21px; margin-top:4px;}
+  .hero-connection-badge {min-height: 25px; padding: 4px 10px;}
+  .hero-state-sub {margin-bottom: 4px}
+  .endpoint-glass-box {min-height: 34px; margin-bottom: 5px}
+  .btn-liquid-action {min-height: 37px}
+  .hold-hint-pill {margin-top:3px}
+  .floating-glass-dock {height:53px;flex-basis:53px;margin-top:3px}
+  .floating-glass-dock.dashboard-dock .dock-pill-btn,
+  .dock-pill-btn {height:43px;min-height:43px}
+  .activity-glass-card {min-height: 54px; padding:8px 9px}
+  .activity-glass-card .card-eyebrow {font-size:15px}
+  .activity-glass-card .card-eyebrow-row{margin-bottom:5px}
+}
+@media (max-width: 440px) {
+  .activity-item .item-right {gap:3px}
+  .activity-entry-time {flex-basis:44px;font-size:9px}
+  .activity-result-pill {min-width:45px;padding:3px 4px;font-size:7.5px}
+  .activity-glass-card {padding-inline:8px}
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass-sphere-enclosure,
+  .queen-orb-portrait {transition:none!important}
+}
+
+/* The legacy 620px layout scaled the entire Orb stage to 78%, which
+ * reintroduced blur even after the crest was moved outside the float.
+ * Never resample the logo's ancestor at any supported window height. */
+.orb-stage {
+  transform: none !important;
+}
+.queen-orb-emblem-layer > .queen-orb-portrait {
+  width: 128px;
+  height: 128px;
+}
+@media (max-height:760px) {
+  .queen-orb-emblem-layer > .queen-orb-portrait {
+    width: 92px;
+    height: 92px;
+  }
+}
+
+/* Bright ellipse trails may pass around the crown, never across facial detail. */
+.orb-eclipse-plane,
+.orb-eclipse-plane.alternate {
+  z-index: 3;
+}

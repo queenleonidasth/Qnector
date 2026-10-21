@@ -1,0 +1,254 @@
+{
+  "ok": true,
+  "results": [
+    {
+      "width": 475,
+      "height": 865,
+      "orb": {
+        "x": 142.34375,
+        "y": 87,
+        "width": 190.296875,
+        "height": 190.296875
+      },
+      "feed": {
+        "x": 22,
+        "y": 535.921875,
+        "width": 431,
+        "height": 244.078125
+      },
+      "activity": {
+        "x": 9,
+        "y": 488.921875,
+        "width": 457,
+        "height": 302.078125
+      },
+      "dock": {
+        "x": 9,
+        "y": 796,
+        "width": 457,
+        "height": 61
+      },
+      "portrait": {
+        "x": 173.484375,
+        "y": 118.140625,
+        "width": 128,
+        "height": 128
+      },
+      "portraitUnfiltered": {
+        "transform": "none",
+        "filter": "none",
+        "animationName": "none"
+      },
+      "overlap": false,
+      "populated": {
+        "count": 11,
+        "y": [
+          536,
+          594,
+          652,
+          710,
+          768,
+          826,
+          884,
+          942,
+          1000,
+          1058,
+          1116
+        ],
+        "timelineNodes": 11,
+        "timestamps": 11,
+        "statusPills": 11,
+        "streamScrollHeight": 936,
+        "streamHeight": 244
+      },
+      "preview": "D:\\Projects\\Qnector-NoPlan-20261016\\docs\\design\\visual-parity-20261021\\v23-compact-live-475x865.png"
+    },
+    {
+      "width": 435,
+      "height": 900,
+      "orb": {
+        "x": 121.5,
+        "y": 87,
+        "width": 192,
+        "height": 192
+      },
+      "feed": {
+        "x": 18,
+        "y": 535.21875,
+        "width": 399,
+        "height": 279.78125
+      },
+      "activity": {
+        "x": 9,
+        "y": 488.21875,
+        "width": 417,
+        "height": 337.78125
+      },
+      "dock": {
+        "x": 9,
+        "y": 831,
+        "width": 417,
+        "height": 61
+      },
+      "portrait": {
+        "x": 153.5,
+        "y": 119,
+        "width": 128,
+        "height": 128
+      },
+      "portraitUnfiltered": {
+        "transform": "none",
+        "filter": "none",
+        "animationName": "none"
+      },
+      "overlap": false,
+      "populated": {
+        "count": 11,
+        "y": [
+          535,
+          593,
+          651,
+          709,
+          767,
+          825,
+          883,
+          941,
+          999,
+          1057,
+          1115
+        ],
+        "timelineNodes": 11,
+        "timestamps": 11,
+        "statusPills": 11,
+        "streamScrollHeight": 936,
+        "streamHeight": 280
+      },
+      "preview": "D:\\Projects\\Qnector-NoPlan-20261016\\docs\\design\\visual-parity-20261021\\v23-compact-live-435x900.png"
+    },
+    {
+      "width": 420,
+      "height": 620,
+      "orb": {
+        "x": 141,
+        "y": 70,
+        "width": 138,
+        "height": 138
+      },
+      "feed": {
+        "x": 17,
+        "y": 391.9375,
+        "width": 386,
+        "height": 157.0625
+      },
+      "activity": {
+        "x": 8,
+        "y": 351.9375,
+        "width": 404,
+        "height": 206.0625
+      },
+      "dock": {
+        "x": 8,
+        "y": 561,
+        "width": 404,
+        "height": 53
+      },
+      "portrait": {
+        "x": 164,
+        "y": 93,
+        "width": 92,
+        "height": 92
+      },
+      "portraitUnfiltered": {
+        "transform": "none",
+        "filter": "none",
+        "animationName": "none"
+      },
+      "overlap": false,
+      "populated": {
+        "count": 9,
+        "y": [
+          392,
+          450,
+          508,
+          566,
+          624,
+          682,
+          740,
+          798,
+          856
+        ],
+        "timelineNodes": 9,
+        "timestamps": 9,
+        "statusPills": 9,
+        "streamScrollHeight": 936,
+        "streamHeight": 157
+      },
+      "preview": "D:\\Projects\\Qnector-NoPlan-20261016\\docs\\design\\visual-parity-20261021\\v23-compact-live-420x620.png"
+    },
+    {
+      "width": 700,
+      "height": 900,
+      "orb": {
+        "x": 254,
+        "y": 87,
+        "width": 192,
+        "height": 192
+      },
+      "feed": {
+        "x": 22,
+        "y": 538.5625,
+        "width": 656,
+        "height": 276.4375
+      },
+      "activity": {
+        "x": 9,
+        "y": 491.5625,
+        "width": 682,
+        "height": 334.4375
+      },
+      "dock": {
+        "x": 9,
+        "y": 831,
+        "width": 682,
+        "height": 61
+      },
+      "portrait": {
+        "x": 286,
+        "y": 119,
+        "width": 128,
+        "height": 128
+      },
+      "portraitUnfiltered": {
+        "transform": "none",
+        "filter": "none",
+        "animationName": "none"
+      },
+      "overlap": false,
+      "populated": {
+        "count": 11,
+        "y": [
+          539,
+          597,
+          655,
+          713,
+          771,
+          829,
+          887,
+          945,
+          1003,
+          1061,
+          1119
+        ],
+        "timelineNodes": 11,
+        "timestamps": 11,
+        "statusPills": 11,
+        "streamScrollHeight": 936,
+        "streamHeight": 276
+      },
+      "preview": "D:\\Projects\\Qnector-NoPlan-20261016\\docs\\design\\visual-parity-20261021\\v23-compact-live-700x900.png"
+    }
+  ],
+  "errors": [],
+  "source": "actual native renderer / synthetic mutation-blocked bridge",
+  "timestamp": "2026-10-21T06:55:43.118Z"
+}

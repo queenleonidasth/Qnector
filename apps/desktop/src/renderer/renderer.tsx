@@ -38,6 +38,7 @@ import { useGlassRefraction } from "./glass-refraction.js";
 import "./liquid-motion.css";
 import "./royal-motion-system.css";
 import "./mockup-parity.css";
+import "./activity-orb-compact.css";
 import { QUALITY_OPTIONS, useMotionPreferences } from "./motion-policy.js";
 
 const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url).href;
@@ -162,7 +163,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
     if (!stream) return;
     const updateVisibleRows = (): void => {
       const usableHeight = Math.max(44, stream.clientHeight - 8);
-      setVisibleRows(Math.max(1, Math.min(15, Math.ceil(usableHeight / 50))));
+      setVisibleRows(Math.max(1, Math.min(15, Math.ceil(usableHeight / 58))));
     };
     updateVisibleRows();
     const observer = new ResizeObserver(updateVisibleRows);
@@ -230,7 +231,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
     true,
   );
 
-  const rowHeight = 50;
+  const rowHeight = 58;
   const overscan = 3;
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
   const endIndex = Math.min(
@@ -243,7 +244,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
     <>
       <section className="glass-card activity-glass-card">
         <div className="card-eyebrow-row">
-          <span className="card-eyebrow">Live Activity Feed</span>
+          <span className="card-eyebrow"><RoyalIcon name="runtime" size={17} />Live Activity Feed</span>
           <span className="live-badge">
             <span className="live-beacon" />
             <span>LIVE</span>
@@ -269,8 +270,14 @@ const ActivityPanel = React.memo(function ActivityPanel({
                   className={`activity-item ${item.status} ${enteringActivityId === item.id ? "entering" : ""}`}
                   data-activity-id={item.id}
                   onClick={() => setSelectedActivity(item)}
-                  aria-label={`View details for ${item.tool}.${item.action}`}
+                  aria-label={`View details for ${item.tool}.${item.action}, ${item.status}`}
                 >
+                  <time className="activity-entry-time" dateTime={item.timestamp}>
+                    {formatTime(item.timestamp)}
+                  </time>
+                  <span className={`activity-entry-rail ${item.status}`} aria-hidden="true">
+                    <span className={`item-bead ${item.status}`} />
+                  </span>
                   <div className="item-left">
                     <div className="item-title">
                       {item.tool}.{item.action}
@@ -294,15 +301,12 @@ const ActivityPanel = React.memo(function ActivityPanel({
                         DIRECT TOOL
                       </span>
                     )}
-                    {item.status === "running" ? (
-                      <span className="activity-processing-label">
-                        PROCESSING…
-                      </span>
-                    ) : item.durationMs !== undefined ? (
-                      <span>{item.durationMs}ms</span>
-                    ) : null}
-                    <span>{formatTime(item.timestamp)}</span>
-                    <span className={`item-bead ${item.status}`} />
+                    <span className={`activity-result-pill ${item.status}`}>
+                      {item.status === "running" ? "RUNNING" : item.status.toUpperCase()}
+                    </span>
+                    {item.durationMs !== undefined && item.status !== "running" && (
+                      <span className="activity-duration">{item.durationMs}ms</span>
+                    )}
                     <span className="activity-open-glyph">›</span>
                   </div>
                   </button>

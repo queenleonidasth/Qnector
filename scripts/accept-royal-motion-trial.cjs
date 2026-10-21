@@ -22,6 +22,10 @@ async function snapshot(){
   queenImageBorder:portraitStyle.borderTopWidth,
   queenImageBackground:portraitStyle.backgroundColor,
   queenImageContrast:portraitStyle.filter,
+   queenImageTransform:portraitStyle.transform,
+   emblemTransform:getComputedStyle(document.querySelector(".queen-orb-emblem-layer")).transform,
+   stageTransform:getComputedStyle(document.querySelector(".orb-stage")).transform,
+   buttonTransform:getComputedStyle(orb).transform,
   reflectionMask:reflectionStyle.maskImage,
   hasSilk:!!document.querySelector(".liquid-silk-canvas"),
   hasMatrix:!!document.querySelector(".gold-matrix-canvas"),
@@ -56,7 +60,12 @@ async function main(){
  assert.equal(result.queenBlend,"normal","Preserve original black/gold portrait contrast");
  assert.equal(result.queenImageBorder,"0px","No square icon border");
  assert.equal(result.queenImageBackground,"rgba(0, 0, 0, 0)","No square background plate");
- assert.match(result.queenImageContrast,/contrast\(1\.15\)/,"Retain crisp source detail");
+ // V2.3 removes bitmap filters and ancestor transforms, which caused resampling blur.
+  assert.equal(result.queenImageContrast,"none","Original Queen bitmap unfiltered");
+  assert.equal(result.queenImageTransform,"none","No bitmap transform");
+  assert.equal(result.emblemTransform,"none","Emblem remains stationary");
+  assert.equal(result.stageTransform,"none","No legacy stage-wide scale");
+  assert.equal(result.buttonTransform,"none","No hover/hold resizing of the crest");
  assert.match(result.reflectionMask,/radial-gradient/,"Glass reflection must avoid the face center");
  assert.equal(result.active,false);
  assert.equal(result.visible,"hidden","No waiting ring at idle");

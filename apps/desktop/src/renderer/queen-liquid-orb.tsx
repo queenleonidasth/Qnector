@@ -173,9 +173,14 @@ export const QueenLiquidOrb = React.memo(function QueenLiquidOrb({
       <div className="queen-orb-float">
         <div className="queen-orb-inner-glass">
           <canvas ref={canvasRef} className="queen-orb-fluid" />
-          <img src={QUEEN_IMAGE_URL} className="queen-orb-portrait" alt="" draggable={false} />
           <div className="queen-orb-reflection" />
         </div>
+      </div>
+      {/* The trademark is deliberately outside the floating/filtered glass layer.
+          An unchanged 1:1 alpha PNG can now stay pixel-aligned on the screen
+          while the glass, particles and orbital trails move independently. */}
+      <div className="queen-orb-emblem-layer">
+        <img src={QUEEN_IMAGE_URL} className="queen-orb-portrait" alt="" draggable={false} />
       </div>
     </div>
   );
