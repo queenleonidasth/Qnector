@@ -334,10 +334,36 @@ export async function executeMemory(
 
     if (action === "health") {
       const snapshot = context.memoryV2?.snapshot({eventLimit: 1, taskLimit: 1, memoryLimit: 1});
+      const legacy = await memory.listFacts({limit: 500});
+      const persistedV2 = [];
+      if (context.memoryV2) {
+        let cursor = 0;
+        for (;;) {
+          const page = context.memoryV2.listMemoryPage(cursor, 100);
+          persistedV2.push(...page.items);
+          if (page.nextCursor === null) break;
+          cursor = page.nextCursor;
+        }
+      }
+      const normalize = (key: string) => key.trim().toLocaleLowerCase();
+      const legacyKeys = new Set(legacy.facts.map((fact) => normalize(fact.key)));
+      const v2Keys = new Set(persistedV2.map((fact) => normalize(fact.key)));
+      const missingFromV2 = [...legacyKeys].filter((key) => !v2Keys.has(key)).length;
+      const v2WorkspaceKeys = new Set(persistedV2.filter((item) => item.scope === "workspace").map((fact) => normalize(fact.key)));
+      const onlyInV2 = [...v2WorkspaceKeys].filter((key) => !legacyKeys.has(key)).length;
       return {
         summary: "Qnector local Memory capture diagnostics",
         data: { journal: getMemoryJournalHealth(), freshness: snapshot?.freshness ?? null,
-          counts: snapshot?.counts ?? null, capture: "tool-driven; not passive ChatGPT transcript" },
+          counts: snapshot?.counts ?? null,
+          consistency: {
+            legacyFacts: legacy.total,
+            v2WorkspaceFacts: persistedV2.filter((item) => item.scope === "workspace").length,
+            missingFromV2,
+            onlyInV2,
+            inSync: Boolean(context.memoryV2) && missingFromV2 === 0 && onlyInV2 === 0,
+          },
+          workspaceScope: "Tool-event paths outside the active workspace are intentionally excluded.",
+          capture: "tool-driven; not passive ChatGPT transcript" },
       };
     }
 
@@ -417,10 +443,10 @@ export async function executeMemory(
           ...(memoryScope === "task" && context.memoryTaskId
             ? { taskId: context.memoryTaskId, scope: "task" as const }
             : { scope: "workspace" as const }),
-          category: (category as MemoryCategory | undefined) ?? "note",
-          key,
-          value,
-          tags,
+          category: fact.category,
+          key: fact.key,
+          value: fact.value,
+          tags: fact.tags,
           importance: numberInput(object, "importance", 50),
         });
       }
@@ -456,7 +482,8 @@ export async function executeMemory(
       const id = stringInput(object, "id");
       const key = stringInput(object, "key");
       if (!id && !key) throw new Error("INVALID_INPUT: id or key is required");
-      const fact = await memory.getFact({ ...(id ? { id } : { key }) });
+      const fact = (await memory.getFact({ ...(id ? { id } : { key }) })) ??
+        (id ? findV2MemoryById(context, id) : null);
       const snapshot = await memoryMetadata(memory);
       return {
         summary: fact
@@ -470,11 +497,23 @@ export async function executeMemory(
       const id = stringInput(object, "id");
       const key = stringInput(object, "key");
       if (!id && !key) throw new Error("INVALID_INPUT: id or key is required");
-      const deleted = await memory.deleteFact({ ...(id ? { id } : { key }) });
+      // Legacy IDs and V2 IDs differ. Resolve the legacy key before deleting
+      // either copy, so a successful delete cannot leave stale V2 results.
+      const original = await memory.getFact({ ...(id ? { id } : { key }) });
+      const v2Original = id && !original ? findV2MemoryById(context, id) : null;
+      const legacyTarget = original ?? (v2Original
+        ? await memory.getFact({ key: v2Original.key }) : null);
+      const v2Deleted = context.memoryV2?.deleteMemory({
+        ...(original ? { key: original.key } : id ? { id } : { key }),
+        ...(context.memoryTaskId ? { taskId: context.memoryTaskId } : {}),
+      }) ?? false;
+      const deleted = await memory.deleteFact({
+        ...(legacyTarget ? { id: legacyTarget.id } : id ? { id } : { key }),
+      });
       const snapshot = await memoryMetadata(memory);
       return {
-        summary: deleted ? "Deleted memory fact" : "Memory fact not found",
-        data: memoryEnvelope(snapshot, { deleted }),
+        summary: deleted || v2Deleted ? "Deleted memory fact in both stores" : "Memory fact not found",
+        data: memoryEnvelope(snapshot, { deleted: deleted || v2Deleted }),
       };
     }
 
@@ -499,6 +538,7 @@ export async function executeMemory(
         scope as "active" | "checkpoints" | "facts" | "all",
       );
       if (scope === "all") context.memoryV2?.clearWorkspace();
+      else context.memoryV2?.clearLegacyScope(scope as "facts" | "checkpoints" | "active");
       return {
         summary: `Cleared ${scope} memory for the active workspace`,
         data: result,
@@ -558,6 +598,13 @@ async function compactWorkingSetAction(
     eventLimit: 200, taskLimit: 1, memoryLimit: 100,
   });
   const source = task ?? recall.state.active;
+  // Tool events are fresh even when a manually saved task checkpoint has not
+  // been revised. Report those timestamps separately; never invent an updated
+  // task plan or present a historical checkpoint as a live conversation.
+  const activeSavedAt = task?.updatedAt ?? recall.checkpoints[0]?.createdAt ?? null;
+  const latestToolEventAt = v2?.freshness?.toolEventsAt ?? null;
+  const activeNeedsReview = Boolean(source && !task && latestToolEventAt &&
+    (!activeSavedAt || Date.parse(latestToolEventAt) > Date.parse(activeSavedAt)));
   const taskRecovery = task ? context.memoryV2?.recoveryContext(task.id) : undefined;
   const criticalContextComplete = source?.criticalContext ?? "";
   const omitCriticalContext = Buffer.byteLength(criticalContextComplete, "utf8") > 10_000;
@@ -598,7 +645,10 @@ async function compactWorkingSetAction(
     recentErrors,
     resumeHint: briefText(buildResumeHint(active, recentErrors), 185),
     memoryStatus: {
-      eventUpdatedAt: task?.lastEventAt ?? null,
+      eventUpdatedAt: latestToolEventAt,
+      factsUpdatedAt: v2?.freshness?.semanticFactsAt ?? null,
+      savedTaskUpdatedAt: activeSavedAt,
+      savedTaskNeedsReview: activeNeedsReview,
       semanticFacts: v2?.counts.memories ?? recall.state.facts.length,
       capture: "explicit-tool-events-only",
     },
@@ -625,6 +675,19 @@ async function compactWorkingSetAction(
     while (workingSetBaselines.size > 300) workingSetBaselines.delete(workingSetBaselines.keys().next().value!);
   }
   return { summary: "Prepared compact Qnector task working set", data: { ...data, revision } };
+}
+
+/** Resolve IDs displayed by Memory V2 without confusing them with legacy IDs. */
+function findV2MemoryById(context: ToolContext, id: string) {
+  if (!context.memoryV2) return null;
+  let cursor = 0;
+  for (;;) {
+    const page = context.memoryV2.listMemoryPage(cursor, 100);
+    const found = page.items.find((item) => item.id === id);
+    if (found) return found;
+    if (page.nextCursor === null) return null;
+    cursor = page.nextCursor;
+  }
 }
 
 const workingSetBaselines = new Map<string, string>();

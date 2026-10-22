@@ -232,6 +232,9 @@ export interface MemoryV2LiveEvent {
     | "event.recorded"
     | "checkpoint.created"
     | "memory.updated"
+    | "memory.deleted"
+    | "memory.cleared"
+    | "checkpoints.cleared"
     | "migration.completed"
     | "workspace.cleared";
   workspaceId: string;

@@ -1362,6 +1362,81 @@ describe("Qnector grouped tools", () => {
     expect(data.resumeHint).toContain("Verify download progress");
   });
 
+  it("keeps legacy and V2 notes, deletion, scoped clearing and metadata consistent", async () => {
+    root = await mkdtemp(path.join(tmpdir(), "qnector-memory-parity-"));
+    const context = makeContext(defaultConfig(root));
+    const v2 = new MemoryV2Store(root, { file: path.join(root, "memory-v2.sqlite") });
+    context.memoryV2 = v2;
+    const registry = new ToolRegistry();
+    try {
+      const first = await registry.call("memory", context, {
+        action: "note", key: "Update status", value: "Initial", category: "decision", tags: ["verified"],
+      });
+      expect(first.ok).toBe(true);
+      const firstId = (first.data as {data:{fact:{id:string}}}).data.fact.id;
+      const update = await registry.call("memory", context, {
+        action: "set", key: "Update status", value: "Revised",
+      });
+      expect(update.ok).toBe(true);
+      expect(v2.listMemoryPage(0, 20).items.find(f => f.key === "Update status"))
+        .toMatchObject({ value: "Revised", category: "decision", tags: ["verified"] });
+
+      const deleted = await registry.call("memory", context, {action:"delete", id:firstId});
+      expect(deleted.ok).toBe(true);
+      expect((deleted.data as {data:{deleted:boolean}}).data.deleted).toBe(true);
+      expect(v2.listMemoryPage(0, 20).items.some(f => f.key === "Update status")).toBe(false);
+      await registry.call("memory", context, {action:"note",key:"V2 lookup",value:"Available"});
+      const v2Id = v2.listMemoryPage(0,20).items.find(f=>f.key==="V2 lookup")!.id;
+      const foundByV2Id = await registry.call("memory",context,{action:"get",id:v2Id});
+      expect((foundByV2Id.data as {data:{found:boolean}}).data.found).toBe(true);
+      const deletedByV2Id = await registry.call("memory",context,{action:"delete",id:v2Id});
+      expect((deletedByV2Id.data as {data:{deleted:boolean}}).data.deleted).toBe(true);
+      expect(await context.memory!.getFact({key:"V2 lookup"})).toBeNull();
+      expect(v2.listMemoryPage(0,20).items.some(f=>f.key==="V2 lookup")).toBe(false);
+      const consistent = await registry.call("memory", context, {action:"health"});
+      expect((consistent.data as {data:{consistency:{inSync:boolean}}}).data.consistency.inSync).toBe(true);
+      v2.upsertMemory({key:"Unmirrored V2 note",value:"diagnostic only",category:"note",scope:"workspace"});
+      const inconsistent = await registry.call("memory", context, {action:"health"});
+      expect((inconsistent.data as {data:{consistency:{onlyInV2:number;inSync:boolean}}}).data.consistency)
+        .toMatchObject({onlyInV2:1,inSync:false});
+      expect(v2.deleteMemory({key:"Unmirrored V2 note"})).toBe(true);
+
+      const task = v2.createTask({title:"Independent task notes"});
+      const scoped = {...context, memoryTaskId:task.id};
+      await registry.call("memory", scoped, {
+        action:"note",key:"Scoped rule",value:"Task-specific",memoryScope:"task",
+      });
+      expect(v2.listMemoryPage(0,20).items.some(f=>f.key==="Scoped rule")).toBe(true);
+      await registry.call("memory", scoped, {action:"delete",key:"Scoped rule"});
+      expect(v2.listMemoryPage(0,20).items.some(f=>f.key==="Scoped rule")).toBe(false);
+
+      await registry.call("memory", context, {action:"note",key:"Clear me",value:"gone"});
+      v2.saveTaskCheckpoint(task.id, {
+        currentTask:"Task", completedSteps:[], pendingSteps:[], criticalContext:"Saved",
+      });
+      const afterFacts=await registry.call("memory",context,{action:"clear",scope:"facts"});
+      expect(afterFacts.ok).toBe(true);
+      expect(v2.listMemoryPage(0, 20).items).toHaveLength(0);
+      expect(v2.getTask(task.id)).not.toBeNull();
+      await registry.call("memory", context, {action:"clear",scope:"active"});
+      expect(v2.getTask(v2.defaultTaskId)).toMatchObject({
+        status:"idle",currentTask:"General workspace activity",
+      });
+      expect(v2.getTask(task.id)?.title).toBe("Independent task notes");
+      await registry.call("memory",context,{action:"clear",scope:"checkpoints"});
+      expect(v2.recoveryContext(task.id).checkpoint).toBeNull();
+
+      v2.setWorkspace(path.join(root,"other-workspace"));
+      v2.upsertMemory({key:"Other workspace",value:"preserved",category:"rule",scope:"workspace"});
+      v2.setWorkspace(root);
+      await registry.call("memory",context,{action:"clear",scope:"facts"});
+      v2.setWorkspace(path.join(root,"other-workspace"));
+      expect(v2.listMemoryPage(0,20).items.some(f=>f.key==="Other workspace")).toBe(true);
+    } finally {
+      v2.close();
+    }
+  });
+
   it("returns a compact scoped working set and explicitly deduplicates authorized chat turns", async () => {
     root = await mkdtemp(path.join(tmpdir(), "qnector-lean-memory-"));
     const context = makeContext(defaultConfig(root));
@@ -1401,6 +1476,8 @@ describe("Qnector grouped tools", () => {
       expect(result.ok).toBe(true);
       const data = (result.data as { data: Record<string, unknown> }).data;
       expect(data.mode).toBe("compact");
+      expect((data.memoryStatus as {eventUpdatedAt:string|null}).eventUpdatedAt).toBeTruthy();
+      expect(typeof (data.memoryStatus as {savedTaskNeedsReview:boolean}).savedTaskNeedsReview).toBe("boolean");
       expect(data).not.toHaveProperty("managedProcesses");
       expect(data).not.toHaveProperty("lastCommands");
       expect(JSON.stringify(data).length).toBeLessThan(4000);

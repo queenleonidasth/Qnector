@@ -679,6 +679,55 @@ export class MemoryV2Store {
     };
   }
 
+  /** Delete a mirrored note from the current workspace, with an optional
+   * matching task copy. Never delete a note from an unrelated workspace. */
+  public deleteMemory(input: { key?: string; id?: string; taskId?: string }): boolean {
+    const key = input.key?.trim();
+    const taskId = input.taskId ? this.resolveTaskId(input.taskId) : null;
+    let changes = 0;
+    if (key) {
+      const normalizedKey = normalizeSearch(sanitizeText(key).value.trim());
+      if (!normalizedKey) return false;
+      if (taskId) {
+        changes = Number(this.db.prepare(
+          "DELETE FROM memories WHERE workspace_id=? AND normalized_key=? AND (task_id IS NULL OR task_id=?)",
+        ).run(this.workspaceId, normalizedKey, taskId).changes);
+      } else {
+        changes = Number(this.db.prepare(
+          "DELETE FROM memories WHERE workspace_id=? AND normalized_key=? AND task_id IS NULL",
+        ).run(this.workspaceId, normalizedKey).changes);
+      }
+    } else if (input.id) {
+      changes = Number(this.db.prepare(
+        "DELETE FROM memories WHERE workspace_id=? AND id=?",
+      ).run(this.workspaceId, input.id).changes);
+    }
+    if (changes > 0)
+      this.emit("memory.deleted", taskId ?? undefined, key ?? input.id ?? "");
+    return changes > 0;
+  }
+
+  /** Clear only the selected memory category for this workspace. */
+  public clearLegacyScope(scope: "facts" | "checkpoints" | "active"): void {
+    if (scope === "active") {
+      const task = this.ensureDefaultTask();
+      this.updateTask({
+        taskId: task.id,
+        title: "General workspace activity",
+        currentTask: "General workspace activity",
+        criticalContext: "",
+        completedSteps: [],
+        pendingSteps: [],
+        status: "idle",
+      });
+      return;
+    }
+    const table = scope === "facts" ? "memories" : "task_checkpoints";
+    this.db.prepare(`DELETE FROM ${table} WHERE workspace_id=?`).run(this.workspaceId);
+    this.emit(scope === "facts" ? "memory.cleared" : "checkpoints.cleared",
+      this.defaultTaskId, `Cleared ${scope} for active workspace`);
+  }
+
   public snapshot(
     options: {
       eventLimit?: number;
