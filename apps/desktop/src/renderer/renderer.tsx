@@ -1437,6 +1437,11 @@ function App(): React.ReactElement {
                   <stop offset="50%" stopColor="#f59e0b" />
                   <stop offset="100%" stopColor="#ef4444" />
                 </linearGradient>
+                <linearGradient id="disconnectEmberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#ffad45" />
+                  <stop offset="48%" stopColor="#ff6137" />
+                  <stop offset="100%" stopColor="#e63232" />
+                </linearGradient>
               </defs>
               <circle cx="65" cy="65" r="58" className="charge-track" />
               <circle

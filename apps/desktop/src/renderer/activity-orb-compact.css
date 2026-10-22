@@ -634,3 +634,20 @@ html[data-motion-quality="off"] .orb-stage::before,
 html[data-motion-quality="off"] .orb-stage::after,
 html[data-motion-quality="reduced"] .orb-stage::before,
 html[data-motion-quality="reduced"] .orb-stage::after { animation: none !important; }
+
+/* Disconnect-only energy is ember red; the idle orbital system remains gold. */
+.charge-svg-ring.active .charge-meter {
+  stroke: url(#disconnectEmberGradient);
+  stroke-width: 3.5px;
+  stroke-linecap: round;
+}
+.charge-svg-ring.active {
+  filter: drop-shadow(0 0 5px rgba(255, 92, 49, .72))
+          drop-shadow(0 0 11px rgba(216, 46, 30, .25));
+}
+.orb-stage:has(.glass-sphere-enclosure.holding)::before,
+.orb-stage:has(.glass-sphere-enclosure.holding)::after {
+  border-color: rgba(255, 107, 68, .9);
+  box-shadow: 0 0 14px rgba(255, 69, 38, .4),
+              inset 0 0 10px rgba(255, 130, 57, .2);
+}
