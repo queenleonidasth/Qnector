@@ -736,3 +736,40 @@ html[data-motion-quality="off"]
   filter: blur(6px);
   opacity: 0.52;
 }
+
+/* Orb finish (2026-10-29): remove the broad yellow aura that read as a
+   second hard border when the orb returns to the offline hero.
+   The glass sphere and crest remain; the connecting motion is unchanged. */
+.orb-travel-stage .plasma-aura,
+.orb-travel-stage .plasma-aura.active {
+  display: none !important;
+  animation: none !important;
+  filter: none !important;
+}
+/* In the large offline state the orbit accents read as an extra circular
+   stroke. Keep the face and internal glass animation, omit exterior rings. */
+.orb-travel-stage.orb-expanded .orb-astral-orbit,
+.orb-travel-stage.orb-expanded .orb-astral-orbit.inner,
+.orb-travel-stage.orb-expanded .orb-comet-track {
+  opacity: 0 !important;
+  animation: none !important;
+  filter: none !important;
+}
+.orb-travel-stage.orb-expanded .glass-sphere-enclosure,
+.orb-travel-stage.orb-expanded .glass-sphere-enclosure:hover,
+.orb-travel-stage.orb-expanded .glass-sphere-enclosure:active,
+.orb-travel-stage.orb-expanded .glass-sphere-enclosure.disconnecting {
+  border-color: rgba(234, 230, 215, 0.18) !important;
+  background: conic-gradient(
+    from 32deg,
+    rgba(232, 232, 225, 0.3),
+    rgba(30, 38, 49, 0.32) 18%,
+    rgba(221, 202, 166, 0.22) 36%,
+    rgba(18, 24, 34, 0.43) 50%,
+    rgba(231, 216, 183, 0.21) 72%,
+    rgba(199, 213, 225, 0.27)
+  ) !important;
+  box-shadow:
+    inset 0 0 12px rgba(245, 245, 241, 0.1),
+    0 0 12px rgba(5, 9, 15, 0.2) !important;
+}
