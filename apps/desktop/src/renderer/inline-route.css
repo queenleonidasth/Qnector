@@ -17,7 +17,7 @@
   overflow: hidden;
 }
 .app-main > .dashboard-page.current {
-  view-transition-name: qnector-route;
+  view-transition-name: none;
   visibility: visible;
 }
 .app-main > .dashboard-page.offstage {
@@ -38,7 +38,7 @@
   border: 0;
   overflow: hidden;
   isolation: isolate;
-  view-transition-name: qnector-route;
+  view-transition-name: none;
 }
 .inline-route-shell {
   position: relative;
@@ -105,27 +105,7 @@
   padding: 6px 2px 16px 0;
   gap: 10px;
 }
-/* Snapshot each route as one composited surface, moving old and new pages in
-   parallel. The header and dock remain stationary throughout navigation. */
-::view-transition-old(qnector-route),
-::view-transition-new(qnector-route) {
-  animation-duration: 330ms;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-  animation-fill-mode: both;
-  mix-blend-mode: normal;
-}
-::view-transition-old(qnector-route) {
-  animation-name: qnRouteExitLeft;
-}
-::view-transition-new(qnector-route) {
-  animation-name: qnRouteEnterRight;
-}
-:root[data-route-direction="right"]::view-transition-old(qnector-route) {
-  animation-name: qnRouteExitRight;
-}
-:root[data-route-direction="right"]::view-transition-new(qnector-route) {
-  animation-name: qnRouteEnterLeft;
-}
+/* Directly animated inline pages never cover the interactive dock. */
 @keyframes qnRouteExitLeft {
   from {
     transform: translate3d(0, 0, 0);
@@ -158,20 +138,24 @@
     transform: translate3d(0, 0, 0);
   }
 }
-@supports not (view-transition-name: qnector-route) {
-  .app-main > .inline-route-view {
-    animation: qnRouteEnterRight 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
+/* Animating the live route (not a View Transition pseudo-overlay) keeps the
+   fixed bottom dock hit-testable throughout every slide. */
+.app-main > .dashboard-page.current,
+.app-main > .inline-route-view {
+  view-transition-name: none;
 }
+.app-main > .inline-route-view {
+  animation: qnRouteEnterRight 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+:root[data-route-direction="right"] .app-main > .inline-route-view {
+  animation-name: qnRouteEnterLeft;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(qnector-route),
-  ::view-transition-new(qnector-route),
   .app-main > .inline-route-view {
     animation: none !important;
   }
 }
-html[data-motion="off"]::view-transition-old(qnector-route),
-html[data-motion="off"]::view-transition-new(qnector-route),
 html[data-motion="off"] .app-main > .inline-route-view {
   animation: none !important;
 }

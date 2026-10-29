@@ -38,13 +38,11 @@ describe("drawer navigation and content completeness UX", () => {
 
   it("slides entire routes inline and never opens a modal drawer", () => {
     expect(renderer).toContain("const switchDrawer = (drawer: DrawerName)");
-    expect(renderer).toContain("document.startViewTransition");
+    expect(renderer).not.toContain("document.startViewTransition");
     expect(renderer).toContain("flushSync(() => setActiveDrawer(next))");
+    expect(renderer).toContain("key={activeDrawer}");
     expect(renderer).toContain(
-      "currentRouteTransition.current.skipTransition()",
-    );
-    expect(renderer).toContain(
-      "if (routeTransitionId.current !== transitionId) return;",
+      "document.documentElement.dataset.routeDirection = direction;",
     );
     expect(renderer).toContain('className="inline-route-view"');
     expect(renderer).toContain('className="inline-route-shell"');
@@ -54,10 +52,11 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).not.toContain(
       "className={`drawer-card unified-drawer-card",
     );
-    expect(inlineStyles).toContain("view-transition-name: qnector-route;");
-    expect(inlineStyles).toContain("::view-transition-old(qnector-route)");
+    expect(inlineStyles).not.toContain("view-transition-name: qnector-route;");
+    expect(inlineStyles).not.toContain("::view-transition-old(qnector-route)");
     expect(inlineStyles).toContain("@keyframes qnRouteEnterRight");
-    expect(inlineStyles).toContain("@keyframes qnRouteExitLeft");
+    expect(inlineStyles).toContain("@keyframes qnRouteEnterLeft");
+    expect(inlineStyles).toContain("animation: qnRouteEnterRight 190ms");
     expect(inlineStyles).toContain(".inline-route-shell");
     expect(inlineStyles).toContain("animation: none !important;");
   });

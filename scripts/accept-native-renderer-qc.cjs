@@ -287,6 +287,88 @@ async function main() {
         screens: [],
       };
       if (motionOn && width === 420) {
+        const physicalDockResults = [];
+        for (const name of ["Memory", "Skills", "Settings", "Home", "Memory"]) {
+          const location = await evaluate((label) => {
+            const button = [
+              ...document.querySelectorAll(".floating-glass-dock button"),
+            ].find((b) => b.textContent.trim().endsWith(label));
+            if (!button) return null;
+            const rect = button.getBoundingClientRect();
+            const x = Math.round(rect.left + rect.width / 2);
+            const y = Math.round(rect.top + rect.height / 2);
+            const hit = document.elementFromPoint(x, y);
+            return {
+              x,
+              y,
+              hit: hit?.className || hit?.tagName,
+              label: button.textContent.trim(),
+            };
+          }, name);
+          assert.ok(location, "Dock button missing: " + name);
+          win.webContents.sendInputEvent({
+            type: "mouseMove",
+            x: location.x,
+            y: location.y,
+          });
+          win.webContents.sendInputEvent({
+            type: "mouseDown",
+            x: location.x,
+            y: location.y,
+            button: "left",
+            clickCount: 1,
+          });
+          win.webContents.sendInputEvent({
+            type: "mouseUp",
+            x: location.x,
+            y: location.y,
+            button: "left",
+            clickCount: 1,
+          });
+          await delay(45);
+          const state = await evaluate(snapshot);
+          if (name === "Memory" && physicalDockResults.length === 0) {
+            const activeAnimation = await evaluate(() => {
+              const route = document.querySelector(".inline-route-view");
+              return route ? getComputedStyle(route).animationName : null;
+            });
+            assert.match(
+              activeAnimation || "",
+              /qnRouteEnterRight/,
+              "Physical navigation must preserve the slide animation",
+            );
+          }
+          physicalDockResults.push({
+            requested: name,
+            actual: state.label,
+            hit: location.hit,
+          });
+          if (name === "Home") {
+            assert.equal(
+              state.route,
+              false,
+              "Real click on Home must display dashboard instantly",
+            );
+          } else {
+            const expected =
+              name === "Skills"
+                ? /SKILL/i
+                : name === "Settings"
+                  ? /SETTING/i
+                  : /MEMORY/i;
+            assert.match(
+              state.label || "",
+              expected,
+              "Real pointer click did not immediately activate " +
+                name +
+                ": " +
+                JSON.stringify(physicalDockResults),
+            );
+          }
+        }
+        data.physicalDockClicksVerified = physicalDockResults.length;
+        assert.equal((await evaluate(openNav, "Home")).ok, true);
+        await delay(360);
         // Click faster than the 330ms slide. The latest route must win without
         // waiting for the first View Transition to finish.
         for (const name of ["Memory", "Skills", "Settings", "Memory"]) {

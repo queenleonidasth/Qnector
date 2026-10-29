@@ -578,8 +578,7 @@ function App(): React.ReactElement {
   const runtimeLastRefreshRef = useRef(0);
   const [activeDrawer, setActiveDrawer] = useState<DrawerName | null>(null);
   const activeDrawerRef = useRef<DrawerName | null>(null);
-  const routeTransitionId = useRef(0);
-  const currentRouteTransition = useRef<ViewTransition | null>(null);
+  // Keep route updates independent of Chromium's input-blocking View Transition overlay.
   activeDrawerRef.current = activeDrawer;
   const memoryRefreshTimerRef = useRef<number | null>(null);
   const memoryRefreshInFlightRef = useRef(false);
@@ -672,52 +671,16 @@ function App(): React.ReactElement {
     if (drawer === "runtime") void refreshRuntime();
   };
 
-  // View transitions slide whole routes within the app's main viewport.
-  // There is no modal, backdrop or bottom-sheet opening animation.
+  // The native View Transition overlay blocks pointer events on the bottom dock.
+  // Commit the selected route immediately; animate only the new inline page.
   const changeRoute = (
     next: DrawerName | null,
     direction: "left" | "right",
   ): void => {
     if (activeDrawerRef.current === next) return;
     activeDrawerRef.current = next;
-    const transitionId = ++routeTransitionId.current;
-    const root = document.documentElement;
-    // Interrupt the previous slide; the latest dock click must take effect now.
-    if (currentRouteTransition.current) {
-      currentRouteTransition.current.skipTransition();
-      currentRouteTransition.current = null;
-      delete root.dataset.routeDirection;
-      flushSync(() => setActiveDrawer(next));
-      return;
-    }
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    if (
-      !animationsEnabled ||
-      root.dataset.motionQuality === "off" ||
-      reduced ||
-      !document.startViewTransition
-    ) {
-      setActiveDrawer(next);
-      return;
-    }
-    root.dataset.routeDirection = direction;
-    const transition = document.startViewTransition(() => {
-      if (routeTransitionId.current !== transitionId) return;
-      flushSync(() => setActiveDrawer(next));
-    });
-    currentRouteTransition.current = transition;
-    // skipTransition rejects ready when the slide is interrupted; consume it.
-    void transition.ready.catch(() => undefined);
-    void transition.finished
-      .finally(() => {
-        if (routeTransitionId.current === transitionId) {
-          currentRouteTransition.current = null;
-          delete root.dataset.routeDirection;
-        }
-      })
-      .catch(() => undefined);
+    document.documentElement.dataset.routeDirection = direction;
+    flushSync(() => setActiveDrawer(next));
   };
 
   const closeDrawer = (): void => changeRoute(null, "right");
@@ -1774,6 +1737,7 @@ function App(): React.ReactElement {
         </div>
         {activeDrawer && (
           <div
+            key={activeDrawer}
             className="inline-route-view"
             data-testid="inline-route-view"
             role="region"
