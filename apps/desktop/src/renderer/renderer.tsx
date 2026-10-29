@@ -150,7 +150,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
     if (!stream) return;
     const updateVisibleRows = (): void => {
       const usableHeight = Math.max(44, stream.clientHeight - 8);
-      setVisibleRows(Math.max(1, Math.min(15, Math.ceil(usableHeight / 58))));
+      setVisibleRows(Math.max(1, Math.min(15, Math.ceil(usableHeight / 64))));
     };
     updateVisibleRows();
     const observer = new ResizeObserver(updateVisibleRows);
@@ -218,7 +218,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
     true,
   );
 
-  const rowHeight = 58;
+  const rowHeight = 64;
   const overscan = 3;
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
   const endIndex = Math.min(

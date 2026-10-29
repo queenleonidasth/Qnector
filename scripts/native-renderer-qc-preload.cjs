@@ -182,13 +182,90 @@ const emitQcBridge = (state) => {
 const prevent = async () => {
   throw new Error("QC_FIXTURE_BLOCKS_MUTATING_ACTIONS");
 };
+const seededActivity =
+  process.env.QNECTOR_QC_SEED_ACTIVITY === "on"
+    ? [
+        {
+          id: "qa1",
+          timestamp: "2026-10-29T16:40:00.000Z",
+          tool: "system",
+          action: "screen_capture",
+          argsSummary: 'action="screen_capture"; source="primary"',
+          status: "success",
+          durationMs: 348,
+        },
+        {
+          id: "qa2",
+          timestamp: "2026-10-29T16:39:48.000Z",
+          tool: "process",
+          action: "run",
+          argsSummary: "Build QNECTOR desktop renderer and test changes",
+          status: "running",
+        },
+        {
+          id: "qa3",
+          timestamp: "2026-10-29T16:39:02.000Z",
+          tool: "mcp",
+          action: "exchange",
+          argsSummary: '{traceId:"c0af49cf-7fa2-4481-a39b"}',
+          status: "success",
+          durationMs: 1923,
+        },
+        {
+          id: "qa4",
+          timestamp: "2026-10-29T16:38:46.000Z",
+          tool: "files",
+          action: "inspect",
+          argsSummary: "path=D:/Projects/Qnector/renderer.tsx",
+          status: "success",
+          durationMs: 78,
+          skillTrace: { skills: ["UI UX Pro Max", "Impeccable"] },
+        },
+        {
+          id: "qa5",
+          timestamp: "2026-10-29T16:38:01.000Z",
+          tool: "browser",
+          action: "navigate",
+          argsSummary: 'url="https://localhost:18887"',
+          status: "error",
+          durationMs: 1204,
+        },
+        {
+          id: "qa6",
+          timestamp: "2026-10-29T16:37:30.000Z",
+          tool: "memory",
+          action: "recall",
+          argsSummary: "Task=UI production QA and optical alignment",
+          status: "success",
+          durationMs: 15,
+        },
+        {
+          id: "qa7",
+          timestamp: "2026-10-29T16:36:12.000Z",
+          tool: "system",
+          action: "window_focus",
+          argsSummary: "windowId=qnector-window",
+          status: "success",
+          durationMs: 104,
+        },
+        {
+          id: "qa8",
+          timestamp: "2026-10-29T16:35:04.000Z",
+          tool: "mcp",
+          action: "exchange",
+          argsSummary: "Check QNECTOR MCP connection status",
+          status: "success",
+          durationMs: 389,
+        },
+      ]
+    : [];
 const api = {
   getWindowVisible: async () => true,
   onWindowVisible: noop,
   getBootstrap: async () => ({
     status,
     config,
-    activity: [],
+    activity: seededActivity,
     processes: [],
     update: undefined,
     runtimeReady: true,
@@ -217,7 +294,7 @@ const api = {
   onMemory: noop,
   onProcess: noop,
   onUpdate: noop,
-  getActivity: async () => [],
+  getActivity: async () => seededActivity,
   getProcesses: async () => [],
   durableJobs: async () => ({
     state: "ready",

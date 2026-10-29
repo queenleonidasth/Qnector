@@ -91,8 +91,8 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     const jsx = await read("renderer.tsx");
     const css = await read("activity-orb-compact.css");
     expect(jsx).toContain('import "./activity-orb-compact.css"');
-    expect(jsx).toContain("Math.ceil(usableHeight / 58)");
-    expect(jsx).toContain("const rowHeight = 58");
+    expect(jsx).toContain("Math.ceil(usableHeight / 64)");
+    expect(jsx).toContain("const rowHeight = 64");
     expect(jsx).toContain('className="activity-entry-time"');
     expect(jsx).toContain("activity-result-pill");
     expect(jsx).toContain("item-bead");
