@@ -281,25 +281,57 @@
   opacity: 0.55;
   cursor: wait;
 }
+/* The activity feed follows the shrinking Hero instead of jumping to the
+ * top on the same React commit. The expanded height is measured from the
+ * actual content, so short windows, font scaling and locale changes work. */
+.dashboard-page .hero-glass-section {
+  box-sizing: border-box;
+  height: var(--qn-hero-expanded-height, auto);
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+  overflow: hidden !important;
+  opacity: 1;
+  transform: none;
+  transition:
+    height 900ms cubic-bezier(0.22, 0.78, 0.22, 1),
+    opacity 350ms ease,
+    padding-bottom 900ms cubic-bezier(0.22, 0.78, 0.22, 1);
+}
 .dashboard-page.orb-docked .hero-glass-section {
   height: 0 !important;
+  flex: 0 0 auto !important;
   min-height: 0 !important;
-  flex: 0 0 0px !important;
-  padding: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
   margin: 0 !important;
   border: 0 !important;
   opacity: 0;
-  visibility: hidden;
-  overflow: hidden !important;
   pointer-events: none;
 }
-.dashboard-page.orb-docked .orb-home-anchor {
-  height: 0;
-  margin: 0;
+.dashboard-page .activity-glass-card {
+  min-height: 0;
+  flex: 1 1 auto;
+  transition:
+    border-color 700ms ease,
+    box-shadow 700ms ease;
 }
 .dashboard-page.orb-docked .activity-glass-card {
   flex: 1 1 auto;
   min-height: 0;
+  border-color: rgba(235, 195, 134, 0.42);
+}
+/* Respect the accessibility/performance motion controls. */
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-page .hero-glass-section,
+  .dashboard-page .activity-glass-card {
+    transition: none !important;
+  }
+}
+html[data-motion="off"] .dashboard-page .hero-glass-section,
+html[data-motion-quality="off"] .dashboard-page .hero-glass-section,
+html[data-motion="off"] .dashboard-page .activity-glass-card,
+html[data-motion-quality="off"] .dashboard-page .activity-glass-card {
+  transition: none !important;
 }
 @media (max-width: 430px) {
   .header-disconnect-btn {
@@ -642,11 +674,11 @@ html[data-motion-quality="off"] .bridge-active-caption {
  * offset -0.6px X / -4.55px Y before the parent stage is scaled.
  * Apply the same optical correction in both positions; retain the original asset. */
 .orb-travel-stage .queen-orb-emblem-layer > .queen-orb-portrait {
-  translate: -0.6px -4.55px;
+  translate: -1px -5px;
   transition: translate 940ms cubic-bezier(0.18, 0.82, 0.22, 1);
 }
 .orb-travel-stage.orb-compact .queen-orb-emblem-layer > .queen-orb-portrait {
-  translate: -0.6px -4.55px;
+  translate: -1px -5px;
 }
 /* Compact header is an icon, not a bobbing hero sculpture. Eliminate
  * subpixel drift between the stationary rim and the moving inner glass. */
@@ -689,13 +721,18 @@ html[data-motion-quality="off"]
   }
 }
 
-/* Keep the crown/face crisp: native alpha pixels, no intermediate
-   contrast/brightness/filter surface, and consistent scale in BOTH states.
-   A single image size also avoids a sudden logo-size jump during docking. */
+/* The 256px source logo is already sharp; enlarge it instead of applying
+ * contrast/drop-shadow filters that generate a soft intermediate texture.
+ * Whole-pixel positioning prevents blur after the 3D travel completes. */
 .orb-travel-stage .queen-orb-emblem-layer > .queen-orb-portrait {
-  width: 76%;
-  height: 76%;
+  width: 86%;
+  height: 86%;
   filter: none !important;
   -webkit-filter: none !important;
   image-rendering: auto;
+  backface-visibility: hidden;
+}
+.orb-travel-stage .queen-orb-emblem-layer::before {
+  filter: blur(6px);
+  opacity: 0.52;
 }

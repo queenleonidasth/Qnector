@@ -595,6 +595,9 @@ function App(): React.ReactElement {
   // A single canvas-backed orb moves between its hero and header anchors.
   const orbTravelRef = useRef<HTMLDivElement | null>(null);
   const orbHomeRef = useRef<HTMLDivElement | null>(null);
+  const heroLayoutRef = useRef<HTMLElement | null>(null);
+  const dashboardLayoutRef = useRef<HTMLDivElement | null>(null);
+  const heroExpandedHeightRef = useRef(0);
   const orbHeaderRef = useRef<HTMLDivElement | null>(null);
   const orbPositionedRef = useRef(false);
   const orbWasDockedRef = useRef<boolean | null>(null);
@@ -1204,6 +1207,48 @@ function App(): React.ReactElement {
   const isConnected = bridge.state === "connected";
   const isConnecting = bridge.state === "connecting";
   const orbDocked = isConnected && !isDisconnecting;
+  // The Hero retains its natural content height as a CSS variable.
+  // When docking, the height transitions to zero so Activity physically
+  // slides upward with the layout instead of teleporting on connect.
+  // Keep measuring while expanded; the collapsed Hero must use the last
+  // known full height until it becomes visible again.
+  useLayoutEffect(() => {
+    const page = dashboardLayoutRef.current;
+    const hero = heroLayoutRef.current;
+    const home = orbHomeRef.current;
+    if (!page || !hero || !home) return;
+    let frame = 0;
+    const measure = () => {
+      if (orbDocked) return;
+      const next = Math.ceil(hero.scrollHeight);
+      if (
+        next > 100 &&
+        next < 1000 &&
+        Math.abs(next - heroExpandedHeightRef.current) >= 1
+      ) {
+        heroExpandedHeightRef.current = next;
+        page.style.setProperty("--qn-hero-expanded-height", `${next}px`);
+      }
+    };
+    measure();
+    const resize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(home);
+    const title = hero.querySelector(".hero-state-title");
+    if (title) observer.observe(title);
+    const prompt = hero.querySelector(".orb-connect-prompt");
+    if (prompt) observer.observe(prompt);
+    window.addEventListener("resize", resize);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", resize);
+    };
+  }, [orbDocked]);
+
   // FLIP/shared element: animate the SAME Orb between two measured targets.
   // Do not depend on CSS transforms from the old compact-orb stylesheet.
   // The animation's middle frames are sampled in the renderer acceptance test.
@@ -1623,6 +1668,7 @@ function App(): React.ReactElement {
 
       <main className={"app-main" + (activeDrawer ? " route-active" : "")}>
         <div
+          ref={dashboardLayoutRef}
           className={
             "dashboard-page" +
             (activeDrawer ? " offstage" : " current") +
@@ -1631,7 +1677,11 @@ function App(): React.ReactElement {
           aria-hidden={Boolean(activeDrawer)}
           inert={Boolean(activeDrawer)}
         >
-          <section className="glass-card hero-glass-section">
+          <section
+            ref={heroLayoutRef}
+            className="glass-card hero-glass-section"
+            aria-hidden={orbDocked}
+          >
             <div
               className="orb-home-anchor"
               ref={orbHomeRef}
