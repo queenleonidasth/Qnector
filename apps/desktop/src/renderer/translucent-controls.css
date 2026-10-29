@@ -675,3 +675,16 @@ html[data-motion-quality="off"]
   > .queen-orb-portrait {
   transition: none;
 }
+
+/* Offline hero safety spacing. The painted outer arcs/glow extend beyond
+   the main sphere: 19px clearance previously let them cross the heading.
+   Reserve optical clearance rather than moving a fixed-position orb over text.
+   The separate compact header layout is unchanged. */
+.dashboard-page:not(.orb-docked) .orb-home-anchor {
+  margin-bottom: 42px;
+}
+@media (max-height: 760px) {
+  .dashboard-page:not(.orb-docked) .orb-home-anchor {
+    margin-bottom: 30px;
+  }
+}
