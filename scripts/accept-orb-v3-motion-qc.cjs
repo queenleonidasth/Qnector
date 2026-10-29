@@ -156,6 +156,39 @@ app.whenReady().then(async () => {
         Math.abs(returned.orbX - initial.orbX) < 2,
         "Orb missed offline anchor",
       );
+      // Critical regression: previous releases landed 46px below the
+      // finished offline position because the Header was still 116px high
+      // when the reverse flight calculated its destination. Check the
+      // PAINTED sphere's post-disconnect center, not only the stage X value.
+      const offline = await run(
+        "(()=>{const $=s=>document.querySelector(s);const rect=e=>e.getBoundingClientRect();" +
+          'const sphere=rect($(".glass-sphere-enclosure")),hero=rect($(".hero-glass-section")),' +
+          'title=rect($(".hero-state-title")),main=rect($(".app-main")),' +
+          'portrait=$(".queen-orb-portrait"),style=getComputedStyle(portrait);' +
+          "const actualX=sphere.left+sphere.width/2,actualY=sphere.top+sphere.height/2;" +
+          "const expectedX=main.left+main.width/2," +
+          "expectedY=Math.min((hero.top+title.top)/2,title.top-sphere.height/2-40);" +
+          "return {xError:actualX-expectedX,yError:actualY-expectedY," +
+          "titleGap:title.top-sphere.bottom,portraitFilter:style.filter," +
+          "portraitWidth:rect(portrait).width,sphereWidth:sphere.width," +
+          "portraitLoaded:portrait.complete&&portrait.naturalWidth>=256};})()",
+      );
+      assert.ok(
+        Math.abs(offline.xError) <= 1 && Math.abs(offline.yError) <= 1,
+        "Offline Orb not centered after Disconnect: " + JSON.stringify(offline),
+      );
+      assert.ok(
+        offline.titleGap >= 39,
+        "Offline Orb overlaps heading after Disconnect: " +
+          JSON.stringify(offline),
+      );
+      assert.ok(
+        offline.portraitFilter === "none" &&
+          offline.portraitLoaded &&
+          offline.portraitWidth >= offline.sphereWidth * 0.7,
+        "Portrait is filtered, undersized, or missing: " +
+          JSON.stringify(offline),
+      );
       assert.ok(
         back.orbScale > final.orbScale && back.orbScale < 1,
         "Reverse transition skipped middle",

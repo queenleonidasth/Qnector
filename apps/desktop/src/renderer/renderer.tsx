@@ -1319,9 +1319,21 @@ function App(): React.ReactElement {
         (heroRect.top + titleRect.top) / 2,
         titleRect.top - sphereRadius - 40,
       );
+      // On Disconnect the header animates from 116px to 70px. The main,
+      // hero and title are all translated by its *current* extra height.
+      // If that displacement is baked into the destination, the Orb lands
+      // exactly 46px too low and stays there after the animation finishes.
+      // Predict the FINAL idle-layout coordinate instead of measuring the
+      // in-flight header geometry as the destination.
+      const headerContainer =
+        document.querySelector<HTMLElement>(".app-header");
+      const headerExtraHeight = Math.max(
+        0,
+        (headerContainer?.getBoundingClientRect().height ?? 70) - 70,
+      );
       return {
         x: mainRect.left + mainRect.width / 2 - localCenterX * offlineScale,
-        y: opticalCenterY - localCenterY * offlineScale,
+        y: opticalCenterY - headerExtraHeight - localCenterY * offlineScale,
         scale: offlineScale,
       };
     };
@@ -1382,6 +1394,15 @@ function App(): React.ReactElement {
         orbFlightRef.current = null;
         stage.dataset.travelling = "false";
         stage.classList.remove("orb-morphing");
+        // Resolve any final header/layout movement after the flight:
+        // ResizeObserver callbacks during the flight were intentionally
+        // deferred, so do not leave the Orb at a stale endpoint.
+        requestAnimationFrame(() => {
+          if (orbFlightRef.current || orbWasDockedRef.current !== orbDocked)
+            return;
+          const settled = targetTransform();
+          if (settled) stage.style.transform = serialize(settled);
+        });
       };
     } else if (!orbFlightRef.current) {
       stage.style.transform = next;
