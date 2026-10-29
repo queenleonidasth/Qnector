@@ -57,19 +57,20 @@ app.whenReady().then(async () => {
         disconnected.orb.x +
         disconnected.orb.w / 2 -
         (disconnected.main.x + disconnected.main.w / 2);
-      const heroCenterErrorY =
-        disconnected.orb.y +
-        disconnected.orb.h / 2 -
-        (disconnected.hero.y + disconnected.hero.h / 2);
+      const sphereCenterY = disconnected.orb.y + disconnected.orb.h / 2;
+      const upperSpaceCenterY =
+        (disconnected.hero.y + disconnected.title.y) / 2;
+      const maxSafeCenterY = disconnected.title.y - disconnected.orb.h / 2 - 40;
+      const expectedCenterY = Math.min(upperSpaceCenterY, maxSafeCenterY);
+      const upperSpaceCenterErrorY = sphereCenterY - expectedCenterY;
       assert.ok(
         Math.abs(centerErrorX) <= 1,
         "Orb is not horizontally centered: " + centerErrorX,
       );
-      if (height >= 850)
-        assert.ok(
-          Math.abs(heroCenterErrorY) <= 5,
-          "Orb is not vertically centered: " + heroCenterErrorY,
-        );
+      assert.ok(
+        Math.abs(upperSpaceCenterErrorY) <= 5,
+        "Orb is not centered above Offline heading: " + upperSpaceCenterErrorY,
+      );
       assert.ok(
         clearance >= 40,
         "Offline Orb overlaps title: " +

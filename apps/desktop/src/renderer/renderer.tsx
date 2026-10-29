@@ -1308,13 +1308,15 @@ function App(): React.ReactElement {
       const mainRect = main.getBoundingClientRect();
       const heroRect = hero.getBoundingClientRect();
       const titleRect = title.getBoundingClientRect();
-      // Offline Orb is 10% smaller than the original 168px ring. This
-      // keeps the heading clear while putting the visible center at the
-      // geometrical center of the entire upper hero, not 14px above it.
-      const offlineScale = 0.9;
-      const sphereRadius = ((visual?.offsetHeight ?? 168) * offlineScale) / 2;
+      // The entire hero also contains the heading/prompt, so centering
+      // inside its full height puts the Orb visually too low. Center the
+      // PAINTED sphere within the space ABOVE the heading instead.
+      // At scale 1 the portrait retains native raster sharpness, while the
+      // safety clamp keeps outer orbit trails clear of the heading.
+      const offlineScale = 1;
+      const sphereRadius = (visual?.offsetHeight ?? 168) / 2;
       const opticalCenterY = Math.min(
-        heroRect.top + heroRect.height / 2,
+        (heroRect.top + titleRect.top) / 2,
         titleRect.top - sphereRadius - 40,
       );
       return {

@@ -688,3 +688,16 @@ html[data-motion-quality="off"]
     margin-bottom: 30px;
   }
 }
+
+/* Preserve native-scale portrait pixels while the Orb is in the offline hero.
+   In the compact header its face is the recognition point, so display the
+   same PNG at a larger fraction of the painted sphere, without any blur. */
+.orb-travel-stage .queen-orb-emblem-layer > .queen-orb-portrait {
+  filter: contrast(1.09) saturate(1.04) !important;
+  -webkit-filter: contrast(1.09) saturate(1.04) !important;
+  image-rendering: auto;
+}
+.orb-travel-stage.orb-compact .queen-orb-emblem-layer > .queen-orb-portrait {
+  width: 76%;
+  height: 76%;
+}
