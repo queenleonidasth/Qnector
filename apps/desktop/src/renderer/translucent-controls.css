@@ -640,9 +640,9 @@ html[data-motion-quality="off"] .bridge-active-caption {
 /* Compact Orb optical centering: the source 256px crest alpha centroid
  * is (129.2,137.1), not (128,128). At the 128px emblem render size,
  * offset -0.6px X / -4.55px Y before the parent stage is scaled.
- * Keep the large central Orb and original asset completely unchanged. */
+ * Apply the same optical correction in both positions; retain the original asset. */
 .orb-travel-stage .queen-orb-emblem-layer > .queen-orb-portrait {
-  translate: 0 0;
+  translate: -0.6px -4.55px;
   transition: translate 940ms cubic-bezier(0.18, 0.82, 0.22, 1);
 }
 .orb-travel-stage.orb-compact .queen-orb-emblem-layer > .queen-orb-portrait {
@@ -656,7 +656,7 @@ html[data-motion-quality="off"] .bridge-active-caption {
 }
 @media (max-height: 760px) {
   /* Low-height layout uses a 92px emblem. Scale the correction accordingly. */
-  .orb-travel-stage.orb-compact .queen-orb-emblem-layer > .queen-orb-portrait {
+  .orb-travel-stage .queen-orb-emblem-layer > .queen-orb-portrait {
     translate: -0.43px -3.27px;
   }
 }

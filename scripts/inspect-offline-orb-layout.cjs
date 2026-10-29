@@ -51,6 +51,25 @@ app.whenReady().then(async () => {
       let disconnected = await probe();
       const clearance =
         disconnected.title.y - (disconnected.orb.y + disconnected.orb.h);
+      // Geometric center of the PAINTED sphere, not its 380px stage or
+      // the asymmetric orbit decoration. The short layout prioritizes text safety.
+      const centerErrorX =
+        disconnected.orb.x +
+        disconnected.orb.w / 2 -
+        (disconnected.main.x + disconnected.main.w / 2);
+      const heroCenterErrorY =
+        disconnected.orb.y +
+        disconnected.orb.h / 2 -
+        (disconnected.hero.y + disconnected.hero.h / 2);
+      assert.ok(
+        Math.abs(centerErrorX) <= 1,
+        "Orb is not horizontally centered: " + centerErrorX,
+      );
+      if (height >= 850)
+        assert.ok(
+          Math.abs(heroCenterErrorY) <= 5,
+          "Orb is not vertically centered: " + heroCenterErrorY,
+        );
       assert.ok(
         clearance >= 40,
         "Offline Orb overlaps title: " +

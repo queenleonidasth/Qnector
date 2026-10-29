@@ -1280,11 +1280,47 @@ function App(): React.ReactElement {
         };
       }
       const rect = home.getBoundingClientRect();
-      if (rect.width < 1 || rect.height < 1) return null;
+      const hero = home.closest<HTMLElement>(".hero-glass-section");
+      const title = hero?.querySelector<HTMLElement>(".hero-state-title");
+      const main = document.querySelector<HTMLElement>(".app-main");
+      if (rect.width < 1 || rect.height < 1 || !hero || !title || !main)
+        return null;
+      // The old code centered the 380x210 STAGE inside the anchor, not the
+      // painted Orb within the visual hero. This left the sphere visibly high
+      // relative to the space between Header and the Live Activity panel.
+      // Invert the current transform to center the painted sphere itself.
+      const visual = stage.querySelector<HTMLElement>(
+        ".glass-sphere-enclosure",
+      );
+      const currentTransform = getComputedStyle(stage).transform;
+      const matrix =
+        currentTransform === "none"
+          ? new DOMMatrix()
+          : new DOMMatrix(currentTransform);
+      const currentScale = matrix.a || 1;
+      const painted = visual?.getBoundingClientRect();
+      const localCenterX = painted
+        ? (painted.left + painted.width / 2 - matrix.m41) / currentScale
+        : w / 2;
+      const localCenterY = painted
+        ? (painted.top + painted.height / 2 - matrix.m42) / currentScale
+        : h / 2;
+      const mainRect = main.getBoundingClientRect();
+      const heroRect = hero.getBoundingClientRect();
+      const titleRect = title.getBoundingClientRect();
+      // Offline Orb is 10% smaller than the original 168px ring. This
+      // keeps the heading clear while putting the visible center at the
+      // geometrical center of the entire upper hero, not 14px above it.
+      const offlineScale = 0.9;
+      const sphereRadius = ((visual?.offsetHeight ?? 168) * offlineScale) / 2;
+      const opticalCenterY = Math.min(
+        heroRect.top + heroRect.height / 2,
+        titleRect.top - sphereRadius - 40,
+      );
       return {
-        x: rect.left + (rect.width - w) / 2,
-        y: rect.top + (rect.height - h) / 2,
-        scale: 1,
+        x: mainRect.left + mainRect.width / 2 - localCenterX * offlineScale,
+        y: opticalCenterY - localCenterY * offlineScale,
+        scale: offlineScale,
       };
     };
     const serialize = (p: { x: number; y: number; scale: number }) =>
