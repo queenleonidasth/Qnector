@@ -40,6 +40,12 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).toContain("const switchDrawer = (drawer: DrawerName)");
     expect(renderer).toContain("document.startViewTransition");
     expect(renderer).toContain("flushSync(() => setActiveDrawer(next))");
+    expect(renderer).toContain(
+      "currentRouteTransition.current.skipTransition()",
+    );
+    expect(renderer).toContain(
+      "if (routeTransitionId.current !== transitionId) return;",
+    );
     expect(renderer).toContain('className="inline-route-view"');
     expect(renderer).toContain('className="inline-route-shell"');
     expect(renderer).toContain('className="drawer-page"');

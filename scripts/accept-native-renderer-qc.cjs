@@ -286,6 +286,23 @@ async function main() {
         reducedMotion: start.motion === "off",
         screens: [],
       };
+      if (motionOn && width === 420) {
+        // Click faster than the 330ms slide. The latest route must win without
+        // waiting for the first View Transition to finish.
+        for (const name of ["Memory", "Skills", "Settings", "Memory"]) {
+          assert.equal((await evaluate(openNav, name)).ok, true);
+          await delay(20);
+        }
+        const rapid = await evaluate(snapshot);
+        assert.match(
+          rapid.label || "",
+          /MEMORY/i,
+          "Rapid dock clicks must switch instantly",
+        );
+        data.rapidDockSwitchVerified = true;
+        assert.equal((await evaluate(openNav, "Home")).ok, true);
+        await delay(360);
+      }
       for (const name of ["Memory", "Skills", "Settings"]) {
         const clicked = await evaluate(openNav, name);
         assert.equal(

@@ -579,6 +579,7 @@ function App(): React.ReactElement {
   const [activeDrawer, setActiveDrawer] = useState<DrawerName | null>(null);
   const activeDrawerRef = useRef<DrawerName | null>(null);
   const routeTransitionId = useRef(0);
+  const currentRouteTransition = useRef<ViewTransition | null>(null);
   activeDrawerRef.current = activeDrawer;
   const memoryRefreshTimerRef = useRef<number | null>(null);
   const memoryRefreshInFlightRef = useRef(false);
@@ -681,6 +682,14 @@ function App(): React.ReactElement {
     activeDrawerRef.current = next;
     const transitionId = ++routeTransitionId.current;
     const root = document.documentElement;
+    // Interrupt the previous slide; the latest dock click must take effect now.
+    if (currentRouteTransition.current) {
+      currentRouteTransition.current.skipTransition();
+      currentRouteTransition.current = null;
+      delete root.dataset.routeDirection;
+      flushSync(() => setActiveDrawer(next));
+      return;
+    }
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -695,12 +704,18 @@ function App(): React.ReactElement {
     }
     root.dataset.routeDirection = direction;
     const transition = document.startViewTransition(() => {
+      if (routeTransitionId.current !== transitionId) return;
       flushSync(() => setActiveDrawer(next));
     });
+    currentRouteTransition.current = transition;
+    // skipTransition rejects ready when the slide is interrupted; consume it.
+    void transition.ready.catch(() => undefined);
     void transition.finished
       .finally(() => {
-        if (routeTransitionId.current === transitionId)
+        if (routeTransitionId.current === transitionId) {
+          currentRouteTransition.current = null;
           delete root.dataset.routeDirection;
+        }
       })
       .catch(() => undefined);
   };
