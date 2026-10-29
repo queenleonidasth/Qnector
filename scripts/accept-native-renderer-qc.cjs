@@ -18,8 +18,7 @@ app.commandLine.appendSwitch("disable-gpu");
 app.on("window-all-closed", () => {});
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function openNav(name) {
-  const options = [...document.querySelectorAll(".drawer-menu-tabs button")];
-  const fromTabs = options.find((b) => b.textContent.trim() === name);
+  const fromTabs = null;
   const fromDock = [...document.querySelectorAll("button")].find(
     (b) => b.textContent.trim().endsWith(name) && !b.closest(".drawer-card"),
   );
@@ -68,8 +67,12 @@ function snapshot() {
       "true",
     routeHeight: route?.getBoundingClientRect().height || 0,
     label: route?.getAttribute("aria-label") || null,
-    tabs: [...document.querySelectorAll(".drawer-menu-tabs button")].map((b) =>
-      b.textContent.trim(),
+    tabs: [...document.querySelectorAll(".floating-glass-dock button")].map(
+      (b) => b.textContent.trim(),
+    ),
+    hasUpperTabs: !!document.querySelector(".drawer-menu-tabs"),
+    workspaceInSettings: !!document.querySelector(
+      ".workspace-settings-section",
     ),
     overflowX: document.documentElement.scrollWidth > innerWidth,
     content: snapScroll(content),
@@ -185,6 +188,10 @@ async function main() {
         win.webContents.debugger.detach();
       }
       assert.ok(start.text.includes("QNECTOR"), "main renderer failed to load");
+      assert.ok(
+        start.tabs.includes("Home"),
+        "Home missing from bottom navigation",
+      );
       const data = {
         width,
         height,
@@ -192,7 +199,7 @@ async function main() {
         reducedMotion: start.motion === "off",
         screens: [],
       };
-      for (const name of ["Workspace", "Memory", "Skills", "Settings"]) {
+      for (const name of ["Memory", "Skills", "Settings"]) {
         const clicked = await evaluate(openNav, name);
         assert.equal(
           clicked.ok,
@@ -237,7 +244,13 @@ async function main() {
           false,
           "Horizontal page overflow " + name + " at " + width,
         );
-        assert.equal(current.tabs.length, 4, "Wrong nav tab count " + name);
+        assert.equal(current.tabs.length, 4, "Wrong dock tab count " + name);
+        assert.equal(
+          current.hasUpperTabs,
+          false,
+          "Unexpected upper navigation tabs",
+        );
+        assert.equal(current.tabs[0], "Home", "Home missing from dock");
         if (name === "Memory")
           assert.ok(
             current.text.includes("Memory at a glance"),
@@ -249,6 +262,11 @@ async function main() {
             "Skills content missing",
           );
         if (name === "Settings") {
+          assert.equal(
+            current.workspaceInSettings,
+            true,
+            "Workspace card missing from Settings",
+          );
           assert.ok(
             current.content?.scrollHeight >= current.content?.clientHeight,
             "Settings scroll data missing",
@@ -257,6 +275,19 @@ async function main() {
             ["auto", "scroll"].includes(current.content?.overflow),
             "Settings scroll not enabled",
           );
+        }
+        if (width === 451 && (name === "Memory" || name === "Skills")) {
+          win.showInactive();
+          await delay(100);
+          const png = await win.webContents.capturePage();
+          fs.writeFileSync(
+            path.join(
+              output,
+              "candidate-" + name.toLowerCase() + "-451x978.png",
+            ),
+            png.toPNG(),
+          );
+          win.hide();
         }
         data.screens.push({
           name,
@@ -268,6 +299,16 @@ async function main() {
             : 0,
           overflowX: current.overflowX,
         });
+      }
+      if (width === 451) {
+        win.showInactive();
+        await delay(150);
+        const png = await win.webContents.capturePage();
+        fs.writeFileSync(
+          path.join(output, "candidate-settings-451x978.png"),
+          png.toPNG(),
+        );
+        win.hide();
       }
       const settingsScroll = await win.webContents.executeJavaScript(
         '(()=>{const e=document.querySelector(".drawer-content");if(!e)return null;e.scrollTop=e.scrollHeight;return {top:e.scrollTop,extent:e.scrollHeight-e.clientHeight};})()',

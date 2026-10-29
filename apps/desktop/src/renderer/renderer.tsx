@@ -41,6 +41,7 @@ import "./royal-motion-system.css";
 import "./mockup-parity.css";
 import "./activity-orb-compact.css";
 import "./inline-route.css";
+import "./liquid-controls.css";
 import { QUALITY_OPTIONS, useMotionPreferences } from "./motion-policy.js";
 
 const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url)
@@ -73,33 +74,18 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
   { value: "local-only", label: "Local Only" },
 ];
 
-type DrawerName = "workspace" | "memory" | "skills" | "runtime" | "settings";
+type DrawerName = "memory" | "skills" | "runtime" | "settings";
 type UpdateUxPhase =
   "idle" | "checking" | "downloading" | "preparing-restart" | "restarting";
 
-type PrimaryDrawerName = Exclude<DrawerName, "runtime">;
-
-const drawerMenuItems: Array<{ key: PrimaryDrawerName; label: string }> = [
-  { key: "workspace", label: "Workspace" },
-  { key: "memory", label: "Memory" },
-  { key: "skills", label: "Skills" },
-  { key: "settings", label: "Settings" },
-];
-
 const drawerTitles: Record<DrawerName, string> = {
-  workspace: "ACTIVE WORKSPACE",
   memory: "AI PROJECT MEMORY",
   skills: "SKILL MANAGER",
   runtime: "RUNTIME & DIAGNOSTICS",
   settings: "BRIDGE SETTINGS",
 };
 
-const drawerOrder: PrimaryDrawerName[] = [
-  "workspace",
-  "memory",
-  "skills",
-  "settings",
-];
+const drawerOrder: DrawerName[] = ["memory", "skills", "settings"];
 
 // Older releases auto-promoted tool logs to completion. Show those entries as
 // unverified instead of presenting a misleading green checkmark.
@@ -758,8 +744,8 @@ function App(): React.ReactElement {
     return () => document.removeEventListener("keydown", onEscape);
   }, [activeDrawer, setupOpen, animationsEnabled]);
 
-  // A different drawer route restores its own scroll offset after React mounts
-  // the replacement page. The shell and menu remain mounted throughout.
+  // Restore each route scroll position when its inline page mounts.
+  // The bottom dock and window header stay mounted.
   useLayoutEffect(() => {
     if (!activeDrawer) return;
     const frame = window.requestAnimationFrame(() => {
@@ -771,23 +757,6 @@ function App(): React.ReactElement {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeDrawer]);
-
-  const renderDrawerMenuTabs = (current: DrawerName): React.ReactElement => (
-    <nav className="drawer-menu-tabs" aria-label="Qnector menu sections">
-      {drawerMenuItems.map((item) => (
-        <button
-          key={item.key}
-          type="button"
-          className={item.key === current ? "active" : ""}
-          aria-current={item.key === current ? "page" : undefined}
-          aria-controls="unified-drawer-panel"
-          onClick={() => switchDrawer(item.key)}
-        >
-          <span>{item.label}</span>
-        </button>
-      ))}
-    </nav>
-  );
 
   const refreshRuntime = async (force = false): Promise<void> => {
     if (!force && Date.now() - runtimeLastRefreshRef.current < 15_000) return;
@@ -1649,78 +1618,12 @@ function App(): React.ReactElement {
               tabIndex={-1}
             >
               <div className="drawer-header">
-                <span className="drawer-title">
-                  <RoyalIcon name={activeDrawer} size={17} />
+                <h2 className="drawer-title">
+                  <RoyalIcon name={activeDrawer} size={18} />
                   {drawerTitles[activeDrawer]}
-                </span>
-                <button
-                  className="btn-drawer-close"
-                  type="button"
-                  aria-label="Back to Home"
-                  onClick={closeDrawer}
-                >
-                  Home
-                </button>
+                </h2>
               </div>
-              {renderDrawerMenuTabs(activeDrawer)}
               <div className="drawer-page" key={activeDrawer}>
-                {activeDrawer === "workspace" && (
-                  <>
-                    <div className="drawer-content">
-                      <div className="drawer-row">
-                        <span className="drawer-label">Current Folder</span>
-                        <span
-                          style={{
-                            fontSize: "10px",
-                            color: "var(--text-gold)",
-                          }}
-                        >
-                          {status?.machineName}
-                        </span>
-                      </div>
-                      <div className="workspace-path-box">
-                        {status?.activeWorkspace ?? "—"}
-                      </div>
-                      <div className="drawer-actions">
-                        <button
-                          className="btn-drawer-action"
-                          onClick={() => void chooseWorkspace()}
-                        >
-                          📁 Choose Folder
-                        </button>
-                        <button
-                          className="btn-drawer-action"
-                          disabled={!status?.activeWorkspace}
-                          onClick={() =>
-                            status?.activeWorkspace &&
-                            void window.qnector.openPath(status.activeWorkspace)
-                          }
-                        >
-                          ↗ Explorer
-                        </button>
-                        <button
-                          className="btn-drawer-action"
-                          disabled={!status?.activeWorkspace}
-                          onClick={() => {
-                            if (!status?.activeWorkspace) return;
-                            setError(undefined);
-                            void window.qnector
-                              .openTerminal(status.activeWorkspace)
-                              .catch((reason: unknown) =>
-                                setError(
-                                  reason instanceof Error
-                                    ? reason.message
-                                    : String(reason),
-                                ),
-                              );
-                          }}
-                        >
-                          💻 Terminal
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
                 {activeDrawer === "memory" && (
                   <div className="drawer-content">
                     <MemoryCenter
@@ -1747,6 +1650,77 @@ function App(): React.ReactElement {
                 {activeDrawer === "settings" && (
                   <>
                     <div className="drawer-content">
+                      <section
+                        className="workspace-settings-section"
+                        aria-labelledby="workspace-settings-title"
+                      >
+                        <div className="workspace-settings-heading">
+                          <RoyalIcon name="folder" size={18} />
+                          <div>
+                            <h3 id="workspace-settings-title">Workspace</h3>
+                            <p>
+                              Choose the folder QNECTOR uses for local tools and
+                              memory.
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className="workspace-settings-path"
+                          title={
+                            status?.activeWorkspace ?? "No workspace selected"
+                          }
+                        >
+                          <span className="workspace-settings-machine">
+                            {status?.machineName ?? "This PC"}
+                          </span>
+                          <span className="workspace-settings-directory">
+                            {status?.activeWorkspace ?? "No workspace selected"}
+                          </span>
+                        </div>
+                        <div className="workspace-settings-actions">
+                          <button
+                            type="button"
+                            className="btn-drawer-action"
+                            onClick={() => void chooseWorkspace()}
+                          >
+                            <RoyalIcon name="folder" size={15} /> Choose Folder
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-drawer-action"
+                            disabled={!status?.activeWorkspace}
+                            onClick={() =>
+                              status?.activeWorkspace &&
+                              void window.qnector.openPath(
+                                status.activeWorkspace,
+                              )
+                            }
+                          >
+                            Explorer
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-drawer-action"
+                            disabled={!status?.activeWorkspace}
+                            onClick={() => {
+                              if (!status?.activeWorkspace) return;
+                              setError(undefined);
+                              void window.qnector
+                                .openTerminal(status.activeWorkspace)
+                                .catch((reason: unknown) =>
+                                  setError(
+                                    reason instanceof Error
+                                      ? reason.message
+                                      : String(reason),
+                                  ),
+                                );
+                            }}
+                          >
+                            Terminal
+                          </button>
+                        </div>
+                      </section>
+
                       <button
                         className="setup-launch-card"
                         type="button"
@@ -2233,16 +2207,18 @@ function App(): React.ReactElement {
         className={`floating-glass-dock ${activeDrawer ? "" : "dashboard-dock"}`}
       >
         <button
-          className={`dock-pill-btn ${activeDrawer === "workspace" ? "active" : ""}`}
-          onClick={() => toggleDrawer("workspace")}
+          className={`dock-pill-btn ${activeDrawer === null ? "active" : ""}`}
+          aria-current={activeDrawer === null ? "page" : undefined}
+          onClick={closeDrawer}
         >
           <span>
-            <RoyalIcon name="workspace" size={18} />
+            <RoyalIcon name="home" size={18} />
           </span>
-          <span>Workspace</span>
+          <span>Home</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "memory" ? "active" : ""}`}
+          aria-current={activeDrawer === "memory" ? "page" : undefined}
           onClick={() => toggleDrawer("memory")}
         >
           <span>
@@ -2252,6 +2228,7 @@ function App(): React.ReactElement {
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "skills" ? "active" : ""}`}
+          aria-current={activeDrawer === "skills" ? "page" : undefined}
           onClick={() => toggleDrawer("skills")}
         >
           <span>
@@ -2261,6 +2238,7 @@ function App(): React.ReactElement {
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "settings" ? "active" : ""}`}
+          aria-current={activeDrawer === "settings" ? "page" : undefined}
           onClick={() => toggleDrawer("settings")}
         >
           <span>

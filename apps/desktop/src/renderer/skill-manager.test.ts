@@ -6,9 +6,10 @@ const skillUrl = new URL("./skill-manager.tsx", import.meta.url);
 const cssUrl = new URL("./skill-manager.css", import.meta.url);
 
 describe("desktop Skill Manager", () => {
-  it("replaces Runtime in both primary navigation surfaces while keeping diagnostics accessible", async () => {
+  it("retains Skills in bottom navigation while keeping diagnostics accessible", async () => {
     const source = await readFile(rendererUrl, "utf8");
-    expect(source).toContain('{ key: "skills", label: "Skills" }');
+    expect(source).toContain('onClick={() => toggleDrawer("skills")}');
+    expect(source).not.toContain('className="drawer-menu-tabs"');
     expect(source).not.toContain('{ key: "runtime", label: "Runtime" }');
     expect(source).toContain('onClick={() => toggleDrawer("skills")}');
     expect(source).toContain("<span>Skills</span>");

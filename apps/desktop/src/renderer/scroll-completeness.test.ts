@@ -20,13 +20,16 @@ const terminalSource = readFileSync(
 );
 
 describe("drawer navigation and content completeness UX", () => {
-  it("uses one simple top navigation without the extra settings jump menu", () => {
-    expect(renderer).toContain('className="drawer-menu-tabs"');
-    expect(renderer).toContain('{ key: "workspace", label: "Workspace" }');
-    expect(renderer).toContain('{ key: "memory", label: "Memory" }');
-    expect(renderer).toContain('{ key: "skills", label: "Skills" }');
-    expect(renderer).toContain('{ key: "settings", label: "Settings" }');
-    expect(renderer).not.toContain('{ key: "runtime", label: "Runtime" }');
+  it("uses only bottom navigation and moves Workspace into Settings", () => {
+    expect(renderer).not.toContain('className="drawer-menu-tabs"');
+    expect(renderer).toContain("<span>Home</span>");
+    expect(renderer).toContain("<span>Memory</span>");
+    expect(renderer).toContain("<span>Skills</span>");
+    expect(renderer).toContain("<span>Settings</span>");
+    expect(renderer).toContain('activeDrawer === null ? "page" : undefined');
+    expect(renderer).toContain("onClick={closeDrawer}");
+    expect(renderer).toContain('id="workspace-settings-title"');
+    expect(renderer).toContain("onClick={() => void chooseWorkspace()}");
     expect(renderer).toContain("Runtime & Diagnostics");
     expect(renderer).not.toContain("settings-jump-nav");
     expect(renderer).not.toContain("settings-quick-actions");
