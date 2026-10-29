@@ -64,6 +64,21 @@ try {
       "--x64",
       "--config.directories.output=$resolvedOutput"
     )
+    # Avoid redundant network downloads by packaging the installed Electron runtime.
+    $localElectronDist = Join-Path $projectRoot "node_modules\electron\dist"
+    $electronVersionFile = Join-Path $localElectronDist "version"
+    $localElectronExe = Join-Path $localElectronDist "electron.exe"
+    if ((Test-Path -LiteralPath $electronVersionFile -PathType Leaf) -and
+        (Test-Path -LiteralPath $localElectronExe -PathType Leaf)) {
+      $localElectronVersion = ([IO.File]::ReadAllText($electronVersionFile)).Trim()
+      $expectedElectronVersion = (Get-Content (Join-Path $desktopRoot "package.json") -Raw | ConvertFrom-Json).devDependencies.electron
+      if ($localElectronVersion -ne $expectedElectronVersion -or
+          (Get-Item $localElectronExe).VersionInfo.ProductVersion -ne $expectedElectronVersion) {
+        throw "Local Electron version mismatch: expected $expectedElectronVersion, found $localElectronVersion"
+      }
+      $builderArgs += "--config.electronDist=$localElectronDist"
+      Write-Output "Using locally installed Electron $localElectronVersion distribution"
+    }
     if ($Target -eq "portable") {
       $builderArgs += @("--win", "portable")
     } else {
