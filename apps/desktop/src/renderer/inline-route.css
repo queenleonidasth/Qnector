@@ -1,0 +1,177 @@
+/* QNECTOR inline routes: dashboard and menu pages occupy the SAME viewport.
+   No modal/backdrop, vertical drawer animation, new window, or extra card. */
+.app-main {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+.app-main > .dashboard-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+}
+.app-main > .dashboard-page.current {
+  view-transition-name: qnector-route;
+  visibility: visible;
+}
+.app-main > .dashboard-page.offstage {
+  visibility: hidden;
+  pointer-events: none;
+}
+.app-main > .inline-route-view {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  padding: 2px 0 0;
+  background: transparent;
+  border: 0;
+  overflow: hidden;
+  isolation: isolate;
+  view-transition-name: qnector-route;
+}
+.inline-route-shell {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow: hidden;
+  padding: 0 2px;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  border: 0;
+  border-radius: 0;
+  animation: none;
+  transform: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.inline-route-shell .drawer-header {
+  flex: 0 0 auto;
+  padding: 7px 6px 9px;
+  border-bottom: 1px solid rgba(240, 202, 137, 0.21);
+}
+.inline-route-shell .drawer-title {
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}
+.inline-route-shell .btn-drawer-close {
+  min-height: 30px;
+  min-width: 48px;
+  padding: 5px 8px;
+  border: 1px solid rgba(240, 202, 137, 0.25);
+  border-radius: 8px;
+  font: 600 11px/1.3 var(--font-sans);
+  color: var(--text-gold);
+}
+.inline-route-shell .drawer-menu-tabs {
+  flex: 0 0 auto;
+}
+.inline-route-shell .drawer-page {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: none !important;
+  transform: none !important;
+}
+.inline-route-shell .drawer-content,
+.inline-route-shell .runtime-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.inline-route-shell .drawer-content {
+  padding: 6px 2px 16px 0;
+  gap: 10px;
+}
+/* Snapshot each route as one composited surface, moving old and new pages in
+   parallel. The header and dock remain stationary throughout navigation. */
+::view-transition-old(qnector-route),
+::view-transition-new(qnector-route) {
+  animation-duration: 330ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+  mix-blend-mode: normal;
+}
+::view-transition-old(qnector-route) {
+  animation-name: qnRouteExitLeft;
+}
+::view-transition-new(qnector-route) {
+  animation-name: qnRouteEnterRight;
+}
+:root[data-route-direction="right"]::view-transition-old(qnector-route) {
+  animation-name: qnRouteExitRight;
+}
+:root[data-route-direction="right"]::view-transition-new(qnector-route) {
+  animation-name: qnRouteEnterLeft;
+}
+@keyframes qnRouteExitLeft {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+@keyframes qnRouteEnterRight {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes qnRouteExitRight {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+@keyframes qnRouteEnterLeft {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@supports not (view-transition-name: qnector-route) {
+  .app-main > .inline-route-view {
+    animation: qnRouteEnterRight 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(qnector-route),
+  ::view-transition-new(qnector-route),
+  .app-main > .inline-route-view {
+    animation: none !important;
+  }
+}
+html[data-motion="off"]::view-transition-old(qnector-route),
+html[data-motion="off"]::view-transition-new(qnector-route),
+html[data-motion="off"] .app-main > .inline-route-view {
+  animation: none !important;
+}

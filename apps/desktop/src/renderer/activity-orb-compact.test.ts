@@ -11,7 +11,9 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(orb.indexOf('className="queen-orb-emblem-layer"')).toBeGreaterThan(
       orb.indexOf('className="queen-orb-reflection"'),
     );
-    expect(orb).toContain('src={QUEEN_IMAGE_URL} className="queen-orb-portrait"');
+    expect(orb).toContain(
+      'src={QUEEN_IMAGE_URL} className="queen-orb-portrait"',
+    );
     expect(style).toContain(".queen-orb-emblem-layer > .queen-orb-portrait");
     expect(style).toContain("transform: none !important");
     expect(style).toContain("filter: none !important");
@@ -25,28 +27,40 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     const clock = await read("royal-motion-clock.ts");
     const renderer = await read("renderer.tsx");
     expect(silk).toContain("lastAnimatedSecondsRef.current");
-    expect(silk).toContain("if (canvas.width === pixelWidth && canvas.height === pixelHeight) return");
+    expect(silk).toContain(
+      "if (canvas.width === pixelWidth && canvas.height === pixelHeight) return",
+    );
     expect(silk).not.toContain("draw(0, false)");
     expect(orb).toContain("orbit.phase += delta * orbit.speed");
     expect(orb).toContain("useRoyalCanvasMotion(draw, motionEnabled)");
     expect(orb).not.toContain("const angleTime = time * speed");
-    expect(clock).toContain("if (isMoving()) frame = requestAnimationFrame(tick)");
+    expect(clock).toContain(
+      "if (isMoving()) frame = requestAnimationFrame(tick)",
+    );
     expect(renderer).not.toContain("setBurstFlash(true)");
   });
   it("replaces the right-side flashing yellow ring with an active status and slim progress rail", async () => {
     const css = await read("activity-orb-compact.css");
-    expect(css).toContain(".activity-virtual-row > .activity-item.running::before");
+    expect(css).toContain(
+      ".activity-virtual-row > .activity-item.running::before",
+    );
     expect(css).toContain("royalTaskProgressSweep");
     expect(css).toContain(".activity-result-pill.running::before");
     expect(css).toContain("@keyframes royalRunningBadgeBreathe");
     expect(css).toContain("prefers-reduced-motion: reduce");
-    expect(css).toContain('html[data-motion="off"] .activity-result-pill.running');
+    expect(css).toContain(
+      'html[data-motion="off"] .activity-result-pill.running',
+    );
   });
   it("keeps the isolated synthetic preview identified without overlaying the real header", async () => {
-    const preview = await read("../../../../scripts/preview-activity-orb-v23.cjs");
+    const preview = await read(
+      "../../../../scripts/preview-activity-orb-v23.cjs",
+    );
     expect(preview).toContain('title:"QNECTOR Preview - SIMULATED DATA"');
     expect(preview).toContain("window.__qcFixture.emitActivityBurst(18,true)");
-    expect(preview).not.toContain('badge.textContent="SIMULATED - NO LIVE MCP DATA"');
+    expect(preview).not.toContain(
+      'badge.textContent="SIMULATED - NO LIVE MCP DATA"',
+    );
     expect(preview).not.toContain("z-index:99999");
   });
   it("keeps status pills uniform and the dashboard focused on Open ChatGPT", async () => {
@@ -65,12 +79,15 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(jsx).toContain('className="activity-skill-inline"');
     expect(jsx).toContain('className="activity-skill-names"');
     expect(jsx).toContain('item.skillTrace.skills.join(" · ")');
-    expect(jsx).toContain('className="activity-direct-badge">DIRECT TOOL</span>');
-    expect(jsx).not.toContain('SKILL {item.skillTrace.skills.length}');
+    expect(jsx).toContain('className="activity-direct-badge"');
+    expect(jsx).toContain("DIRECT TOOL");
+    expect(jsx).not.toContain("SKILL {item.skillTrace.skills.length}");
     expect(css).toContain(".activity-skill-inline .activity-skill-names");
     expect(css).toContain("opacity: 1;");
     expect(css).not.toContain(".activity-item:hover .activity-skill-badge");
-    expect(css).not.toContain(".activity-item:focus-visible .activity-skill-badge");
+    expect(css).not.toContain(
+      ".activity-item:focus-visible .activity-skill-badge",
+    );
   });
   it("allocates true viewport area to real virtualized Activity, not decoration", async () => {
     const jsx = await read("renderer.tsx");
@@ -81,7 +98,7 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(jsx).toContain('className="activity-entry-time"');
     expect(jsx).toContain("activity-result-pill");
     expect(jsx).toContain("item-bead");
-    expect(jsx).toContain('onClick={() => setSelectedActivity(item)}');
+    expect(jsx).toContain("onClick={() => setSelectedActivity(item)}");
     expect(css).toContain(".activity-glass-card");
     expect(css).toContain("--parity-orb-size: clamp(146px");
     expect(css).toContain(".activity-stream");

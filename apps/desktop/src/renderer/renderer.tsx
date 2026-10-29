@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import "./styles.css";
 import { MemoryCenter } from "./memory-center.js";
 import type {
@@ -39,9 +40,11 @@ import "./liquid-motion.css";
 import "./royal-motion-system.css";
 import "./mockup-parity.css";
 import "./activity-orb-compact.css";
+import "./inline-route.css";
 import { QUALITY_OPTIONS, useMotionPreferences } from "./motion-policy.js";
 
-const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url).href;
+const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url)
+  .href;
 
 const fallbackBridge: TransportSnapshot = {
   state: "disconnected",
@@ -71,7 +74,6 @@ const transportOptions: Array<{ value: TransportMode; label: string }> = [
 ];
 
 type DrawerName = "workspace" | "memory" | "skills" | "runtime" | "settings";
-type DrawerTransition = "left" | "right" | null;
 type UpdateUxPhase =
   "idle" | "checking" | "downloading" | "preparing-restart" | "restarting";
 
@@ -242,25 +244,50 @@ const ActivityPanel = React.memo(function ActivityPanel({
   // FLIP-style list stack: shift surviving visible items downward when a new
   // activity arrives at the head. Animate the inner button, not the virtual row
   // whose transform owns the scroll position.
-  const previousActivityOrder = useRef<string[]>(activity.map((entry) => entry.id));
+  const previousActivityOrder = useRef<string[]>(
+    activity.map((entry) => entry.id),
+  );
   useLayoutEffect(() => {
     const oldOrder = previousActivityOrder.current;
     previousActivityOrder.current = activity.map((entry) => entry.id);
     const stream = streamRef.current;
-    if (!stream || stream.scrollTop > 2 || document.documentElement.dataset.motion !== "on" ||
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-        document.documentElement.dataset.motionQuality === "off") return;
-    const addedAtHead = activity[0] && oldOrder.length > 0 && oldOrder[0] !== activity[0].id && !oldOrder.includes(activity[0].id);
+    if (
+      !stream ||
+      stream.scrollTop > 2 ||
+      document.documentElement.dataset.motion !== "on" ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      document.documentElement.dataset.motionQuality === "off"
+    )
+      return;
+    const addedAtHead =
+      activity[0] &&
+      oldOrder.length > 0 &&
+      oldOrder[0] !== activity[0].id &&
+      !oldOrder.includes(activity[0].id);
     if (!addedAtHead) return;
     const previousPositions = new Map(oldOrder.map((id, index) => [id, index]));
-    for (const [index, entry] of activity.slice(0, Math.min(visibleRows + 2, 12)).entries()) {
+    for (const [index, entry] of activity
+      .slice(0, Math.min(visibleRows + 2, 12))
+      .entries()) {
       const previousIndex = previousPositions.get(entry.id);
-      if (previousIndex === undefined || previousIndex >= index || index - previousIndex > 3) continue;
-      const button = Array.from(stream.querySelectorAll<HTMLElement>(".activity-item[data-activity-id]"))
-        .find((element) => element.dataset.activityId === entry.id);
+      if (
+        previousIndex === undefined ||
+        previousIndex >= index ||
+        index - previousIndex > 3
+      )
+        continue;
+      const button = Array.from(
+        stream.querySelectorAll<HTMLElement>(
+          ".activity-item[data-activity-id]",
+        ),
+      ).find((element) => element.dataset.activityId === entry.id);
       button?.animate(
-        [{ transform: `translate3d(0, ${-(index - previousIndex) * rowHeight}px, 0)` },
-         { transform: "translate3d(0, 0, 0)" }],
+        [
+          {
+            transform: `translate3d(0, ${-(index - previousIndex) * rowHeight}px, 0)`,
+          },
+          { transform: "translate3d(0, 0, 0)" },
+        ],
         { duration: 265, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
       );
     }
@@ -270,7 +297,10 @@ const ActivityPanel = React.memo(function ActivityPanel({
     <>
       <section className="glass-card activity-glass-card">
         <div className="card-eyebrow-row">
-          <span className="card-eyebrow"><RoyalIcon name="runtime" size={17} />Live Activity Feed</span>
+          <span className="card-eyebrow">
+            <RoyalIcon name="runtime" size={17} />
+            Live Activity Feed
+          </span>
           <span className="live-badge">
             <span className="live-beacon" />
             <span>LIVE</span>
@@ -290,48 +320,69 @@ const ActivityPanel = React.memo(function ActivityPanel({
             {visibleActivity.map((item, localIndex) => {
               const index = startIndex + localIndex;
               return (
-                <div className="activity-virtual-row" key={item.id} style={{ transform: `translate3d(0, ${index * rowHeight}px, 0)` }}>
-                  <button
-                  type="button"
-                  className={`activity-item ${item.status} ${enteringActivityId === item.id ? "entering" : ""}`}
-                  data-activity-id={item.id}
-                  onClick={() => setSelectedActivity(item)}
-                  aria-label={`View details for ${item.tool}.${item.action}, ${item.status}, ${item.skillTrace?.skills.length ? `Skills: ${item.skillTrace.skills.join(", ")}` : "direct tool call"}`}
+                <div
+                  className="activity-virtual-row"
+                  key={item.id}
+                  style={{
+                    transform: `translate3d(0, ${index * rowHeight}px, 0)`,
+                  }}
                 >
-                  <time className="activity-entry-time" dateTime={item.timestamp}>
-                    {formatTime(item.timestamp)}
-                  </time>
-                  <span className={`activity-entry-rail ${item.status}`} aria-hidden="true">
-                    <span className={`item-bead ${item.status}`} />
-                  </span>
-                  <div className="item-left">
-                    <div className="item-title">
-                      {item.tool}.{item.action}
-                    </div>
-                    <div className="item-args">{item.argsSummary || "—"}</div>
-
-                  </div>
-                  <div className="item-right">
-                    <span className={`activity-result-pill ${item.status}`}>
-                      {item.status === "running" ? "RUNNING" : item.status.toUpperCase()}
+                  <button
+                    type="button"
+                    className={`activity-item ${item.status} ${enteringActivityId === item.id ? "entering" : ""}`}
+                    data-activity-id={item.id}
+                    onClick={() => setSelectedActivity(item)}
+                    aria-label={`View details for ${item.tool}.${item.action}, ${item.status}, ${item.skillTrace?.skills.length ? `Skills: ${item.skillTrace.skills.join(", ")}` : "direct tool call"}`}
+                  >
+                    <time
+                      className="activity-entry-time"
+                      dateTime={item.timestamp}
+                    >
+                      {formatTime(item.timestamp)}
+                    </time>
+                    <span
+                      className={`activity-entry-rail ${item.status}`}
+                      aria-hidden="true"
+                    >
+                      <span className={`item-bead ${item.status}`} />
                     </span>
-                    {item.durationMs !== undefined && item.status !== "running" && (
-                      <span className="activity-duration">{item.durationMs}ms</span>
-                    )}
-                    <span className="activity-open-glyph">›</span>
-                  </div>
-                  <div className="activity-skill-inline">
-                    {item.skillTrace?.skills.length ? (
-                      <>
-                        <span className="activity-skill-badge">SKILL</span>
-                        <span className="activity-skill-names" title={item.skillTrace.skills.join(", ")}>
-                          {item.skillTrace.skills.join(" · ")}
+                    <div className="item-left">
+                      <div className="item-title">
+                        {item.tool}.{item.action}
+                      </div>
+                      <div className="item-args">{item.argsSummary || "—"}</div>
+                    </div>
+                    <div className="item-right">
+                      <span className={`activity-result-pill ${item.status}`}>
+                        {item.status === "running"
+                          ? "RUNNING"
+                          : item.status.toUpperCase()}
+                      </span>
+                      {item.durationMs !== undefined &&
+                        item.status !== "running" && (
+                          <span className="activity-duration">
+                            {item.durationMs}ms
+                          </span>
+                        )}
+                      <span className="activity-open-glyph">›</span>
+                    </div>
+                    <div className="activity-skill-inline">
+                      {item.skillTrace?.skills.length ? (
+                        <>
+                          <span className="activity-skill-badge">SKILL</span>
+                          <span
+                            className="activity-skill-names"
+                            title={item.skillTrace.skills.join(", ")}
+                          >
+                            {item.skillTrace.skills.join(" · ")}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="activity-direct-badge">
+                          DIRECT TOOL
                         </span>
-                      </>
-                    ) : (
-                      <span className="activity-direct-badge">DIRECT TOOL</span>
-                    )}
-                  </div>
+                      )}
+                    </div>
                   </button>
                 </div>
               );
@@ -541,12 +592,8 @@ function App(): React.ReactElement {
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const runtimeLastRefreshRef = useRef(0);
   const [activeDrawer, setActiveDrawer] = useState<DrawerName | null>(null);
-  const [drawerTransition, setDrawerTransition] =
-    useState<DrawerTransition>(null);
-  const [isClosingDrawer, setIsClosingDrawer] = useState(false);
-  const drawerCloseFallbackRef = useRef<number | null>(null);
-  const drawerSwitchTimeoutRef = useRef<number | null>(null);
   const activeDrawerRef = useRef<DrawerName | null>(null);
+  const routeTransitionId = useRef(0);
   activeDrawerRef.current = activeDrawer;
   const memoryRefreshTimerRef = useRef<number | null>(null);
   const memoryRefreshInFlightRef = useRef(false);
@@ -631,112 +678,85 @@ function App(): React.ReactElement {
     !setupBusy,
   );
 
-  const clearDrawerSwitchTimer = (): void => {
-    if (drawerSwitchTimeoutRef.current !== null) {
-      window.clearTimeout(drawerSwitchTimeoutRef.current);
-      drawerSwitchTimeoutRef.current = null;
-    }
-  };
-
-  const finishDrawerClose = (): void => {
-    if (drawerCloseFallbackRef.current !== null) {
-      window.clearTimeout(drawerCloseFallbackRef.current);
-      drawerCloseFallbackRef.current = null;
-    }
-    clearDrawerSwitchTimer();
-    setDrawerTransition(null);
-    activeDrawerRef.current = null;
-    setActiveDrawer(null);
-    setIsClosingDrawer(false);
-  };
-
-  const closeDrawer = (): void => {
-    if (!activeDrawerRef.current || isClosingDrawer) return;
-    clearDrawerSwitchTimer();
-    setDrawerTransition(null);
-    if (!animationsEnabled) {
-      finishDrawerClose();
-      return;
-    }
-    setIsClosingDrawer(true);
-    if (drawerCloseFallbackRef.current !== null) {
-      window.clearTimeout(drawerCloseFallbackRef.current);
-    }
-    // The DOM should normally be removed by drawerSlideDown's animationend.
-    // Keep a generous fallback for reduced-motion / renderer edge cases.
-    drawerCloseFallbackRef.current = window.setTimeout(finishDrawerClose, 360);
-  };
-
-  useModalFocusTrap(Boolean(activeDrawer), drawerDialogRef, closeDrawer, true);
-
-  const onDrawerAnimationEnd = (
-    event: React.AnimationEvent<HTMLDivElement>,
-  ): void => {
-    if (
-      isClosingDrawer &&
-      event.target === event.currentTarget &&
-      (event.animationName === "liquidDrawerOut" || event.animationName === "drawerSlideDown")
-    ) {
-      finishDrawerClose();
-    }
-  };
-
   const refreshDrawerData = (drawer: DrawerName): void => {
     if (drawer === "memory") void refreshMemory();
     if (drawer === "runtime") void refreshRuntime();
   };
 
-  const switchDrawer = (drawer: DrawerName): void => {
-    if (isClosingDrawer) {
-      if (drawerCloseFallbackRef.current !== null) {
-        window.clearTimeout(drawerCloseFallbackRef.current);
-        drawerCloseFallbackRef.current = null;
-      }
-      setIsClosingDrawer(false);
-    }
-    const previousDrawer = activeDrawerRef.current;
-    if (previousDrawer === drawer) return;
-    activeDrawerRef.current = drawer;
-    if (!previousDrawer) {
-      refreshDrawerData(drawer);
-      setActiveDrawer(drawer);
+  // View transitions slide whole routes within the app's main viewport.
+  // There is no modal, backdrop or bottom-sheet opening animation.
+  const changeRoute = (
+    next: DrawerName | null,
+    direction: "left" | "right",
+  ): void => {
+    if (activeDrawerRef.current === next) return;
+    activeDrawerRef.current = next;
+    const transitionId = ++routeTransitionId.current;
+    const root = document.documentElement;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (
+      !animationsEnabled ||
+      root.dataset.motionQuality === "off" ||
+      reduced ||
+      !document.startViewTransition
+    ) {
+      setActiveDrawer(next);
       return;
     }
-    if (!animationsEnabled) {
-      clearDrawerSwitchTimer();
-      refreshDrawerData(drawer);
-      setDrawerTransition(null);
-      setActiveDrawer(drawer);
-      return;
-    }
+    root.dataset.routeDirection = direction;
+    const transition = document.startViewTransition(() => {
+      flushSync(() => setActiveDrawer(next));
+    });
+    void transition.finished
+      .finally(() => {
+        if (routeTransitionId.current === transitionId)
+          delete root.dataset.routeDirection;
+      })
+      .catch(() => undefined);
+  };
 
-    const currentIndex = drawerOrder.indexOf(
-      previousDrawer === "runtime" ? "settings" : previousDrawer,
+  const closeDrawer = (): void => changeRoute(null, "right");
+
+  const switchDrawer = (drawer: DrawerName): void => {
+    const previous = activeDrawerRef.current;
+    if (previous === drawer) return;
+    const scroll = drawerDialogRef.current?.querySelector<HTMLElement>(
+      ".drawer-page > .drawer-content, .drawer-page > .runtime-scroll",
     );
+    if (previous && scroll)
+      drawerScrollRef.current[previous] = scroll.scrollTop;
+    const previousIndex = previous
+      ? drawerOrder.indexOf(previous === "runtime" ? "settings" : previous)
+      : -1;
     const nextIndex = drawerOrder.indexOf(
       drawer === "runtime" ? "settings" : drawer,
     );
-    const direction: Exclude<DrawerTransition, null> =
-      nextIndex > currentIndex ? "left" : "right";
-
-    // Retarget instantly: old transitions never disable input or own a timer.
-    const scroller = drawerDialogRef.current?.querySelector<HTMLElement>(
-      ".drawer-page > .drawer-content, .drawer-page > .runtime-scroll",
-    );
-    if (previousDrawer && scroller) drawerScrollRef.current[previousDrawer] = scroller.scrollTop;
     refreshDrawerData(drawer);
-    setDrawerTransition(direction);
-    setActiveDrawer(drawer);
+    changeRoute(drawer, nextIndex < previousIndex ? "right" : "left");
   };
 
   const toggleDrawer = (drawer: DrawerName): void => {
-    if (isClosingDrawer) return;
-    if (activeDrawerRef.current === drawer) {
-      closeDrawer();
-      return;
-    }
-    switchDrawer(drawer);
+    if (activeDrawerRef.current === drawer) closeDrawer();
+    else switchDrawer(drawer);
   };
+
+  useEffect(() => {
+    if (!activeDrawer) return;
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape" || event.defaultPrevented || setupOpen) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"]')
+      )
+        return;
+      event.preventDefault();
+      closeDrawer();
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [activeDrawer, setupOpen, animationsEnabled]);
 
   // A different drawer route restores its own scroll offset after React mounts
   // the replacement page. The shell and menu remain mounted throughout.
@@ -746,7 +766,8 @@ function App(): React.ReactElement {
       const scroller = drawerDialogRef.current?.querySelector<HTMLElement>(
         ".drawer-page > .drawer-content, .drawer-page > .runtime-scroll",
       );
-      if (scroller) scroller.scrollTop = drawerScrollRef.current[activeDrawer] ?? 0;
+      if (scroller)
+        scroller.scrollTop = drawerScrollRef.current[activeDrawer] ?? 0;
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeDrawer]);
@@ -949,18 +970,25 @@ function App(): React.ReactElement {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       holdProgressRef.current = 0;
-      if (ringMeterRef.current) ringMeterRef.current.style.strokeDashoffset = "364.42";
+      if (ringMeterRef.current)
+        ringMeterRef.current.style.strokeDashoffset = "364.42";
       setIsDisconnecting(false);
       setBusy(false);
     }
   };
 
   const startHold = (): void => {
-    if (bridge.state !== "connected" || busy || isDisconnecting ||
-        holdStartRef.current !== null) return;
+    if (
+      bridge.state !== "connected" ||
+      busy ||
+      isDisconnecting ||
+      holdStartRef.current !== null
+    )
+      return;
     holdStartRef.current = performance.now();
     holdProgressRef.current = 0;
-    if (ringMeterRef.current) ringMeterRef.current.style.strokeDashoffset = "364.42";
+    if (ringMeterRef.current)
+      ringMeterRef.current.style.strokeDashoffset = "364.42";
     setIsHolding(true);
     let lastLabelAt = 0;
 
@@ -970,8 +998,9 @@ function App(): React.ReactElement {
       const progress = Math.min((now - startedAt) / 3000, 1);
       holdProgressRef.current = progress;
       if (ringMeterRef.current) {
-        ringMeterRef.current.style.strokeDashoffset =
-          String(364.42 * (1 - progress));
+        ringMeterRef.current.style.strokeDashoffset = String(
+          364.42 * (1 - progress),
+        );
       }
       // The rAF ring runs at display refresh; text is updated at ~10 Hz.
       // This avoids a full React App render on every compositor frame.
@@ -992,7 +1021,9 @@ function App(): React.ReactElement {
         didLongPressRef.current = true;
         setIsHolding(false);
         // The completed charge ring now fades out without a one-frame burst overlay.
-        window.setTimeout(() => { didLongPressRef.current = false; }, 1000);
+        window.setTimeout(() => {
+          didLongPressRef.current = false;
+        }, 1000);
         void disconnect();
       }
     };
@@ -1007,7 +1038,8 @@ function App(): React.ReactElement {
       animFrameRef.current = null;
     }
     holdProgressRef.current = 0;
-    if (ringMeterRef.current) ringMeterRef.current.style.strokeDashoffset = "364.42";
+    if (ringMeterRef.current)
+      ringMeterRef.current.style.strokeDashoffset = "364.42";
     setIsHolding(false);
   };
 
@@ -1354,11 +1386,11 @@ function App(): React.ReactElement {
 
   return (
     <div className="app-container">
-        <RoyalSilkBackground
-          isConnected={isConnected}
-          frozen={matrixFrozenAfterDisconnect}
-          motionEnabled={animationsEnabled}
-        />
+      <RoyalSilkBackground
+        isConnected={isConnected}
+        frozen={matrixFrozenAfterDisconnect}
+        motionEnabled={animationsEnabled}
+      />
       {error && (
         <div className="error-toast" role="alert" aria-live="assertive">
           <span>{error}</span>
@@ -1412,8 +1444,7 @@ function App(): React.ReactElement {
               type="button"
               className={`update-header-pill ${updateState?.phase ?? "available"}`}
               onClick={() => {
-                if (isClosingDrawer) return;
-                setActiveDrawer("settings");
+                switchDrawer("settings");
               }}
               title={updateState?.message}
             >
@@ -1438,155 +1469,764 @@ function App(): React.ReactElement {
         </div>
       </header>
 
-      <main className="app-main">
-        <section className="glass-card hero-glass-section">
+      <main className={"app-main" + (activeDrawer ? " route-active" : "")}>
+        <div
+          className={
+            "dashboard-page" + (activeDrawer ? " offstage" : " current")
+          }
+          aria-hidden={Boolean(activeDrawer)}
+          inert={Boolean(activeDrawer)}
+        >
+          <section className="glass-card hero-glass-section">
+            <div className="orb-stage">
+              <div className="orb-astral-orbit" aria-hidden="true" />
+              <div className="orb-astral-orbit inner" aria-hidden="true" />
+              <div className="orb-eclipse-plane" aria-hidden="true" />
+              <div className="orb-eclipse-plane alternate" aria-hidden="true" />
+              <div className="orb-comet-track" aria-hidden="true" />
+              <svg
+                className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}
+                viewBox="0 0 130 130"
+              >
+                <defs>
+                  <linearGradient
+                    id="goldFireGrad"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="100%"
+                  >
+                    <stop offset="0%" stopColor="#ffe270" />
+                    <stop offset="50%" stopColor="#f59e0b" />
+                    <stop offset="100%" stopColor="#ef4444" />
+                  </linearGradient>
+                  <linearGradient
+                    id="disconnectEmberGradient"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="100%"
+                  >
+                    <stop offset="0%" stopColor="#ffad45" />
+                    <stop offset="48%" stopColor="#ff6137" />
+                    <stop offset="100%" stopColor="#e63232" />
+                  </linearGradient>
+                </defs>
+                <circle cx="65" cy="65" r="58" className="charge-track" />
+                <circle
+                  cx="65"
+                  cy="65"
+                  r="58"
+                  className="charge-meter"
+                  ref={ringMeterRef}
+                  style={{
+                    strokeDasharray: 364.42,
+                    strokeDashoffset: 364.42 * (1 - disconnectRingProgress),
+                  }}
+                />
+              </svg>
 
-          <div className="orb-stage">
-            <div className="orb-astral-orbit" aria-hidden="true" />
-            <div className="orb-astral-orbit inner" aria-hidden="true" />
-            <div className="orb-eclipse-plane" aria-hidden="true" />
-            <div className="orb-eclipse-plane alternate" aria-hidden="true" />
-            <div className="orb-comet-track" aria-hidden="true" />
-            <svg
-              className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}
-              viewBox="0 0 130 130"
-            >
-              <defs>
-                <linearGradient
-                  id="goldFireGrad"
-                  x1="0%"
-                  y1="0%"
-                  x2="100%"
-                  y2="100%"
-                >
-                  <stop offset="0%" stopColor="#ffe270" />
-                  <stop offset="50%" stopColor="#f59e0b" />
-                  <stop offset="100%" stopColor="#ef4444" />
-                </linearGradient>
-                <linearGradient id="disconnectEmberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#ffad45" />
-                  <stop offset="48%" stopColor="#ff6137" />
-                  <stop offset="100%" stopColor="#e63232" />
-                </linearGradient>
-              </defs>
-              <circle cx="65" cy="65" r="58" className="charge-track" />
-              <circle
-                cx="65"
-                cy="65"
-                r="58"
-                className="charge-meter"
-                ref={ringMeterRef}
-                style={{
-                  strokeDasharray: 364.42,
-                  strokeDashoffset: 364.42 * (1 - disconnectRingProgress),
-                }}
-              />
-            </svg>
+              <div className={`plasma-aura ${isConnected ? "active" : ""}`} />
 
-            <div className={`plasma-aura ${isConnected ? "active" : ""}`} />
+              {/* No flashing burst layer: the orb stays on one continuous surface. */}
 
-            {/* No flashing burst layer: the orb stays on one continuous surface. */}
+              <div
+                className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}
+                role="button"
+                tabIndex={0}
+                aria-label={
+                  isDisconnecting
+                    ? "Disconnecting from ChatGPT"
+                    : isConnected
+                      ? "Hold for 3 seconds to disconnect"
+                      : "Connect to ChatGPT"
+                }
+                title={
+                  isDisconnecting
+                    ? "Disconnecting from ChatGPT"
+                    : isConnected
+                      ? "Hold for 3 seconds to disconnect"
+                      : "Click to connect"
+                }
+                onClick={handleOrbClick}
+                onMouseDown={startHold}
+                onMouseUp={cancelHold}
+                onMouseLeave={cancelHold}
+                onTouchStart={startHold}
+                onTouchEnd={cancelHold}
+                onTouchCancel={cancelHold}
+                onKeyDown={handleOrbKeyDown}
+                onKeyUp={handleOrbKeyUp}
+              >
+                <QueenLiquidOrb
+                  connected={isConnected}
+                  holding={isHolding}
+                  disconnecting={isDisconnecting}
+                  motionEnabled={animationsEnabled}
+                />
+              </div>
+            </div>
+
+            {/* Connection status is already shown by the header ACTIVE indicator. */}
+            <h2 className="hero-state-title">
+              {isHolding ? (
+                <>
+                  DISCONNECTING (<span ref={titleCountdownRef}>3.0</span>s)
+                </>
+              ) : isDisconnecting ? (
+                "DISCONNECTING…"
+              ) : isConnected ? (
+                "Your bridge is online."
+              ) : isConnecting ? (
+                "ESTABLISHING BRIDGE…"
+              ) : (
+                "Your bridge is offline."
+              )}
+            </h2>
+            <p className="hero-state-sub">
+              {isHolding
+                ? "Keep holding the orb to confirm disconnection…"
+                : isDisconnecting
+                  ? "Closing the tunnel and local bridge cleanly…"
+                  : isConnected
+                    ? "Connected to ChatGPT · Full System Access"
+                    : "Expose local computer & workspace to ChatGPT"}
+            </p>
+
+            {isConnected ? (
+              <button
+                className="btn-liquid-action"
+                type="button"
+                disabled={isDisconnecting}
+                onClick={() => void openChatGPT()}
+              >
+                <span>↗ OPEN CHATGPT</span>
+              </button>
+            ) : (
+              <button
+                className="btn-liquid-action"
+                disabled={busy || isConnecting}
+                onClick={() => void connect()}
+              >
+                {busy || isConnecting ? (
+                  <span>Connecting Bridge…</span>
+                ) : (
+                  <span>⚡ Connect to Bridge</span>
+                )}
+              </button>
+            )}
 
             <div
-              className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}
-              role="button"
-              tabIndex={0}
-              aria-label={
-                isDisconnecting
-                  ? "Disconnecting from ChatGPT"
-                  : isConnected
-                    ? "Hold for 3 seconds to disconnect"
-                    : "Connect to ChatGPT"
-              }
-              title={
-                isDisconnecting
-                  ? "Disconnecting from ChatGPT"
-                  : isConnected
-                    ? "Hold for 3 seconds to disconnect"
-                    : "Click to connect"
-              }
-              onClick={handleOrbClick}
-              onMouseDown={startHold}
-              onMouseUp={cancelHold}
-              onMouseLeave={cancelHold}
-              onTouchStart={startHold}
-              onTouchEnd={cancelHold}
-              onTouchCancel={cancelHold}
-              onKeyDown={handleOrbKeyDown}
-              onKeyUp={handleOrbKeyUp}
+              className={`hold-hint-pill ${disconnectRingActive ? "active" : ""}`}
             >
-              <QueenLiquidOrb
-                connected={isConnected}
-                holding={isHolding}
-                disconnecting={isDisconnecting}
-                motionEnabled={animationsEnabled}
-              />
+              {isHolding ? (
+                <span>
+                  ⚡ Disconnecting in <span ref={hintCountdownRef}>3.0</span>s
+                </span>
+              ) : isDisconnecting ? (
+                <span>⚡ Disconnecting Bridge…</span>
+              ) : isConnected ? (
+                <span>⏳ Hold orb 3s to Disconnect</span>
+              ) : (
+                <span>✨ Tap orb or button to Connect</span>
+              )}
+            </div>
+          </section>
+
+          <ActivityPanel initialActivity={initialActivity} />
+        </div>
+        {activeDrawer && (
+          <div
+            className="inline-route-view"
+            data-testid="inline-route-view"
+            role="region"
+            aria-label={drawerTitles[activeDrawer]}
+          >
+            <div
+              ref={drawerDialogRef}
+              id="unified-drawer-panel"
+              className="inline-route-shell"
+              tabIndex={-1}
+            >
+              <div className="drawer-header">
+                <span className="drawer-title">
+                  <RoyalIcon name={activeDrawer} size={17} />
+                  {drawerTitles[activeDrawer]}
+                </span>
+                <button
+                  className="btn-drawer-close"
+                  type="button"
+                  aria-label="Back to Home"
+                  onClick={closeDrawer}
+                >
+                  Home
+                </button>
+              </div>
+              {renderDrawerMenuTabs(activeDrawer)}
+              <div className="drawer-page" key={activeDrawer}>
+                {activeDrawer === "workspace" && (
+                  <>
+                    <div className="drawer-content">
+                      <div className="drawer-row">
+                        <span className="drawer-label">Current Folder</span>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "var(--text-gold)",
+                          }}
+                        >
+                          {status?.machineName}
+                        </span>
+                      </div>
+                      <div className="workspace-path-box">
+                        {status?.activeWorkspace ?? "—"}
+                      </div>
+                      <div className="drawer-actions">
+                        <button
+                          className="btn-drawer-action"
+                          onClick={() => void chooseWorkspace()}
+                        >
+                          📁 Choose Folder
+                        </button>
+                        <button
+                          className="btn-drawer-action"
+                          disabled={!status?.activeWorkspace}
+                          onClick={() =>
+                            status?.activeWorkspace &&
+                            void window.qnector.openPath(status.activeWorkspace)
+                          }
+                        >
+                          ↗ Explorer
+                        </button>
+                        <button
+                          className="btn-drawer-action"
+                          disabled={!status?.activeWorkspace}
+                          onClick={() => {
+                            if (!status?.activeWorkspace) return;
+                            setError(undefined);
+                            void window.qnector
+                              .openTerminal(status.activeWorkspace)
+                              .catch((reason: unknown) =>
+                                setError(
+                                  reason instanceof Error
+                                    ? reason.message
+                                    : String(reason),
+                                ),
+                              );
+                          }}
+                        >
+                          💻 Terminal
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {activeDrawer === "memory" && (
+                  <div className="drawer-content">
+                    <MemoryCenter
+                      key={status?.activeWorkspace}
+                      memory={memory}
+                      workspace={status?.activeWorkspace}
+                      busy={memoryBusy}
+                      onOpen={() => void openMemoryFile()}
+                      onExport={() => void exportMemoryFile()}
+                      onClear={() => void clearMemory()}
+                    />
+                  </div>
+                )}
+                {activeDrawer === "skills" && (
+                  <SkillManager workspaceKey={status?.activeWorkspace} />
+                )}
+                {activeDrawer === "runtime" && (
+                  <RuntimeDiagnostics
+                    runtimeDashboard={runtimeDashboard}
+                    runtimeBusy={runtimeBusy}
+                    onRefresh={() => void refreshRuntime(true)}
+                  />
+                )}
+                {activeDrawer === "settings" && (
+                  <>
+                    <div className="drawer-content">
+                      <button
+                        className="setup-launch-card"
+                        type="button"
+                        onClick={() => void openSetupWizard()}
+                      >
+                        <span className="setup-launch-icon">✦</span>
+                        <span className="setup-launch-copy">
+                          <strong>Connection Setup</strong>
+                          <small>
+                            Guided OpenAI Tunnel setup from first run to
+                            connected
+                          </small>
+                        </span>
+                        <span className="activity-open-glyph">›</span>
+                      </button>
+
+                      <button
+                        className="setup-launch-card runtime-settings-launch"
+                        type="button"
+                        onClick={() => {
+                          void refreshRuntime(true);
+                          setActiveDrawer("runtime");
+                        }}
+                      >
+                        <span className="setup-launch-icon">◈</span>
+                        <span className="setup-launch-copy">
+                          <strong>Runtime & Diagnostics</strong>
+                          <small>
+                            Performance, health checks, processes and build
+                            state
+                          </small>
+                        </span>
+                        <span className="activity-open-glyph">›</span>
+                      </button>
+
+                      <div
+                        className={`update-settings-card ${updateState?.phase ?? "idle"} ${updateUxPhase !== "idle" ? "ux-busy" : ""}`}
+                      >
+                        <div className="update-card-header">
+                          <span className="update-card-icon">
+                            {updatePhaseIcon}
+                          </span>
+                          <div className="update-card-copy">
+                            <span className="update-card-eyebrow">
+                              App Updates
+                            </span>
+                            <strong>Keep Qnector up to date</strong>
+                            <small>
+                              Download verified releases and restart safely.
+                            </small>
+                          </div>
+                          <span
+                            className={`update-status-badge ${updateState?.phase ?? "idle"}`}
+                          >
+                            {updatePhaseLabel}
+                          </span>
+                        </div>
+
+                        <div className="update-version-grid">
+                          <div className="update-version-panel current">
+                            <span>Current version</span>
+                            <strong>
+                              v{updateState?.currentVersion ?? "…"}
+                            </strong>
+                            <small>{updateState?.mode ?? "…"} build</small>
+                          </div>
+                          <span
+                            className="update-version-arrow"
+                            aria-hidden="true"
+                          >
+                            →
+                          </span>
+                          <div
+                            className={`update-version-panel latest ${
+                              updateHasNewVersion ? "has-update" : ""
+                            }`}
+                          >
+                            <span>Latest release</span>
+                            <strong>
+                              v
+                              {updateState?.latestVersion ??
+                                updateState?.currentVersion ??
+                                "…"}
+                            </strong>
+                            <small>
+                              {updateHasNewVersion
+                                ? "Available now"
+                                : "GitHub Releases"}
+                            </small>
+                          </div>
+                        </div>
+
+                        <div className="update-card-actions update-card-actions-prominent">
+                          <button
+                            type="button"
+                            className="btn-update-primary"
+                            disabled={updateBusy}
+                            onClick={runPrimaryUpdateAction}
+                          >
+                            {updateUxPhase === "checking"
+                              ? "↻ Checking…"
+                              : updateUxPhase === "downloading"
+                                ? `↻ Downloading ${updateProgressPercent}%`
+                                : updateUxPhase === "preparing-restart"
+                                  ? "↻ Preparing restart…"
+                                  : updateUxPhase === "restarting"
+                                    ? "↻ Restarting Qnector…"
+                                    : updateState?.phase === "checking"
+                                      ? "↻ Checking…"
+                                      : updateState?.phase === "downloading"
+                                        ? `Downloading ${updateProgressPercent}%`
+                                        : updateState?.phase === "installing"
+                                          ? "Updating…"
+                                          : updateState?.canInstall
+                                            ? "Restart & Update"
+                                            : updateState?.canDownload
+                                              ? `Download v${updateState.latestVersion ?? "new"}`
+                                              : updateState?.phase ===
+                                                  "up-to-date"
+                                                ? "Check Again"
+                                                : updateState?.phase === "error"
+                                                  ? "Retry"
+                                                  : "Check for Updates"}
+                          </button>
+                          {updateState?.releaseUrl && (
+                            <button
+                              type="button"
+                              className="btn-update-secondary"
+                              onClick={() =>
+                                void window.qnector.openUpdateRelease()
+                              }
+                            >
+                              View Release Notes ↗
+                            </button>
+                          )}
+                        </div>
+
+                        <div
+                          className={`update-status-panel ${
+                            updateState?.phase === "downloading"
+                              ? "downloading"
+                              : ""
+                          } ${updateUxPhase !== "idle" ? "ux-busy" : ""}`}
+                        >
+                          <span className="update-status-panel-icon">
+                            {updatePhaseIcon}
+                          </span>
+                          <div className="update-status-panel-copy">
+                            {updateState?.phase === "downloading" ? (
+                              <div className="update-progress-inline">
+                                <div className="update-progress-inline-heading">
+                                  <strong>Downloading update</strong>
+                                  <span>{updateProgressPercent}%</span>
+                                </div>
+                                <div className="update-progress-track">
+                                  <span
+                                    style={{
+                                      width: `${updateProgressPercent}%`,
+                                    }}
+                                  />
+                                </div>
+                                <div className="update-progress-inline-meta">
+                                  <span>
+                                    {formatBytes(updateState.bytesDownloaded)} /{" "}
+                                    {formatBytes(updateState.totalBytes)}
+                                  </span>
+                                  <span>Verify after download</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <strong>{updatePhaseLabel}</strong>
+                                <p>
+                                  {updateUxMessage ??
+                                    updateState?.message ??
+                                    "Qnector checks GitHub Releases for new versions."}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Tunnel Mode Card */}
+                      <div className="setting-toggle-card">
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "2px",
+                          }}
+                        >
+                          <span className="drawer-label">Tunnel Mode</span>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            Internet transport for ChatGPT
+                          </span>
+                        </div>
+                        <select
+                          className="drawer-select"
+                          value={config?.transport.mode ?? "openai-tunnel"}
+                          disabled={busy}
+                          onChange={(e) =>
+                            void updateTransportMode(
+                              e.target.value as TransportMode,
+                            )
+                          }
+                        >
+                          {transportOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Royal Motion Quality: local UI-only preference.
+                        The persisted legacy animationsEnabled=false always wins. */}
+                      <div className="setting-toggle-card motion-settings-card">
+                        <div className="motion-settings-header">
+                          <strong>Motion Quality</strong>
+                          <small>Liquid Glass, Queen Orb and Silk Aurora</small>
+                        </div>
+                        <div
+                          className="motion-quality-segments"
+                          role="group"
+                          aria-label="Motion quality"
+                        >
+                          {QUALITY_OPTIONS.map((option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              className={
+                                motionPreferences.quality === option
+                                  ? "active"
+                                  : ""
+                              }
+                              aria-pressed={
+                                motionPreferences.quality === option
+                              }
+                              disabled={!animationsEnabled}
+                              onClick={() =>
+                                motionPreferences.setQuality(option)
+                              }
+                            >
+                              {option[0]!.toUpperCase() + option.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="motion-quality-help" role="status">
+                          {motionPreferences.effective === "reduced"
+                            ? "OS Reduced Motion active: decorative loops are paused."
+                            : !animationsEnabled
+                              ? "Animations disabled by the existing QNECTOR setting."
+                              : motionPreferences.effective === "off"
+                                ? "Ambient effects are static; controls still work."
+                                : "Animation follows the display refresh rate, targeting 60+ FPS when hardware permits."}
+                        </p>
+                        <label className="motion-telemetry-toggle">
+                          <input
+                            type="checkbox"
+                            checked={motionPreferences.telemetryEnabled}
+                            onChange={(event) =>
+                              motionPreferences.setTelemetryEnabled(
+                                event.target.checked,
+                              )
+                            }
+                          />
+                          <span>
+                            Show local frame-time diagnostics (opt-in)
+                          </span>
+                        </label>
+                        {motionPreferences.telemetryEnabled && (
+                          <div
+                            className="motion-telemetry-result"
+                            aria-live="off"
+                          >
+                            {motionPreferences.stats
+                              ? `${motionPreferences.stats.fps.toFixed(1)} FPS · P95 ${motionPreferences.stats.p95FrameMs.toFixed(1)} ms · Over 17 ms: ${motionPreferences.stats.missed60HzFrames}`
+                              : "Measuring visible frames…"}
+                          </div>
+                        )}
+                      </div>
+                      {/* Interface Animations */}
+                      <div className="setting-toggle-card">
+                        <label className="drawer-toggle">
+                          <input
+                            type="checkbox"
+                            checked={config?.ui.animationsEnabled ?? true}
+                            onChange={(e) =>
+                              void toggleSetting(
+                                "animationsEnabled",
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px",
+                            }}
+                          >
+                            <span>Interface Animations</span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              Liquid Glass, Silk Aurora and responsive motion
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Global Hotkey Card */}
+                      <div className="setting-toggle-card">
+                        <label className="drawer-toggle">
+                          <input
+                            type="checkbox"
+                            checked={config?.ui.globalShortcutEnabled ?? true}
+                            onChange={(e) =>
+                              void toggleSetting(
+                                "globalShortcutEnabled",
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px",
+                            }}
+                          >
+                            <span>Global Hotkey</span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              Show / hide window from anywhere
+                            </span>
+                          </div>
+                        </label>
+                        <div className="hotkey-badge">
+                          <kbd>Ctrl</kbd>
+                          <span>+</span>
+                          <kbd>Shift</kbd>
+                          <span>+</span>
+                          <kbd>Q</kbd>
+                        </div>
+                      </div>
+
+                      {/* Minimize to Tray */}
+                      <div className="setting-toggle-card">
+                        <label className="drawer-toggle">
+                          <input
+                            type="checkbox"
+                            checked={config?.ui.minimizeToTray ?? true}
+                            onChange={(e) =>
+                              void toggleSetting(
+                                "minimizeToTray",
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px",
+                            }}
+                          >
+                            <span>Minimize to Tray</span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              Keep bridge running in background on close
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Launch on Startup */}
+                      <div className="setting-toggle-card">
+                        <label className="drawer-toggle">
+                          <input
+                            type="checkbox"
+                            checked={config?.ui.startAtLogin ?? false}
+                            onChange={(e) =>
+                              void toggleSetting(
+                                "startAtLogin",
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px",
+                            }}
+                          >
+                            <span>Auto Start</span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              Launch Qnector on Windows startup
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Mirror MEMORY.md */}
+                      <div className="setting-toggle-card">
+                        <label className="drawer-toggle">
+                          <input
+                            type="checkbox"
+                            checked={
+                              config?.memory?.workspaceMirror === "memory-md"
+                            }
+                            onChange={(e) =>
+                              void window.qnector
+                                .updateConfig({
+                                  memory: {
+                                    ...(config?.memory ?? {}),
+                                    workspaceMirror: e.target.checked
+                                      ? "memory-md"
+                                      : "off",
+                                  },
+                                })
+                                .then((saved) => setConfig(saved))
+                                .catch((reason: unknown) =>
+                                  setError(
+                                    reason instanceof Error
+                                      ? reason.message
+                                      : String(reason),
+                                  ),
+                                )
+                            }
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "2px",
+                            }}
+                          >
+                            <span>Save .qnector/MEMORY.md</span>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              Write living markdown docs in workspace
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-
-          {/* Connection status is already shown by the header ACTIVE indicator. */}
-          <h2 className="hero-state-title">
-            {isHolding
-              ? <>DISCONNECTING (<span ref={titleCountdownRef}>3.0</span>s)</>
-              : isDisconnecting
-                ? "DISCONNECTING…"
-                : isConnected
-                  ? "Your bridge is online."
-                  : isConnecting
-                    ? "ESTABLISHING BRIDGE…"
-                    : "Your bridge is offline."}
-          </h2>
-          <p className="hero-state-sub">
-            {isHolding
-              ? "Keep holding the orb to confirm disconnection…"
-              : isDisconnecting
-                ? "Closing the tunnel and local bridge cleanly…"
-                : isConnected
-                  ? "Connected to ChatGPT · Full System Access"
-                  : "Expose local computer & workspace to ChatGPT"}
-          </p>
-
-          {isConnected ? (
-            <button
-              className="btn-liquid-action"
-              type="button"
-              disabled={isDisconnecting}
-              onClick={() => void openChatGPT()}
-            >
-              <span>↗ OPEN CHATGPT</span>
-            </button>
-          ) : (
-            <button
-              className="btn-liquid-action"
-              disabled={busy || isConnecting}
-              onClick={() => void connect()}
-            >
-              {busy || isConnecting ? (
-                <span>Connecting Bridge…</span>
-              ) : (
-                <span>⚡ Connect to Bridge</span>
-              )}
-            </button>
-          )}
-
-          <div
-            className={`hold-hint-pill ${disconnectRingActive ? "active" : ""}`}
-          >
-            {isHolding ? (
-              <span>
-                ⚡ Disconnecting in <span ref={hintCountdownRef}>3.0</span>s
-              </span>
-            ) : isDisconnecting ? (
-              <span>⚡ Disconnecting Bridge…</span>
-            ) : isConnected ? (
-              <span>⏳ Hold orb 3s to Disconnect</span>
-            ) : (
-              <span>✨ Tap orb or button to Connect</span>
-            )}
-          </div>
-        </section>
-
-        <ActivityPanel initialActivity={initialActivity} />
+        )}
       </main>
 
       <footer
@@ -1596,28 +2236,36 @@ function App(): React.ReactElement {
           className={`dock-pill-btn ${activeDrawer === "workspace" ? "active" : ""}`}
           onClick={() => toggleDrawer("workspace")}
         >
-          <span><RoyalIcon name="workspace" size={18} /></span>
+          <span>
+            <RoyalIcon name="workspace" size={18} />
+          </span>
           <span>Workspace</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "memory" ? "active" : ""}`}
           onClick={() => toggleDrawer("memory")}
         >
-          <span><RoyalIcon name="memory" size={18} /></span>
+          <span>
+            <RoyalIcon name="memory" size={18} />
+          </span>
           <span>Memory</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "skills" ? "active" : ""}`}
           onClick={() => toggleDrawer("skills")}
         >
-          <span><RoyalIcon name="skills" size={18} /></span>
+          <span>
+            <RoyalIcon name="skills" size={18} />
+          </span>
           <span>Skills</span>
         </button>
         <button
           className={`dock-pill-btn ${activeDrawer === "settings" ? "active" : ""}`}
           onClick={() => toggleDrawer("settings")}
         >
-          <span><RoyalIcon name="settings" size={18} /></span>
+          <span>
+            <RoyalIcon name="settings" size={18} />
+          </span>
           <span>Settings</span>
         </button>
       </footer>
@@ -1961,575 +2609,6 @@ function App(): React.ReactElement {
       )}
 
       {/* Activity detail dialog is isolated inside ActivityPanel. */}
-
-      {activeDrawer && (
-        <div
-          className={`drawer-backdrop ${isClosingDrawer ? "closing" : ""}`}
-          onClick={closeDrawer}
-        >
-          <div
-            ref={drawerDialogRef}
-            id="unified-drawer-panel"
-            className={`drawer-card unified-drawer-card ${isClosingDrawer ? "closing" : ""}`}
-            role="dialog"
-            aria-modal="true"
-            aria-label={drawerTitles[activeDrawer]}
-            tabIndex={-1}
-            onAnimationEnd={onDrawerAnimationEnd}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="drawer-header">
-              <span className="drawer-title"><RoyalIcon name={activeDrawer} size={17} />{drawerTitles[activeDrawer]}</span>
-              <button
-                className="btn-drawer-close"
-                type="button"
-                aria-label="Close drawer"
-                onClick={closeDrawer}
-              >
-                ✕
-              </button>
-            </div>
-            {renderDrawerMenuTabs(activeDrawer)}
-            <div
-              className={`drawer-page ${drawerTransition ? `drawer-page-${drawerTransition}` : ""}`}
-              key={activeDrawer}
-              onAnimationEnd={(event) => {
-                if (event.target === event.currentTarget &&
-                  (event.animationName === "qRouteSlideForward" || event.animationName === "qRouteSlideBackward")) {
-                  setDrawerTransition(null);
-                }
-              }}
-            >
-              {activeDrawer === "workspace" && (
-                <>
-                  <div className="drawer-content">
-                    <div className="drawer-row">
-                      <span className="drawer-label">Current Folder</span>
-                      <span
-                        style={{ fontSize: "10px", color: "var(--text-gold)" }}
-                      >
-                        {status?.machineName}
-                      </span>
-                    </div>
-                    <div className="workspace-path-box">
-                      {status?.activeWorkspace ?? "—"}
-                    </div>
-                    <div className="drawer-actions">
-                      <button
-                        className="btn-drawer-action"
-                        onClick={() => void chooseWorkspace()}
-                      >
-                        📁 Choose Folder
-                      </button>
-                      <button
-                        className="btn-drawer-action"
-                        disabled={!status?.activeWorkspace}
-                        onClick={() =>
-                          status?.activeWorkspace &&
-                          void window.qnector.openPath(status.activeWorkspace)
-                        }
-                      >
-                        ↗ Explorer
-                      </button>
-                      <button
-                        className="btn-drawer-action"
-                        disabled={!status?.activeWorkspace}
-                        onClick={() => {
-                          if (!status?.activeWorkspace) return;
-                          setError(undefined);
-                          void window.qnector
-                            .openTerminal(status.activeWorkspace)
-                            .catch((reason: unknown) =>
-                              setError(
-                                reason instanceof Error
-                                  ? reason.message
-                                  : String(reason),
-                              ),
-                            );
-                        }}
-                      >
-                        💻 Terminal
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-              {activeDrawer === "memory" && (
-                <div className="drawer-content">
-                  <MemoryCenter
-                    key={status?.activeWorkspace}
-                    memory={memory}
-                    workspace={status?.activeWorkspace}
-                    busy={memoryBusy}
-                    onOpen={() => void openMemoryFile()}
-                    onExport={() => void exportMemoryFile()}
-                    onClear={() => void clearMemory()}
-                  />
-                </div>
-              )}
-              {activeDrawer === "skills" && (
-                <SkillManager workspaceKey={status?.activeWorkspace} />
-              )}
-              {activeDrawer === "runtime" && (
-                <RuntimeDiagnostics
-                  runtimeDashboard={runtimeDashboard}
-                  runtimeBusy={runtimeBusy}
-                  onRefresh={() => void refreshRuntime(true)}
-                />
-              )}
-              {activeDrawer === "settings" && (
-                <>
-                  <div className="drawer-content">
-                    <button
-                      className="setup-launch-card"
-                      type="button"
-                      onClick={() => void openSetupWizard()}
-                    >
-                      <span className="setup-launch-icon">✦</span>
-                      <span className="setup-launch-copy">
-                        <strong>Connection Setup</strong>
-                        <small>
-                          Guided OpenAI Tunnel setup from first run to connected
-                        </small>
-                      </span>
-                      <span className="activity-open-glyph">›</span>
-                    </button>
-
-                    <button
-                      className="setup-launch-card runtime-settings-launch"
-                      type="button"
-                      onClick={() => {
-                        void refreshRuntime(true);
-                        setActiveDrawer("runtime");
-                      }}
-                    >
-                      <span className="setup-launch-icon">◈</span>
-                      <span className="setup-launch-copy">
-                        <strong>Runtime & Diagnostics</strong>
-                        <small>
-                          Performance, health checks, processes and build state
-                        </small>
-                      </span>
-                      <span className="activity-open-glyph">›</span>
-                    </button>
-
-                    <div
-                      className={`update-settings-card ${updateState?.phase ?? "idle"} ${updateUxPhase !== "idle" ? "ux-busy" : ""}`}
-                    >
-                      <div className="update-card-header">
-                        <span className="update-card-icon">
-                          {updatePhaseIcon}
-                        </span>
-                        <div className="update-card-copy">
-                          <span className="update-card-eyebrow">
-                            App Updates
-                          </span>
-                          <strong>Keep Qnector up to date</strong>
-                          <small>
-                            Download verified releases and restart safely.
-                          </small>
-                        </div>
-                        <span
-                          className={`update-status-badge ${updateState?.phase ?? "idle"}`}
-                        >
-                          {updatePhaseLabel}
-                        </span>
-                      </div>
-
-                      <div className="update-version-grid">
-                        <div className="update-version-panel current">
-                          <span>Current version</span>
-                          <strong>v{updateState?.currentVersion ?? "…"}</strong>
-                          <small>{updateState?.mode ?? "…"} build</small>
-                        </div>
-                        <span
-                          className="update-version-arrow"
-                          aria-hidden="true"
-                        >
-                          →
-                        </span>
-                        <div
-                          className={`update-version-panel latest ${
-                            updateHasNewVersion ? "has-update" : ""
-                          }`}
-                        >
-                          <span>Latest release</span>
-                          <strong>
-                            v
-                            {updateState?.latestVersion ??
-                              updateState?.currentVersion ??
-                              "…"}
-                          </strong>
-                          <small>
-                            {updateHasNewVersion
-                              ? "Available now"
-                              : "GitHub Releases"}
-                          </small>
-                        </div>
-                      </div>
-
-                      <div className="update-card-actions update-card-actions-prominent">
-                        <button
-                          type="button"
-                          className="btn-update-primary"
-                          disabled={updateBusy}
-                          onClick={runPrimaryUpdateAction}
-                        >
-                          {updateUxPhase === "checking"
-                            ? "↻ Checking…"
-                            : updateUxPhase === "downloading"
-                              ? `↻ Downloading ${updateProgressPercent}%`
-                              : updateUxPhase === "preparing-restart"
-                                ? "↻ Preparing restart…"
-                                : updateUxPhase === "restarting"
-                                  ? "↻ Restarting Qnector…"
-                                  : updateState?.phase === "checking"
-                                    ? "↻ Checking…"
-                                    : updateState?.phase === "downloading"
-                                      ? `Downloading ${updateProgressPercent}%`
-                                      : updateState?.phase === "installing"
-                                        ? "Updating…"
-                                        : updateState?.canInstall
-                                          ? "Restart & Update"
-                                          : updateState?.canDownload
-                                            ? `Download v${updateState.latestVersion ?? "new"}`
-                                            : updateState?.phase ===
-                                                "up-to-date"
-                                              ? "Check Again"
-                                              : updateState?.phase === "error"
-                                                ? "Retry"
-                                                : "Check for Updates"}
-                        </button>
-                        {updateState?.releaseUrl && (
-                          <button
-                            type="button"
-                            className="btn-update-secondary"
-                            onClick={() =>
-                              void window.qnector.openUpdateRelease()
-                            }
-                          >
-                            View Release Notes ↗
-                          </button>
-                        )}
-                      </div>
-
-                      <div
-                        className={`update-status-panel ${
-                          updateState?.phase === "downloading"
-                            ? "downloading"
-                            : ""
-                        } ${updateUxPhase !== "idle" ? "ux-busy" : ""}`}
-                      >
-                        <span className="update-status-panel-icon">
-                          {updatePhaseIcon}
-                        </span>
-                        <div className="update-status-panel-copy">
-                          {updateState?.phase === "downloading" ? (
-                            <div className="update-progress-inline">
-                              <div className="update-progress-inline-heading">
-                                <strong>Downloading update</strong>
-                                <span>{updateProgressPercent}%</span>
-                              </div>
-                              <div className="update-progress-track">
-                                <span
-                                  style={{ width: `${updateProgressPercent}%` }}
-                                />
-                              </div>
-                              <div className="update-progress-inline-meta">
-                                <span>
-                                  {formatBytes(updateState.bytesDownloaded)} /{" "}
-                                  {formatBytes(updateState.totalBytes)}
-                                </span>
-                                <span>Verify after download</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <strong>{updatePhaseLabel}</strong>
-                              <p>
-                                {updateUxMessage ??
-                                  updateState?.message ??
-                                  "Qnector checks GitHub Releases for new versions."}
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tunnel Mode Card */}
-                    <div className="setting-toggle-card">
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "2px",
-                        }}
-                      >
-                        <span className="drawer-label">Tunnel Mode</span>
-                        <span
-                          style={{
-                            fontSize: "10px",
-                            color: "var(--text-muted)",
-                          }}
-                        >
-                          Internet transport for ChatGPT
-                        </span>
-                      </div>
-                      <select
-                        className="drawer-select"
-                        value={config?.transport.mode ?? "openai-tunnel"}
-                        disabled={busy}
-                        onChange={(e) =>
-                          void updateTransportMode(
-                            e.target.value as TransportMode,
-                          )
-                        }
-                      >
-                        {transportOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Royal Motion Quality: local UI-only preference.
-                        The persisted legacy animationsEnabled=false always wins. */}
-                    <div className="setting-toggle-card motion-settings-card">
-                      <div className="motion-settings-header">
-                        <strong>Motion Quality</strong>
-                        <small>Liquid Glass, Queen Orb and Silk Aurora</small>
-                      </div>
-                      <div className="motion-quality-segments" role="group" aria-label="Motion quality">
-                        {QUALITY_OPTIONS.map((option) => (
-                          <button
-                            key={option}
-                            type="button"
-                            className={motionPreferences.quality === option ? "active" : ""}
-                            aria-pressed={motionPreferences.quality === option}
-                            disabled={!animationsEnabled}
-                            onClick={() => motionPreferences.setQuality(option)}
-                          >
-                            {option[0]!.toUpperCase() + option.slice(1)}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="motion-quality-help" role="status">
-                        {motionPreferences.effective === "reduced"
-                          ? "OS Reduced Motion active: decorative loops are paused."
-                          : !animationsEnabled
-                            ? "Animations disabled by the existing QNECTOR setting."
-                            : motionPreferences.effective === "off"
-                              ? "Ambient effects are static; controls still work."
-                              : "Animation follows the display refresh rate, targeting 60+ FPS when hardware permits."}
-                      </p>
-                      <label className="motion-telemetry-toggle">
-                        <input
-                          type="checkbox"
-                          checked={motionPreferences.telemetryEnabled}
-                          onChange={(event) => motionPreferences.setTelemetryEnabled(event.target.checked)}
-                        />
-                        <span>Show local frame-time diagnostics (opt-in)</span>
-                      </label>
-                      {motionPreferences.telemetryEnabled && (
-                        <div className="motion-telemetry-result" aria-live="off">
-                          {motionPreferences.stats
-                            ? `${motionPreferences.stats.fps.toFixed(1)} FPS · P95 ${motionPreferences.stats.p95FrameMs.toFixed(1)} ms · Over 17 ms: ${motionPreferences.stats.missed60HzFrames}`
-                            : "Measuring visible frames…"}
-                        </div>
-                      )}
-                    </div>
-                    {/* Interface Animations */}
-                    <div className="setting-toggle-card">
-                      <label className="drawer-toggle">
-                        <input
-                          type="checkbox"
-                          checked={config?.ui.animationsEnabled ?? true}
-                          onChange={(e) =>
-                            void toggleSetting(
-                              "animationsEnabled",
-                              e.target.checked,
-                            )
-                          }
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "2px",
-                          }}
-                        >
-                          <span>Interface Animations</span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Liquid Glass, Silk Aurora and responsive motion
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Global Hotkey Card */}
-                    <div className="setting-toggle-card">
-                      <label className="drawer-toggle">
-                        <input
-                          type="checkbox"
-                          checked={config?.ui.globalShortcutEnabled ?? true}
-                          onChange={(e) =>
-                            void toggleSetting(
-                              "globalShortcutEnabled",
-                              e.target.checked,
-                            )
-                          }
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "2px",
-                          }}
-                        >
-                          <span>Global Hotkey</span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Show / hide window from anywhere
-                          </span>
-                        </div>
-                      </label>
-                      <div className="hotkey-badge">
-                        <kbd>Ctrl</kbd>
-                        <span>+</span>
-                        <kbd>Shift</kbd>
-                        <span>+</span>
-                        <kbd>Q</kbd>
-                      </div>
-                    </div>
-
-                    {/* Minimize to Tray */}
-                    <div className="setting-toggle-card">
-                      <label className="drawer-toggle">
-                        <input
-                          type="checkbox"
-                          checked={config?.ui.minimizeToTray ?? true}
-                          onChange={(e) =>
-                            void toggleSetting(
-                              "minimizeToTray",
-                              e.target.checked,
-                            )
-                          }
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "2px",
-                          }}
-                        >
-                          <span>Minimize to Tray</span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Keep bridge running in background on close
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Launch on Startup */}
-                    <div className="setting-toggle-card">
-                      <label className="drawer-toggle">
-                        <input
-                          type="checkbox"
-                          checked={config?.ui.startAtLogin ?? false}
-                          onChange={(e) =>
-                            void toggleSetting("startAtLogin", e.target.checked)
-                          }
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "2px",
-                          }}
-                        >
-                          <span>Auto Start</span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Launch Qnector on Windows startup
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Mirror MEMORY.md */}
-                    <div className="setting-toggle-card">
-                      <label className="drawer-toggle">
-                        <input
-                          type="checkbox"
-                          checked={
-                            config?.memory?.workspaceMirror === "memory-md"
-                          }
-                          onChange={(e) =>
-                            void window.qnector
-                              .updateConfig({
-                                memory: {
-                                  ...(config?.memory ?? {}),
-                                  workspaceMirror: e.target.checked
-                                    ? "memory-md"
-                                    : "off",
-                                },
-                              })
-                              .then((saved) => setConfig(saved))
-                              .catch((reason: unknown) =>
-                                setError(
-                                  reason instanceof Error
-                                    ? reason.message
-                                    : String(reason),
-                                ),
-                              )
-                          }
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "2px",
-                          }}
-                        >
-                          <span>Save .qnector/MEMORY.md</span>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            Write living markdown docs in workspace
-                          </span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

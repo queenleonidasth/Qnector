@@ -6,6 +6,10 @@ const renderer = readFileSync(
   "utf8",
 );
 const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+const inlineStyles = readFileSync(
+  new URL("./inline-route.css", import.meta.url),
+  "utf8",
+);
 const mainSource = readFileSync(
   new URL("../main/main.ts", import.meta.url),
   "utf8",
@@ -29,32 +33,24 @@ describe("drawer navigation and content completeness UX", () => {
     expect(renderer).not.toContain("memory-quick-stats");
   });
 
-  it("keeps one persistent drawer shell and animates only the replaced page", () => {
+  it("slides entire routes inline and never opens a modal drawer", () => {
     expect(renderer).toContain("const switchDrawer = (drawer: DrawerName)");
-    expect(renderer).toContain('nextIndex > currentIndex ? "left" : "right"');
-    expect(renderer).toContain("setActiveDrawer(drawer);");
-    expect(renderer).toContain("setDrawerTransition(direction);");
-    expect(renderer.match(/className=\{`drawer-backdrop/g)?.length).toBe(1);
-    expect(
-      renderer.match(/className=\{`drawer-card unified-drawer-card/g)?.length,
-    ).toBe(1);
-    expect(renderer).toContain(
-      'className={`drawer-page ${drawerTransition ? `drawer-page-${drawerTransition}` : ""}`}',
+    expect(renderer).toContain("document.startViewTransition");
+    expect(renderer).toContain("flushSync(() => setActiveDrawer(next))");
+    expect(renderer).toContain('className="inline-route-view"');
+    expect(renderer).toContain('className="inline-route-shell"');
+    expect(renderer).toContain('className="drawer-page"');
+    expect(renderer).toContain('role="region"');
+    expect(renderer).not.toContain("className={`drawer-backdrop");
+    expect(renderer).not.toContain(
+      "className={`drawer-card unified-drawer-card",
     );
-    expect(styles).toContain(".unified-drawer-card");
-    expect(styles).toContain(".drawer-page-left");
-    expect(styles).toContain(".drawer-page-right");
-    expect(styles).toContain("@keyframes drawerPageFromRight");
-    expect(styles).toContain("@keyframes drawerPageFromLeft");
-    expect(styles).toContain(
-      "animation: drawerPageFromRight 130ms ease-out both !important;",
-    );
-    expect(styles).toContain(
-      "animation: drawerPageFromLeft 130ms ease-out both !important;",
-    );
-    expect(styles).not.toContain(".drawer-card.drawer-switching");
-    expect(styles).not.toContain("drawerContentFromRight");
-    expect(styles).not.toContain("drawerContentFromLeft");
+    expect(inlineStyles).toContain("view-transition-name: qnector-route;");
+    expect(inlineStyles).toContain("::view-transition-old(qnector-route)");
+    expect(inlineStyles).toContain("@keyframes qnRouteEnterRight");
+    expect(inlineStyles).toContain("@keyframes qnRouteExitLeft");
+    expect(inlineStyles).toContain(".inline-route-shell");
+    expect(inlineStyles).toContain("animation: none !important;");
   });
 
   it("keeps drawer typography readable without inflating the shell layout", () => {

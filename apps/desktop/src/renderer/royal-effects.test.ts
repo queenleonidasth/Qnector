@@ -108,8 +108,11 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     const text = await source();
     expect(text).toContain("activity-item ${item.status}");
     expect(text).toContain("activity-result-pill ${item.status}");
-    expect(text).toContain('item.status === "running" ? "RUNNING"');
-    const compactCss = await readFile(new URL("./activity-orb-compact.css", import.meta.url), "utf8");
+    expect(text).toMatch(/item\.status ===\s*"running"\s*\?\s*"RUNNING"/);
+    const compactCss = await readFile(
+      new URL("./activity-orb-compact.css", import.meta.url),
+      "utf8",
+    );
     expect(compactCss).toContain(".activity-result-pill.running");
     expect(compactCss).toContain("color: #fff1c5;");
     expect(css).toContain(".activity-item.running::before");
