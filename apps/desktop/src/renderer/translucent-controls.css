@@ -1,0 +1,410 @@
+/* QNECTOR: restrained translucent controls, not the prior reflective Liquid Glass.
+   One softly frosted content layer and a smaller filter on actual inputs/actions. */
+:root {
+  --qn-translucent-panel: rgba(19, 23, 30, 0.77);
+  --qn-translucent-button: rgba(32, 38, 47, 0.81);
+  --qn-translucent-outline: rgba(229, 200, 150, 0.23);
+}
+.inline-route-shell
+  :is(
+    .setting-toggle-card,
+    .setup-launch-card,
+    .update-settings-card,
+    .workspace-settings-section,
+    .memory-center-panel,
+    .skills-search,
+    .runtime-section,
+    .skill-detail-panel,
+    .skill-row
+  ) {
+  background: var(--qn-translucent-panel);
+  border: 1px solid var(--qn-translucent-outline);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 5px 16px rgba(0, 0, 0, 0.19);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  color: #f1ebdf;
+}
+.inline-route-shell
+  :is(
+    .btn-drawer-action,
+    .skills-add,
+    .skills-primary,
+    .skills-secondary,
+    .skills-filters button,
+    .memory-center button,
+    .skills-add-menu button,
+    .motion-quality-segments button,
+    .btn-update-primary,
+    .btn-update-secondary
+  ) {
+  background: var(--qn-translucent-button);
+  border: 1px solid rgba(229, 200, 150, 0.27);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  color: #f4eddf;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+.inline-route-shell
+  :is(
+    .btn-drawer-action,
+    .skills-add,
+    .skills-primary,
+    .skills-secondary,
+    .skills-filters button,
+    .memory-center button,
+    .motion-quality-segments button
+  ):hover:not(:disabled) {
+  background-color: rgba(56, 64, 75, 0.89);
+  border-color: rgba(255, 215, 146, 0.4);
+}
+.inline-route-shell
+  :is(
+    .skills-search input,
+    .drawer-select,
+    textarea,
+    input:not([type="checkbox"]):not([type="radio"]),
+    select
+  ),
+.inline-route-shell .workspace-settings-path {
+  background-color: rgba(16, 21, 28, 0.84);
+  background-image: none;
+  border: 1px solid rgba(220, 192, 151, 0.25);
+  border-radius: 9px;
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.16);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  color: #f7f1e8;
+}
+.inline-route-shell .skills-search input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.inline-route-shell :is(input, textarea)::placeholder {
+  color: #cfc5b8;
+}
+.inline-route-shell :is(button, input, select, textarea):focus-visible,
+.header-disconnect-btn:focus-visible {
+  outline: 2px solid #f3cb84;
+  outline-offset: 2px;
+}
+.inline-route-shell :is(button, input, select, textarea):disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+.workspace-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+.workspace-settings-heading {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.workspace-settings-heading > svg {
+  flex: none;
+  margin-top: 2px;
+  color: #ecc58b;
+}
+.workspace-settings-heading h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f4dbac;
+  margin: 0;
+}
+.workspace-settings-heading p {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #d4c9b9;
+  margin: 4px 0 0;
+}
+.workspace-settings-path {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workspace-settings-machine {
+  font-size: 10px;
+  color: #ecd198;
+}
+.workspace-settings-directory {
+  font-size: 12px;
+  user-select: text;
+}
+.workspace-settings-actions {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  gap: 7px;
+}
+.workspace-settings-actions .btn-drawer-action {
+  min-width: 0;
+  min-height: 37px;
+  padding: 7px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.workspace-settings-actions .btn-drawer-action:first-child {
+  color: #ffdfaa;
+}
+.floating-glass-dock {
+  background: rgba(20, 24, 31, 0.79);
+  border: 1px solid rgba(231, 193, 130, 0.3);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.055),
+    0 6px 20px rgba(0, 0, 0, 0.25);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.floating-glass-dock .dock-pill-btn {
+  background: rgba(30, 35, 43, 0.47);
+  border: 1px solid transparent;
+}
+.floating-glass-dock .dock-pill-btn.active {
+  background: rgba(91, 72, 48, 0.56);
+  border-color: rgba(241, 209, 149, 0.42);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+}
+.btn-liquid-action {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  background: rgba(39, 42, 51, 0.83);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.08),
+    0 5px 16px rgba(0, 0, 0, 0.22);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .inline-route-shell
+    :is(
+      .setting-toggle-card,
+      .setup-launch-card,
+      .update-settings-card,
+      .workspace-settings-section,
+      .memory-center-panel,
+      .skills-search,
+      .runtime-section,
+      .skill-row
+    ),
+  .floating-glass-dock {
+    background: #20252d;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Single composited orb. Transform uses measured viewport coordinates, so the
+   canvas/emblem remains mounted and continuous through all state transitions. */
+.orb-travel-stage {
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 65;
+  transform-origin: top left;
+  pointer-events: none;
+  contain: layout style;
+  transition: none;
+  will-change: transform;
+}
+.orb-travel-stage.is-positioned {
+  transition:
+    transform 660ms cubic-bezier(0.18, 0.89, 0.24, 1.1),
+    opacity 200ms ease;
+}
+.orb-travel-stage .glass-sphere-enclosure {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.orb-travel-stage.orb-compact .glass-sphere-enclosure {
+  pointer-events: none;
+}
+.orb-travel-stage.orb-route-open:not(.orb-compact) {
+  opacity: 0;
+  pointer-events: none;
+}
+.orb-travel-stage.orb-route-open:not(.orb-compact) .glass-sphere-enclosure {
+  pointer-events: none;
+}
+.orb-home-anchor {
+  width: min(100%, 380px);
+  height: calc(var(--parity-orb-size) + 18px);
+  margin: clamp(9px, calc((100vh - 650px) * 0.23), 49px) 0 4px;
+  flex: 0 0 auto;
+  visibility: hidden;
+}
+.app-header.orb-in-header .brand-crest {
+  visibility: hidden;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.header-disconnect-btn {
+  font: 600 10px/1.1 var(--font-sans);
+  padding: 7px 8px;
+  min-height: 30px;
+  background: rgba(57, 36, 33, 0.82);
+  border: 1px solid rgba(241, 123, 92, 0.43);
+  border-radius: 10px;
+  color: #ffc8aa;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  box-shadow: inset 0 1px rgba(255, 222, 210, 0.08);
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+.header-disconnect-btn:hover:not(:disabled) {
+  background: rgba(91, 45, 39, 0.92);
+  border-color: rgba(255, 150, 116, 0.7);
+}
+.header-disconnect-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.dashboard-page.orb-docked .hero-glass-section {
+  height: 0 !important;
+  min-height: 0 !important;
+  flex: 0 0 0px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  opacity: 0;
+  visibility: hidden;
+  overflow: hidden !important;
+  pointer-events: none;
+}
+.dashboard-page.orb-docked .orb-home-anchor {
+  height: 0;
+  margin: 0;
+}
+.dashboard-page.orb-docked .activity-glass-card {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+@media (max-width: 430px) {
+  .header-disconnect-btn {
+    padding: 7px 6px;
+    font-size: 9px;
+  }
+  .header-actions {
+    gap: 5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-travel-stage.is-positioned {
+    transition: none !important;
+  }
+}
+html[data-motion="off"] .orb-travel-stage.is-positioned,
+html[data-motion-quality="off"] .orb-travel-stage.is-positioned {
+  transition: none !important;
+}
+
+/* One-shot optical flourish along the morph path: concentric caustic echo,
+   not a permanent GPU-heavy blur and never a second Orb component. */
+.orb-travel-stage.orb-morphing::before,
+.orb-travel-stage.orb-morphing::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--parity-orb-size);
+  height: var(--parity-orb-size);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 3;
+}
+.orb-travel-stage.orb-morphing::before {
+  border: 1px solid rgba(255, 219, 152, 0.6);
+  box-shadow:
+    0 0 25px rgba(237, 173, 94, 0.35),
+    inset 0 0 14px rgba(255, 237, 177, 0.16);
+  animation: qnOrbCausticEcho 740ms cubic-bezier(0.16, 0.82, 0.24, 1) both;
+}
+.orb-travel-stage.orb-morphing::after {
+  background: conic-gradient(
+    from -50deg,
+    transparent 0%,
+    rgba(255, 227, 155, 0.75) 19%,
+    transparent 33%,
+    transparent 76%,
+    rgba(255, 213, 132, 0.4) 85%,
+    transparent 100%
+  );
+  -webkit-mask: radial-gradient(
+    transparent 54%,
+    #000 57%,
+    #000 61%,
+    transparent 69%
+  );
+  mask: radial-gradient(transparent 54%, #000 57%, #000 61%, transparent 69%);
+  animation: qnOrbCausticArc 740ms cubic-bezier(0.19, 0.86, 0.26, 1) both;
+}
+@keyframes qnOrbCausticEcho {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.82);
+  }
+  24% {
+    opacity: 0.82;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.49);
+  }
+}
+@keyframes qnOrbCausticArc {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(-75deg) scale(0.75);
+  }
+  26% {
+    opacity: 0.77;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(115deg) scale(1.31);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-travel-stage.orb-morphing::before,
+  .orb-travel-stage.orb-morphing::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+html[data-motion="off"] .orb-travel-stage.orb-morphing::before,
+html[data-motion="off"] .orb-travel-stage.orb-morphing::after,
+html[data-motion-quality="off"] .orb-travel-stage.orb-morphing::before,
+html[data-motion-quality="off"] .orb-travel-stage.orb-morphing::after {
+  animation: none;
+  opacity: 0;
+}
+
+/* Restrained top-level translucency without pointer-driven refraction. */
+.app-header,
+.activity-glass-card {
+  background-color: rgba(18, 22, 30, 0.81);
+  -webkit-backdrop-filter: blur(6px) saturate(108%);
+  backdrop-filter: blur(6px) saturate(108%);
+}

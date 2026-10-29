@@ -4,12 +4,17 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const root = process.cwd();
 const motionOn = process.env.QNECTOR_QC_MOTION === "on";
+const offlineOrb = process.env.QNECTOR_QC_OFFLINE === "on";
 const output = path.join(
   root,
   "apps",
   "desktop",
   "release",
-  motionOn ? "qc-inline-motion" : "qc-native-renderer",
+  offlineOrb
+    ? "qc-orb-offline"
+    : motionOn
+      ? "qc-inline-motion"
+      : "qc-native-renderer",
 );
 const preload = path.join(root, "scripts", "native-renderer-qc-preload.cjs");
 fs.mkdirSync(output, { recursive: true });
@@ -187,6 +192,51 @@ async function main() {
         );
         win.webContents.debugger.detach();
       }
+
+      await delay(750);
+      const orbLayout = await win.webContents.executeJavaScript(
+        "(() => { const q=s=>document.querySelector(s), r=e=>e.getBoundingClientRect();" +
+          'const orb=q(".orb-travel-stage"), sphere=q(".orb-travel-stage .glass-sphere-enclosure"),' +
+          'header=q(".brand-crest"),home=q(".orb-home-anchor"),hero=q(".hero-glass-section"),' +
+          'activity=q(".activity-glass-card"); if(!orb||!sphere||!header||!home||!hero||!activity)return null;' +
+          "const center=e=>({x:r(e).left+r(e).width/2,y:r(e).top+r(e).height/2});" +
+          "const dist=(a,b)=>{const x=center(a),y=center(b);return Math.hypot(x.x-y.x,x.y-y.y)};" +
+          'return {compact:orb.classList.contains("orb-compact"),size:r(sphere).width,stageStyle:orb.style.transform,computedTransform:getComputedStyle(orb).transform,stageHeight:orb.offsetHeight,stageWidth:orb.offsetWidth,headerBox:r(header).toJSON(),orbBox:r(orb).toJSON(),' +
+          "headerDistance:dist(sphere,header),homeDistance:dist(sphere,home)," +
+          "heroHeight:r(hero).height,activityHeight:r(activity).height," +
+          'orbCount:document.querySelectorAll(".queen-orb-visual").length,' +
+          'holdRingCount:document.querySelectorAll(".charge-svg-ring").length,' +
+          'disconnectCount:document.querySelectorAll(".header-disconnect-btn").length,' +
+          "overflow:document.documentElement.scrollWidth>innerWidth}; })()",
+      );
+      assert.ok(orbLayout, "Orb anchors missing");
+      assert.equal(orbLayout.orbCount, 1, "Orb was duplicated");
+      assert.equal(orbLayout.holdRingCount, 0, "Hold ring still exists");
+      assert.equal(orbLayout.compact, !offlineOrb, "Orb dock state incorrect");
+      assert.equal(orbLayout.overflow, false, "Orb introduced overflow");
+      if (offlineOrb) {
+        assert.ok(orbLayout.homeDistance < 12, "Offline orb not centered");
+        assert.ok(orbLayout.size > 85, "Offline orb too small");
+      } else {
+        assert.ok(orbLayout.headerDistance < 8, "Header orb misaligned");
+        assert.ok(orbLayout.size < 51, "Header orb too large");
+        assert.ok(orbLayout.heroHeight < 12, "Connected hero did not collapse");
+        assert.equal(orbLayout.disconnectCount, 1, "Missing header Disconnect");
+      }
+      if (width === 451) {
+        win.showInactive();
+        await delay(140);
+        const picture = await win.webContents.capturePage();
+        fs.writeFileSync(
+          path.join(
+            output,
+            offlineOrb ? "orb-offline-home.png" : "orb-connected-home.png",
+          ),
+          picture.toPNG(),
+        );
+        if (!motionOn) win.hide();
+      }
+
       assert.ok(start.text.includes("QNECTOR"), "main renderer failed to load");
       assert.ok(
         start.tabs.includes("Home"),

@@ -11,9 +11,7 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
     expect(orb.indexOf('className="queen-orb-emblem-layer"')).toBeGreaterThan(
       orb.indexOf('className="queen-orb-reflection"'),
     );
-    expect(orb).toContain(
-      'src={QUEEN_IMAGE_URL} className="queen-orb-portrait"',
-    );
+    expect(orb).toContain('className="queen-orb-portrait"');
     expect(style).toContain(".queen-orb-emblem-layer > .queen-orb-portrait");
     expect(style).toContain("transform: none !important");
     expect(style).toContain("filter: none !important");

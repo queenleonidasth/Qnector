@@ -168,14 +168,15 @@ describe("Royal motion effects on the classic Qnector theme", () => {
     expect(text).not.toContain("QNECTORBRIDGE");
   });
 
-  it("preserves original Matrix helper for rollback while migrating the 3-second hold to rAF", async () => {
+  it("preserves Matrix fallback with a single moving orb and explicit disconnect", async () => {
     const text = await source();
     const matrixText = await matrix();
 
-    expect(text).toContain("ref={ringMeterRef}");
+    expect(text).toContain("ref={orbTravelRef}");
+    expect(text).toContain("header-disconnect-btn");
     expect(text).toContain("frozen={matrixFrozenAfterDisconnect}");
     expect(text).toContain(
-      "const disconnectRingProgress = isDisconnecting ? 1 : holdProgressRef.current;",
+      "const orbDocked = isConnected && !isDisconnecting;",
     );
     expect(text).toContain("setMatrixFrozenAfterDisconnect(true)");
     expect(text).toContain("setMatrixFrozenAfterDisconnect(false)");

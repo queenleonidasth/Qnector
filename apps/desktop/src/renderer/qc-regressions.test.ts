@@ -32,14 +32,15 @@ describe("2026-09-11 QC regression guards", () => {
     expect(mainSource).toContain("OPEN_PATH_FAILED");
   });
 
-  it("keeps disconnect on the hold orb without adding a duplicate button", () => {
-    expect(renderer).not.toContain('className="btn-liquid-action disconnect"');
-    expect(renderer).toContain('role="button"');
-    expect(renderer).toContain("tabIndex={0}");
-    expect(renderer).toContain("onKeyDown={handleOrbKeyDown}");
-    expect(renderer).toContain("onKeyUp={handleOrbKeyUp}");
-    expect(renderer).toContain('? "Hold for 3 seconds to disconnect"');
-    expect(styles).toContain(".glass-sphere-enclosure:focus-visible");
+  it("offers a separate header Disconnect while the orb remains a connect-only control", () => {
+    expect(renderer).toContain('className="header-disconnect-btn"');
+    expect(renderer).toContain("onClick={() => void disconnect()}");
+    expect(renderer).toContain("onKeyDown={handleOrbConnectKey}");
+    expect(renderer).not.toContain("handleOrbKeyUp");
+    expect(renderer).not.toContain("holdStartRef");
+    expect(renderer).toContain("ref={orbTravelRef}");
+    expect(renderer).toContain("ref={orbHeaderRef}");
+    expect(renderer).toContain("ref={orbHomeRef}");
   });
 
   it("prevents nested settings scroll rows and disables decorative reduced motion", () => {

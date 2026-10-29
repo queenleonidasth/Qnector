@@ -1,6 +1,9 @@
 const { contextBridge } = require("electron");
 
-const bridge = { state: "connected", mode: "local-only" };
+const bridge = {
+  state: process.env.QNECTOR_QC_OFFLINE === "on" ? "disconnected" : "connected",
+  mode: "local-only",
+};
 const status = {
   host: "127.0.0.1",
   port: 18887,

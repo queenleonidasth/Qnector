@@ -50,20 +50,19 @@ describe("Royal Liquid Glass V2.1 production trial", () => {
     expect(vite).toContain('base: "./"');
   });
 
-  it("does not rerender all of React App at display Hz during long hold", async () => {
+  it("moves one orb canvas with a compositor transform and removes long hold", async () => {
     const [app, css] = await Promise.all([
       load("./renderer.tsx"),
-      load("./liquid-motion.css"),
+      load("./translucent-controls.css"),
     ]);
-    expect(app).toContain("holdProgressRef.current = progress;");
-    expect(app).toContain("ringMeterRef.current.style.strokeDashoffset");
-    expect(app).toContain("requestAnimationFrame(tick)");
-    expect(app).toContain('ref={titleCountdownRef}');
-    expect(app).toContain('ref={hintCountdownRef}');
-    expect(app).not.toContain("setHoldProgress");
-    expect(css).toMatch(/\.charge-svg-ring\s*\{[\s\S]*?visibility:\s*hidden;/);
-    expect(css).toMatch(/\.charge-svg-ring\.active\s*\{[\s\S]*?visibility:\s*visible;/);
-    expect(css).toMatch(/\.charge-meter,[\s\S]*?stroke-linecap:\s*butt;/);
+    expect(app).toContain("orbTravelRef");
+    expect(app).toContain("stage.style.setProperty(");
+    expect(app).toContain("const orbDocked = isConnected && !isDisconnecting;");
+    expect(app).not.toContain("holdProgressRef");
+    expect(app).not.toContain("ringMeterRef");
+    expect(css).toContain(".orb-travel-stage.is-positioned");
+    expect(css).toContain("transform 660ms");
+    expect(css).toContain("prefers-reduced-motion: reduce");
   });
 
   it("preserves the stable window-hidden and animations-off contracts", async () => {
@@ -79,7 +78,7 @@ describe("Royal Liquid Glass V2.1 production trial", () => {
     expect(clock).toContain("!document.hidden");
     expect(clock).toContain("media?.matches");
     expect(css).toContain('html[data-motion="off"]');
-    expect(oldCss).toContain('html.qnector-window-paused *');
+    expect(oldCss).toContain("html.qnector-window-paused *");
     expect(oldCss).toContain('html[data-motion="off"] *');
   });
 });

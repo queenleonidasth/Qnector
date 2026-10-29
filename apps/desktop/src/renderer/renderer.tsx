@@ -35,13 +35,12 @@ import "./royal-effects.css";
 import { RoyalSilkBackground } from "./royal-silk-background.js";
 import { QueenLiquidOrb } from "./queen-liquid-orb.js";
 import { RoyalIcon } from "./royal-icons.js";
-import { useGlassRefraction } from "./glass-refraction.js";
 import "./liquid-motion.css";
 import "./royal-motion-system.css";
 import "./mockup-parity.css";
 import "./activity-orb-compact.css";
 import "./inline-route.css";
-import "./liquid-controls.css";
+import "./translucent-controls.css";
 import { QUALITY_OPTIONS, useMotionPreferences } from "./motion-policy.js";
 
 const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url)
@@ -564,7 +563,6 @@ const ActivityPanel = React.memo(function ActivityPanel({
 });
 
 function App(): React.ReactElement {
-  useGlassRefraction();
   const [status, setStatus] = useState<
     | (ServerStatus & { publicUrl?: string; bridge: TransportSnapshot })
     | undefined
@@ -594,17 +592,13 @@ function App(): React.ReactElement {
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  // 3-second hold-to-disconnect state
-  const holdStartRef = React.useRef<number | null>(null);
-  const animFrameRef = React.useRef<number | null>(null);
-  const didLongPressRef = React.useRef<boolean>(false);
-  // Drive the hold ring directly from requestAnimationFrame without rerendering App.
-  const holdProgressRef = useRef(0);
-  const ringMeterRef = useRef<SVGCircleElement | null>(null);
-  const titleCountdownRef = useRef<HTMLSpanElement | null>(null);
-  const hintCountdownRef = useRef<HTMLSpanElement | null>(null);
-  const [isHolding, setIsHolding] = useState(false);
-  // Keep the completion transition on the existing orb rather than mounting a burst overlay.
+  // A single canvas-backed orb moves between its hero and header anchors.
+  const orbTravelRef = useRef<HTMLDivElement | null>(null);
+  const orbHomeRef = useRef<HTMLDivElement | null>(null);
+  const orbHeaderRef = useRef<HTMLDivElement | null>(null);
+  const orbPositionedRef = useRef(false);
+  const orbWasDockedRef = useRef<boolean | null>(null);
+  const orbMorphTimeoutRef = useRef<number | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupStep, setSetupStep] = useState(0);
   const [setupInfo, setSetupInfo] = useState<ConnectionSetupStatus>();
@@ -902,7 +896,6 @@ function App(): React.ReactElement {
       memoryRequestSeqRef.current += 1;
       if (memoryRefreshTimerRef.current !== null)
         window.clearTimeout(memoryRefreshTimerRef.current);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
 
@@ -930,6 +923,7 @@ function App(): React.ReactElement {
   const disconnect = async (): Promise<void> => {
     setBusy(true);
     setIsDisconnecting(true);
+    closeDrawer();
     setError(undefined);
     try {
       await window.qnector.disconnect();
@@ -938,105 +932,24 @@ function App(): React.ReactElement {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      holdProgressRef.current = 0;
-      if (ringMeterRef.current)
-        ringMeterRef.current.style.strokeDashoffset = "364.42";
       setIsDisconnecting(false);
       setBusy(false);
     }
   };
 
-  const startHold = (): void => {
-    if (
-      bridge.state !== "connected" ||
-      busy ||
-      isDisconnecting ||
-      holdStartRef.current !== null
-    )
-      return;
-    holdStartRef.current = performance.now();
-    holdProgressRef.current = 0;
-    if (ringMeterRef.current)
-      ringMeterRef.current.style.strokeDashoffset = "364.42";
-    setIsHolding(true);
-    let lastLabelAt = 0;
-
-    const tick = (now: number): void => {
-      const startedAt = holdStartRef.current;
-      if (startedAt === null) return;
-      const progress = Math.min((now - startedAt) / 3000, 1);
-      holdProgressRef.current = progress;
-      if (ringMeterRef.current) {
-        ringMeterRef.current.style.strokeDashoffset = String(
-          364.42 * (1 - progress),
-        );
-      }
-      // The rAF ring runs at display refresh; text is updated at ~10 Hz.
-      // This avoids a full React App render on every compositor frame.
-      if (now - lastLabelAt >= 95) {
-        const secondsRemaining = (3 * (1 - progress)).toFixed(1);
-        if (titleCountdownRef.current)
-          titleCountdownRef.current.textContent = secondsRemaining;
-        if (hintCountdownRef.current)
-          hintCountdownRef.current.textContent = secondsRemaining;
-        lastLabelAt = now;
-      }
-
-      if (progress < 1) {
-        animFrameRef.current = requestAnimationFrame(tick);
-      } else {
-        animFrameRef.current = null;
-        holdStartRef.current = null;
-        didLongPressRef.current = true;
-        setIsHolding(false);
-        // The completed charge ring now fades out without a one-frame burst overlay.
-        window.setTimeout(() => {
-          didLongPressRef.current = false;
-        }, 1000);
-        void disconnect();
-      }
-    };
-    animFrameRef.current = requestAnimationFrame(tick);
-  };
-
-  const cancelHold = (): void => {
-    if (isDisconnecting || holdStartRef.current === null) return;
-    holdStartRef.current = null;
-    if (animFrameRef.current !== null) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    holdProgressRef.current = 0;
-    if (ringMeterRef.current)
-      ringMeterRef.current.style.strokeDashoffset = "364.42";
-    setIsHolding(false);
-  };
-
-  const handleOrbClick = () => {
-    if (didLongPressRef.current) {
-      didLongPressRef.current = false;
-      return;
-    }
-    if (busy || isConnecting) return;
-    if (!isConnected) {
+  // The orb is no longer a long-press disconnect control. Offline it acts
+  // as a normal keyboard-accessible Connect button; connected it is decorative.
+  const handleOrbConnect = (): void => {
+    if (bridge.state !== "connected" && !busy && !isDisconnecting)
       void connect();
-    }
   };
 
-  const handleOrbKeyDown = (
+  const handleOrbConnectKey = (
     event: React.KeyboardEvent<HTMLDivElement>,
   ): void => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    if (event.repeat || busy || isConnecting || isDisconnecting) return;
-    if (isConnected) startHold();
-    else void connect();
-  };
-
-  const handleOrbKeyUp = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    if (isConnected) cancelHold();
+    if (!event.repeat) handleOrbConnect();
   };
 
   const chooseWorkspace = async (): Promise<void> => {
@@ -1287,8 +1200,75 @@ function App(): React.ReactElement {
 
   const isConnected = bridge.state === "connected";
   const isConnecting = bridge.state === "connecting";
-  const disconnectRingActive = isHolding || isDisconnecting;
-  const disconnectRingProgress = isDisconnecting ? 1 : holdProgressRef.current;
+  const orbDocked = isConnected && !isDisconnecting;
+  // Only transform and scale the existing orb canvas; no remount/snapshot
+  // duplication and no React render on every frame of the 660ms transition.
+  useLayoutEffect(() => {
+    const stage = orbTravelRef.current;
+    const header = orbHeaderRef.current;
+    const home = orbHomeRef.current;
+    if (!stage || !header || !home) return;
+    if (
+      orbWasDockedRef.current !== null &&
+      orbWasDockedRef.current !== orbDocked
+    ) {
+      stage.classList.remove("orb-morphing");
+      void stage.offsetWidth;
+      stage.classList.add("orb-morphing");
+      if (orbMorphTimeoutRef.current !== null)
+        window.clearTimeout(orbMorphTimeoutRef.current);
+      orbMorphTimeoutRef.current = window.setTimeout(() => {
+        stage.classList.remove("orb-morphing");
+        orbMorphTimeoutRef.current = null;
+      }, 770);
+    }
+    orbWasDockedRef.current = orbDocked;
+    let raf = 0;
+    const layout = (): void => {
+      const width = Math.min(
+        380,
+        document.querySelector(".app-main")?.getBoundingClientRect().width ??
+          380,
+      );
+      stage.style.width = `${width}px`;
+      const stageHeight = stage.offsetHeight;
+      if (!stageHeight) return;
+      const target = orbDocked
+        ? header.getBoundingClientRect()
+        : home.getBoundingClientRect();
+      if (!target.width || !target.height) return;
+      const scale = orbDocked
+        ? Math.min(0.33, target.height / (stageHeight - 18))
+        : 1;
+      const left = target.left + (target.width - width * scale) / 2;
+      const top = target.top + (target.height - stageHeight * scale) / 2;
+      stage.style.setProperty(
+        "transform",
+        `translate3d(${left.toFixed(2)}px, ${top.toFixed(2)}px, 0) scale(${scale.toFixed(5)})`,
+        "important",
+      );
+      if (!orbPositionedRef.current) {
+        orbPositionedRef.current = true;
+        requestAnimationFrame(() => stage.classList.add("is-positioned"));
+      }
+    };
+    const schedule = (): void => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(layout);
+    };
+    layout();
+    const observer = new ResizeObserver(schedule);
+    observer.observe(header);
+    observer.observe(home);
+    const main = document.querySelector(".app-main");
+    if (main) observer.observe(main);
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+    };
+  }, [orbDocked, activeDrawer]);
   // Visual background no longer uses legacy Matrix deceleration.
 
   const updateAttention =
@@ -1397,9 +1377,45 @@ function App(): React.ReactElement {
         </div>
       )}
 
-      <header className="app-header">
+      <div
+        ref={orbTravelRef}
+        className={`orb-stage orb-travel-stage ${orbDocked ? "orb-compact" : "orb-expanded"} ${activeDrawer ? "orb-route-open" : ""}`}
+      >
+        <div className="orb-astral-orbit" aria-hidden="true" />
+        <div className="orb-astral-orbit inner" aria-hidden="true" />
+        <div className="orb-eclipse-plane" aria-hidden="true" />
+        <div className="orb-eclipse-plane alternate" aria-hidden="true" />
+        <div className="orb-comet-track" aria-hidden="true" />
+        <div className={`plasma-aura ${isConnected ? "active" : ""}`} />
+
+        <div
+          className={`glass-sphere-enclosure ${isDisconnecting ? "disconnecting" : ""}`}
+          role={orbDocked ? "img" : "button"}
+          tabIndex={orbDocked || activeDrawer !== null ? -1 : 0}
+          aria-label={
+            orbDocked
+              ? "QNECTOR active animated logo"
+              : isDisconnecting
+                ? "Disconnecting bridge"
+                : "Connect to ChatGPT"
+          }
+          title={orbDocked ? "QNECTOR connected" : "Connect to ChatGPT"}
+          onClick={handleOrbConnect}
+          onKeyDown={handleOrbConnectKey}
+        >
+          <QueenLiquidOrb
+            connected={isConnected}
+            holding={false}
+            disconnecting={isDisconnecting}
+            motionEnabled={animationsEnabled}
+            compact={orbDocked}
+          />
+        </div>
+      </div>
+
+      <header className={`app-header ${orbDocked ? "orb-in-header" : ""}`}>
         <div className="brand-section">
-          <div className="brand-crest">
+          <div className="brand-crest" ref={orbHeaderRef} aria-hidden="true">
             <img src={QUEEN_IMAGE_URL} className="brand-queen-mark" alt="" />
           </div>
           <div>
@@ -1435,131 +1451,53 @@ function App(): React.ReactElement {
               {isConnected ? "Active" : isConnecting ? "Connecting" : "Idle"}
             </span>
           </div>
+          {(isConnected || isDisconnecting) && (
+            <button
+              className="header-disconnect-btn"
+              type="button"
+              aria-label="Disconnect QNECTOR bridge"
+              title="Disconnect bridge"
+              disabled={busy || isDisconnecting}
+              onClick={() => void disconnect()}
+            >
+              {isDisconnecting ? "Disconnecting" : "Disconnect"}
+            </button>
+          )}
         </div>
       </header>
 
       <main className={"app-main" + (activeDrawer ? " route-active" : "")}>
         <div
           className={
-            "dashboard-page" + (activeDrawer ? " offstage" : " current")
+            "dashboard-page" +
+            (activeDrawer ? " offstage" : " current") +
+            (orbDocked ? " orb-docked" : "")
           }
           aria-hidden={Boolean(activeDrawer)}
           inert={Boolean(activeDrawer)}
         >
           <section className="glass-card hero-glass-section">
-            <div className="orb-stage">
-              <div className="orb-astral-orbit" aria-hidden="true" />
-              <div className="orb-astral-orbit inner" aria-hidden="true" />
-              <div className="orb-eclipse-plane" aria-hidden="true" />
-              <div className="orb-eclipse-plane alternate" aria-hidden="true" />
-              <div className="orb-comet-track" aria-hidden="true" />
-              <svg
-                className={`charge-svg-ring ${disconnectRingActive ? "active" : ""}`}
-                viewBox="0 0 130 130"
-              >
-                <defs>
-                  <linearGradient
-                    id="goldFireGrad"
-                    x1="0%"
-                    y1="0%"
-                    x2="100%"
-                    y2="100%"
-                  >
-                    <stop offset="0%" stopColor="#ffe270" />
-                    <stop offset="50%" stopColor="#f59e0b" />
-                    <stop offset="100%" stopColor="#ef4444" />
-                  </linearGradient>
-                  <linearGradient
-                    id="disconnectEmberGradient"
-                    x1="0%"
-                    y1="0%"
-                    x2="100%"
-                    y2="100%"
-                  >
-                    <stop offset="0%" stopColor="#ffad45" />
-                    <stop offset="48%" stopColor="#ff6137" />
-                    <stop offset="100%" stopColor="#e63232" />
-                  </linearGradient>
-                </defs>
-                <circle cx="65" cy="65" r="58" className="charge-track" />
-                <circle
-                  cx="65"
-                  cy="65"
-                  r="58"
-                  className="charge-meter"
-                  ref={ringMeterRef}
-                  style={{
-                    strokeDasharray: 364.42,
-                    strokeDashoffset: 364.42 * (1 - disconnectRingProgress),
-                  }}
-                />
-              </svg>
-
-              <div className={`plasma-aura ${isConnected ? "active" : ""}`} />
-
-              {/* No flashing burst layer: the orb stays on one continuous surface. */}
-
-              <div
-                className={`glass-sphere-enclosure ${isHolding ? "holding" : ""} ${isDisconnecting ? "disconnecting" : ""}`}
-                role="button"
-                tabIndex={0}
-                aria-label={
-                  isDisconnecting
-                    ? "Disconnecting from ChatGPT"
-                    : isConnected
-                      ? "Hold for 3 seconds to disconnect"
-                      : "Connect to ChatGPT"
-                }
-                title={
-                  isDisconnecting
-                    ? "Disconnecting from ChatGPT"
-                    : isConnected
-                      ? "Hold for 3 seconds to disconnect"
-                      : "Click to connect"
-                }
-                onClick={handleOrbClick}
-                onMouseDown={startHold}
-                onMouseUp={cancelHold}
-                onMouseLeave={cancelHold}
-                onTouchStart={startHold}
-                onTouchEnd={cancelHold}
-                onTouchCancel={cancelHold}
-                onKeyDown={handleOrbKeyDown}
-                onKeyUp={handleOrbKeyUp}
-              >
-                <QueenLiquidOrb
-                  connected={isConnected}
-                  holding={isHolding}
-                  disconnecting={isDisconnecting}
-                  motionEnabled={animationsEnabled}
-                />
-              </div>
-            </div>
-
+            <div
+              className="orb-home-anchor"
+              ref={orbHomeRef}
+              aria-hidden="true"
+            />
             {/* Connection status is already shown by the header ACTIVE indicator. */}
             <h2 className="hero-state-title">
-              {isHolding ? (
-                <>
-                  DISCONNECTING (<span ref={titleCountdownRef}>3.0</span>s)
-                </>
-              ) : isDisconnecting ? (
-                "DISCONNECTING…"
-              ) : isConnected ? (
-                "Your bridge is online."
-              ) : isConnecting ? (
-                "ESTABLISHING BRIDGE…"
-              ) : (
-                "Your bridge is offline."
-              )}
+              {isDisconnecting
+                ? "DISCONNECTING…"
+                : isConnected
+                  ? "Your bridge is online."
+                  : isConnecting
+                    ? "ESTABLISHING BRIDGE…"
+                    : "Your bridge is offline."}
             </h2>
             <p className="hero-state-sub">
-              {isHolding
-                ? "Keep holding the orb to confirm disconnection…"
-                : isDisconnecting
-                  ? "Closing the tunnel and local bridge cleanly…"
-                  : isConnected
-                    ? "Connected to ChatGPT · Full System Access"
-                    : "Expose local computer & workspace to ChatGPT"}
+              {isDisconnecting
+                ? "Closing the tunnel and local bridge cleanly…"
+                : isConnected
+                  ? "Connected to ChatGPT · Full System Access"
+                  : "Expose local computer & workspace to ChatGPT"}
             </p>
 
             {isConnected ? (
@@ -1585,21 +1523,13 @@ function App(): React.ReactElement {
               </button>
             )}
 
-            <div
-              className={`hold-hint-pill ${disconnectRingActive ? "active" : ""}`}
-            >
-              {isHolding ? (
-                <span>
-                  ⚡ Disconnecting in <span ref={hintCountdownRef}>3.0</span>s
-                </span>
-              ) : isDisconnecting ? (
-                <span>⚡ Disconnecting Bridge…</span>
-              ) : isConnected ? (
-                <span>⏳ Hold orb 3s to Disconnect</span>
-              ) : (
-                <span>✨ Tap orb or button to Connect</span>
-              )}
-            </div>
+            {!isConnected && (
+              <div className="hold-hint-pill">
+                {isDisconnecting
+                  ? "Disconnecting bridge…"
+                  : "Tap the orb or button to connect"}
+              </div>
+            )}
           </section>
 
           <ActivityPanel initialActivity={initialActivity} />
