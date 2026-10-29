@@ -731,6 +731,37 @@ html[data-motion-quality="off"]
   -webkit-filter: none !important;
   image-rendering: auto;
   backface-visibility: hidden;
+  /* This image still defines the correct alpha/optical geometry, but the
+     real bitmap is drawn separately without the orb stage scale. */
+  visibility: hidden;
+}
+.orb-sharp-crest {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 66;
+  display: block;
+  pointer-events: none;
+  visibility: hidden;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  object-fit: contain;
+  max-width: none;
+  max-height: none;
+  image-rendering: auto;
+  will-change: auto;
+  transform: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  mix-blend-mode: normal;
+  transition: opacity 200ms ease;
+}
+.orb-sharp-crest[data-positioned="true"] {
+  visibility: visible;
+}
+.orb-sharp-crest.orb-route-open:not(.orb-compact) {
+  opacity: 0;
 }
 .orb-travel-stage .queen-orb-emblem-layer::before {
   filter: blur(6px);

@@ -210,6 +210,43 @@ async function main() {
           "overflow:document.documentElement.scrollWidth>innerWidth}; })()",
       );
       assert.ok(orbLayout, "Orb anchors missing");
+      const crestLayout = await win.webContents.executeJavaScript(
+        `(() => {
+          const source = document.querySelector(".orb-travel-stage .queen-orb-portrait");
+          const sharp = document.querySelector(".orb-sharp-crest");
+          if (!source || !sharp) return null;
+          const a = source.getBoundingClientRect();
+          const b = sharp.getBoundingClientRect();
+          const dpr = devicePixelRatio || 1;
+          const pixelError = Math.max(...[b.left,b.top,b.right,b.bottom]
+            .map(v => Math.abs(v*dpr-Math.round(v*dpr))));
+          const geometryError = Math.max(Math.abs(a.left-b.left),
+            Math.abs(a.top-b.top),Math.abs(a.right-b.right),
+            Math.abs(a.bottom-b.bottom));
+          return { loaded: sharp.complete && sharp.naturalWidth >= 256,
+            visible: getComputedStyle(sharp).visibility,
+            sourceHidden: getComputedStyle(source).visibility,
+            transform: getComputedStyle(sharp).transform,
+            pixelError,geometryError,dpr,paintedWidth:b.width };
+        })()`,
+      );
+      assert.ok(crestLayout?.loaded, "Crest bitmap not loaded at " + width);
+      assert.equal(
+        crestLayout.visible,
+        "visible",
+        "Crest not visible at " + width,
+      );
+      assert.equal(
+        crestLayout.sourceHidden,
+        "hidden",
+        "Scaled crest still visible",
+      );
+      assert.equal(crestLayout.transform, "none", "Crest inherits a scale");
+      assert.ok(crestLayout.pixelError < 1e-6, "Crest not pixel aligned");
+      assert.ok(
+        crestLayout.geometryError < 1.1 / crestLayout.dpr,
+        "Sharp crest wandered from glass at " + width,
+      );
       assert.equal(orbLayout.orbCount, 1, "Orb was duplicated");
       assert.equal(orbLayout.holdRingCount, 0, "Hold ring still exists");
       assert.equal(orbLayout.compact, !offlineOrb, "Orb dock state incorrect");

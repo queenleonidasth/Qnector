@@ -42,6 +42,7 @@ import "./activity-orb-compact.css";
 import "./inline-route.css";
 import "./translucent-controls.css";
 import { QUALITY_OPTIONS, useMotionPreferences } from "./motion-policy.js";
+import { crispCrestBounds } from "./orb-crest-geometry.js";
 
 const QUEEN_IMAGE_URL = new URL("./assets/queen-portrait.png", import.meta.url)
   .href;
@@ -594,6 +595,7 @@ function App(): React.ReactElement {
 
   // A single canvas-backed orb moves between its hero and header anchors.
   const orbTravelRef = useRef<HTMLDivElement | null>(null);
+  const orbSharpCrestRef = useRef<HTMLImageElement | null>(null);
   const orbHomeRef = useRef<HTMLDivElement | null>(null);
   const heroLayoutRef = useRef<HTMLElement | null>(null);
   const dashboardLayoutRef = useRef<HTMLDivElement | null>(null);
@@ -1256,8 +1258,32 @@ function App(): React.ReactElement {
     const stage = orbTravelRef.current;
     const header = orbHeaderRef.current;
     const home = orbHomeRef.current;
-    if (!stage || !header || !home) return;
+    const sharpCrest = orbSharpCrestRef.current;
+    const sourceCrest = stage?.querySelector<HTMLImageElement>(
+      ".queen-orb-emblem-layer > .queen-orb-portrait",
+    );
+    if (!stage || !header || !home || !sharpCrest || !sourceCrest) return;
     let frame = 0;
+    let crestFrame = 0;
+    // Measure the original crest (including its travelling parent transform)
+    // but paint the visible PNG at the final, pixel-snapped output size.
+    const syncSharpCrest = (): void => {
+      const rect = sourceCrest.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return;
+      const bounds = crispCrestBounds(rect, window.devicePixelRatio);
+      sharpCrest.style.left = `${bounds.left}px`;
+      sharpCrest.style.top = `${bounds.top}px`;
+      sharpCrest.style.width = `${bounds.width}px`;
+      sharpCrest.style.height = `${bounds.height}px`;
+      sharpCrest.dataset.positioned = "true";
+    };
+    const followCrestFlight = (): void => {
+      crestFrame = 0;
+      syncSharpCrest();
+      if (orbFlightRef.current) {
+        crestFrame = requestAnimationFrame(followCrestFlight);
+      }
+    };
     const reduced = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -1432,6 +1458,7 @@ function App(): React.ReactElement {
         },
       );
       orbFlightRef.current = animation;
+      crestFrame = requestAnimationFrame(followCrestFlight);
       animation.onfinish = () => {
         if (orbFlightRef.current !== animation) return;
         stage.style.transform = next;
@@ -1439,6 +1466,7 @@ function App(): React.ReactElement {
         orbFlightRef.current = null;
         stage.dataset.travelling = "false";
         stage.classList.remove("orb-morphing");
+        syncSharpCrest();
         // Resolve any final header/layout movement after the flight:
         // ResizeObserver callbacks during the flight were intentionally
         // deferred, so do not leave the Orb at a stale endpoint.
@@ -1446,20 +1474,27 @@ function App(): React.ReactElement {
           if (orbFlightRef.current || orbWasDockedRef.current !== orbDocked)
             return;
           const settled = targetTransform();
-          if (settled) stage.style.transform = serialize(settled);
+          if (settled) {
+            stage.style.transform = serialize(settled);
+            syncSharpCrest();
+          }
         });
       };
     } else if (!orbFlightRef.current) {
       stage.style.transform = next;
       stage.dataset.travelling = "false";
       orbPositionedRef.current = true;
+      syncSharpCrest();
     }
     const onResize = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         if (orbFlightRef.current) return;
         const target = targetTransform();
-        if (target) stage.style.transform = serialize(target);
+        if (target) {
+          stage.style.transform = serialize(target);
+          syncSharpCrest();
+        }
       });
     };
     const observer = new ResizeObserver(onResize);
@@ -1470,6 +1505,7 @@ function App(): React.ReactElement {
     window.addEventListener("resize", onResize);
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(crestFrame);
       observer.disconnect();
       window.removeEventListener("resize", onResize);
     };
@@ -1618,6 +1654,17 @@ function App(): React.ReactElement {
           />
         </div>
       </div>
+
+      {/* The glass animation uses a compositor transform; its crest must not.
+          The independent bitmap is drawn at pixel-aligned final output size. */}
+      <img
+        ref={orbSharpCrestRef}
+        src={QUEEN_IMAGE_URL}
+        className={`orb-sharp-crest ${orbDocked ? "orb-compact" : "orb-expanded"} ${activeDrawer ? "orb-route-open" : ""}`}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
 
       <header className={`app-header ${orbDocked ? "orb-in-header" : ""}`}>
         <div className="brand-section">
