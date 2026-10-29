@@ -624,3 +624,15 @@ html[data-motion-quality="off"] .bridge-active-caption > span:last-child,
 html[data-motion-quality="off"] .bridge-active-light {
   animation: none !important;
 }
+
+html[data-motion="off"] .app-header,
+html[data-motion="off"] .brand-section,
+html[data-motion="off"] .brand-section .brand-crest,
+html[data-motion="off"] .brand-copy,
+html[data-motion="off"] .bridge-active-caption,
+html[data-motion-quality="off"] .app-header,
+html[data-motion-quality="off"] .brand-section,
+html[data-motion-quality="off"] .brand-section .brand-crest,
+html[data-motion-quality="off"] .bridge-active-caption {
+  transition: none !important;
+}

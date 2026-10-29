@@ -148,7 +148,7 @@ async function main() {
     });
     try {
       await win.loadFile(path.join(root, "apps", "desktop", "index.html"));
-      if (motionOn) win.showInactive();
+      win.showInactive();
       const evaluate = (f, ...args) =>
         win.webContents.executeJavaScript(
           "(" +
