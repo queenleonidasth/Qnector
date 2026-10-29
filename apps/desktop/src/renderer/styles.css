@@ -4330,3 +4330,14 @@ html[data-motion="off"] *::after {
   flex-shrink: 0;
   overflow: visible;
 }
+
+/* Route-slide navigation: full-direction travel with an eased landing, no fade-up. */
+.drawer-page.drawer-page-left { animation: qRouteSlideForward 310ms cubic-bezier(.22,1,.36,1) both; }
+.drawer-page.drawer-page-right { animation: qRouteSlideBackward 310ms cubic-bezier(.22,1,.36,1) both; }
+@keyframes qRouteSlideForward { from { transform: translate3d(52px,0,0); opacity:.85; } to { transform:translate3d(0,0,0); opacity:1; } }
+@keyframes qRouteSlideBackward { from { transform: translate3d(-52px,0,0); opacity:.85; } to { transform:translate3d(0,0,0); opacity:1; } }
+/* New activity enters from above; existing rows stack down via FLIP in renderer. */
+.activity-virtual-row > .activity-item.entering { animation: qActivityStackDrop 260ms cubic-bezier(.22,1,.36,1) both; }
+@keyframes qActivityStackDrop { from { transform:translate3d(0,-36px,0); opacity:.55; } to { transform:translate3d(0,0,0); opacity:1; } }
+@media (prefers-reduced-motion:reduce) { .drawer-page.drawer-page-left,.drawer-page.drawer-page-right { animation:none!important; } .activity-virtual-row > .activity-item.entering { animation:none!important; } }
+html[data-motion="off"] .drawer-page.drawer-page-left,html[data-motion="off"] .drawer-page.drawer-page-right,html[data-motion="off"] .activity-virtual-row > .activity-item.entering { animation:none!important; }

@@ -187,7 +187,7 @@ const ActivityPanel = React.memo(function ActivityPanel({
           setEnteringActivityId((current) =>
             current === entry.id ? undefined : current,
           );
-        }, 240);
+        }, 300);
       }
       setActivity((items) => mergeActivityEntry(items, entry).slice(0, 50));
       if (entry.status !== "running") {
@@ -239,6 +239,32 @@ const ActivityPanel = React.memo(function ActivityPanel({
     startIndex + visibleRows + overscan * 2,
   );
   const visibleActivity = activity.slice(startIndex, endIndex);
+  // FLIP-style list stack: shift surviving visible items downward when a new
+  // activity arrives at the head. Animate the inner button, not the virtual row
+  // whose transform owns the scroll position.
+  const previousActivityOrder = useRef<string[]>(activity.map((entry) => entry.id));
+  useLayoutEffect(() => {
+    const oldOrder = previousActivityOrder.current;
+    previousActivityOrder.current = activity.map((entry) => entry.id);
+    const stream = streamRef.current;
+    if (!stream || stream.scrollTop > 2 || document.documentElement.dataset.motion !== "on" ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+        document.documentElement.dataset.motionQuality === "off") return;
+    const addedAtHead = activity[0] && oldOrder.length > 0 && oldOrder[0] !== activity[0].id && !oldOrder.includes(activity[0].id);
+    if (!addedAtHead) return;
+    const previousPositions = new Map(oldOrder.map((id, index) => [id, index]));
+    for (const [index, entry] of activity.slice(0, Math.min(visibleRows + 2, 12)).entries()) {
+      const previousIndex = previousPositions.get(entry.id);
+      if (previousIndex === undefined || previousIndex >= index || index - previousIndex > 3) continue;
+      const button = Array.from(stream.querySelectorAll<HTMLElement>(".activity-item[data-activity-id]"))
+        .find((element) => element.dataset.activityId === entry.id);
+      button?.animate(
+        [{ transform: `translate3d(0, ${-(index - previousIndex) * rowHeight}px, 0)` },
+         { transform: "translate3d(0, 0, 0)" }],
+        { duration: 265, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      );
+    }
+  }, [activity, visibleRows]);
 
   return (
     <>
@@ -1969,7 +1995,7 @@ function App(): React.ReactElement {
               key={activeDrawer}
               onAnimationEnd={(event) => {
                 if (event.target === event.currentTarget &&
-                  (event.animationName === "liquidPageFromRight" || event.animationName === "liquidPageFromLeft")) {
+                  (event.animationName === "qRouteSlideForward" || event.animationName === "qRouteSlideBackward")) {
                   setDrawerTransition(null);
                 }
               }}
