@@ -173,6 +173,12 @@ function callTool(tool, input) {
   return Promise.resolve(result(action, {}));
 }
 const noop = () => () => {};
+const statusListeners = new Set();
+const emitQcBridge = (state) => {
+  bridge.state = state;
+  status.bridge = bridge;
+  for (const fn of statusListeners) fn({ ...status, bridge: { ...bridge } });
+};
 const prevent = async () => {
   throw new Error("QC_FIXTURE_BLOCKS_MUTATING_ACTIONS");
 };
@@ -203,7 +209,10 @@ const api = {
   callMemory: async () => result("recall", memory),
   callTool,
   onRuntimeReady: noop,
-  onStatus: noop,
+  onStatus: (callback) => {
+    statusListeners.add(callback);
+    return () => statusListeners.delete(callback);
+  },
   onActivity: noop,
   onMemory: noop,
   onProcess: noop,
@@ -246,6 +255,7 @@ const api = {
 contextBridge.exposeInMainWorld("qnector", api);
 contextBridge.exposeInMainWorld("__qcFixture", {
   getCallCount: () => callCount,
+  setBridgeState: (state) => emitQcBridge(state),
   failRuntimeOnce: () => {
     failNextRuntime = true;
   },

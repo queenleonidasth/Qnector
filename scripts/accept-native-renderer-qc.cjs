@@ -219,7 +219,7 @@ async function main() {
         assert.ok(orbLayout.size > 85, "Offline orb too small");
       } else {
         assert.ok(orbLayout.headerDistance < 8, "Header orb misaligned");
-        assert.ok(orbLayout.size < 51, "Header orb too large");
+        assert.ok(orbLayout.size < 81, "Header orb too large");
         assert.ok(orbLayout.heroHeight < 12, "Connected hero did not collapse");
         assert.equal(orbLayout.disconnectCount, 1, "Missing header Disconnect");
       }

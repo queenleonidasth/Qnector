@@ -525,7 +525,7 @@ html[data-motion-quality="reduced"] .activity-result-pill.running::before {
 /* The legacy 620px layout scaled the entire Orb stage to 78%, which
  * reintroduced blur even after the crest was moved outside the float.
  * Never resample the logo's ancestor at any supported window height. */
-.orb-stage {
+.orb-stage:not(.orb-travel-stage) {
   transform: none !important;
 }
 .queen-orb-emblem-layer > .queen-orb-portrait {

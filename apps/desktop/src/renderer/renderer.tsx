@@ -599,6 +599,9 @@ function App(): React.ReactElement {
   const orbPositionedRef = useRef(false);
   const orbWasDockedRef = useRef<boolean | null>(null);
   const orbMorphTimeoutRef = useRef<number | null>(null);
+  const orbFlightRef = useRef<Animation | null>(null);
+  const orbFlightDuration = 940;
+
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupStep, setSetupStep] = useState(0);
   const [setupInfo, setSetupInfo] = useState<ConnectionSetupStatus>();
@@ -1201,75 +1204,140 @@ function App(): React.ReactElement {
   const isConnected = bridge.state === "connected";
   const isConnecting = bridge.state === "connecting";
   const orbDocked = isConnected && !isDisconnecting;
-  // Only transform and scale the existing orb canvas; no remount/snapshot
-  // duplication and no React render on every frame of the 660ms transition.
+  // FLIP/shared element: animate the SAME Orb between two measured targets.
+  // Do not depend on CSS transforms from the old compact-orb stylesheet.
+  // The animation's middle frames are sampled in the renderer acceptance test.
   useLayoutEffect(() => {
     const stage = orbTravelRef.current;
     const header = orbHeaderRef.current;
     const home = orbHomeRef.current;
     if (!stage || !header || !home) return;
-    if (
-      orbWasDockedRef.current !== null &&
-      orbWasDockedRef.current !== orbDocked
-    ) {
-      stage.classList.remove("orb-morphing");
-      void stage.offsetWidth;
-      stage.classList.add("orb-morphing");
-      if (orbMorphTimeoutRef.current !== null)
-        window.clearTimeout(orbMorphTimeoutRef.current);
-      orbMorphTimeoutRef.current = window.setTimeout(() => {
-        stage.classList.remove("orb-morphing");
-        orbMorphTimeoutRef.current = null;
-      }, 770);
-    }
-    orbWasDockedRef.current = orbDocked;
-    let raf = 0;
-    const layout = (): void => {
-      const width = Math.min(
-        380,
+    let frame = 0;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const enabled =
+      animationsEnabled &&
+      !reduced &&
+      document.documentElement.dataset.motion !== "off" &&
+      document.documentElement.dataset.motionQuality !== "off";
+    const targetTransform = (): {
+      x: number;
+      y: number;
+      scale: number;
+    } | null => {
+      const mainWidth =
         document.querySelector(".app-main")?.getBoundingClientRect().width ??
-          380,
-      );
-      stage.style.width = `${width}px`;
-      const stageHeight = stage.offsetHeight;
-      if (!stageHeight) return;
-      const target = orbDocked
-        ? header.getBoundingClientRect()
-        : home.getBoundingClientRect();
-      if (!target.width || !target.height) return;
-      const scale = orbDocked
-        ? Math.min(0.33, target.height / (stageHeight - 18))
-        : 1;
-      const left = target.left + (target.width - width * scale) / 2;
-      const top = target.top + (target.height - stageHeight * scale) / 2;
-      stage.style.setProperty(
-        "transform",
-        `translate3d(${left.toFixed(2)}px, ${top.toFixed(2)}px, 0) scale(${scale.toFixed(5)})`,
-        "important",
-      );
-      if (!orbPositionedRef.current) {
-        orbPositionedRef.current = true;
-        requestAnimationFrame(() => stage.classList.add("is-positioned"));
+        380;
+      stage.style.width = `${Math.min(380, mainWidth)}px`;
+      const w = stage.offsetWidth,
+        h = stage.offsetHeight;
+      if (w < 1 || h < 1) return null;
+      if (orbDocked) {
+        const brand = header.getBoundingClientRect();
+        // CSS anchor expands from 0 to 64px. Header height is 116px when active.
+        const visual = stage.querySelector<HTMLElement>(
+          ".glass-sphere-enclosure",
+        );
+        const sphereSize = visual?.offsetWidth ?? 190;
+        const scale = Math.min(0.52, 64 / Math.max(1, sphereSize));
+        return {
+          x: brand.left + (64 - w * scale) / 2,
+          y: brand.top + (64 - h * scale) / 2,
+          scale,
+        };
       }
+      const rect = home.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return null;
+      return {
+        x: rect.left + (rect.width - w) / 2,
+        y: rect.top + (rect.height - h) / 2,
+        scale: 1,
+      };
     };
-    const schedule = (): void => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(layout);
+    const serialize = (p: { x: number; y: number; scale: number }) =>
+      `translate3d(${p.x.toFixed(2)}px,${p.y.toFixed(2)}px,0) scale(${p.scale.toFixed(5)})`;
+    const destination = targetTransform();
+    if (!destination) return;
+    const next = serialize(destination);
+    const previous = orbWasDockedRef.current;
+    const changing = previous !== null && previous !== orbDocked;
+    orbWasDockedRef.current = orbDocked;
+
+    if (changing && enabled && orbPositionedRef.current) {
+      // Cancel while preserving the computed mid-flight transform; interrupted
+      // connect/disconnect actions therefore never teleport the Orb.
+      const computed = getComputedStyle(stage).transform;
+      orbFlightRef.current?.cancel();
+      orbFlightRef.current = null;
+      const matrix =
+        computed === "none"
+          ? new DOMMatrix(stage.style.transform)
+          : new DOMMatrix(computed);
+      const from = { x: matrix.m41, y: matrix.m42, scale: matrix.a || 1 };
+      const dx = destination.x - from.x,
+        dy = destination.y - from.y;
+      const direction = orbDocked ? 1 : -1;
+      const c1 = {
+        x: from.x + dx * 0.32 + 9 * direction,
+        y: from.y + dy * 0.32 - 15,
+        scale: from.scale + (destination.scale - from.scale) * 0.3,
+      };
+      const c2 = {
+        x: from.x + dx * 0.76 + 7 * direction,
+        y: from.y + dy * 0.76 + 10,
+        scale: from.scale + (destination.scale - from.scale) * 0.78,
+      };
+      stage.style.transform = serialize(from);
+      stage.dataset.travelling = "true";
+      stage.classList.add("orb-morphing");
+      const animation = stage.animate(
+        [
+          { transform: serialize(from), offset: 0 },
+          { transform: serialize(c1), offset: 0.32 },
+          { transform: serialize(c2), offset: 0.76 },
+          { transform: next, offset: 1 },
+        ],
+        {
+          duration: orbFlightDuration,
+          easing: "cubic-bezier(.18,.82,.22,1)",
+          fill: "forwards",
+        },
+      );
+      orbFlightRef.current = animation;
+      animation.onfinish = () => {
+        if (orbFlightRef.current !== animation) return;
+        stage.style.transform = next;
+        animation.cancel();
+        orbFlightRef.current = null;
+        stage.dataset.travelling = "false";
+        stage.classList.remove("orb-morphing");
+      };
+    } else if (!orbFlightRef.current) {
+      stage.style.transform = next;
+      stage.dataset.travelling = "false";
+      orbPositionedRef.current = true;
+    }
+    const onResize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (orbFlightRef.current) return;
+        const target = targetTransform();
+        if (target) stage.style.transform = serialize(target);
+      });
     };
-    layout();
-    const observer = new ResizeObserver(schedule);
+    const observer = new ResizeObserver(onResize);
     observer.observe(header);
     observer.observe(home);
     const main = document.querySelector(".app-main");
     if (main) observer.observe(main);
-    window.addEventListener("resize", schedule);
+    window.addEventListener("resize", onResize);
     return () => {
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener("resize", schedule);
+      window.removeEventListener("resize", onResize);
     };
-  }, [orbDocked, activeDrawer]);
-  // Visual background no longer uses legacy Matrix deceleration.
+  }, [orbDocked, activeDrawer, animationsEnabled]);
 
   const updateAttention =
     updateState?.phase === "available" ||
@@ -1397,9 +1465,11 @@ function App(): React.ReactElement {
               ? "QNECTOR active animated logo"
               : isDisconnecting
                 ? "Disconnecting bridge"
-                : "Connect to ChatGPT"
+                : "Press QNECTOR orb to connect"
           }
-          title={orbDocked ? "QNECTOR connected" : "Connect to ChatGPT"}
+          title={
+            orbDocked ? "QNECTOR connected" : "Press QNECTOR orb to connect"
+          }
           onClick={handleOrbConnect}
           onKeyDown={handleOrbConnectKey}
         >
@@ -1415,12 +1485,14 @@ function App(): React.ReactElement {
 
       <header className={`app-header ${orbDocked ? "orb-in-header" : ""}`}>
         <div className="brand-section">
-          <div className="brand-crest" ref={orbHeaderRef} aria-hidden="true">
-            <img src={QUEEN_IMAGE_URL} className="brand-queen-mark" alt="" />
-          </div>
-          <div>
+          <div className="brand-crest" ref={orbHeaderRef} aria-hidden="true" />
+          <div className="brand-copy">
             <h1 className="brand-title">QNECTOR</h1>
             <div className="brand-tag">Royal MCP Bridge</div>
+            <div className="bridge-active-caption" aria-live="polite">
+              <span className="bridge-active-light" aria-hidden="true" />
+              <span>Your bridge is active</span>
+            </div>
           </div>
         </div>
         <div className="header-actions">
@@ -1445,24 +1517,16 @@ function App(): React.ReactElement {
               </span>
             </button>
           )}
-          <div className={`status-pill ${bridge.state}`}>
-            <span className="status-dot" />
-            <span>
-              {isConnected ? "Active" : isConnecting ? "Connecting" : "Idle"}
-            </span>
-          </div>
-          {(isConnected || isDisconnecting) && (
-            <button
-              className="header-disconnect-btn"
-              type="button"
-              aria-label="Disconnect QNECTOR bridge"
-              title="Disconnect bridge"
-              disabled={busy || isDisconnecting}
-              onClick={() => void disconnect()}
-            >
-              {isDisconnecting ? "Disconnecting" : "Disconnect"}
-            </button>
-          )}
+          <button
+            className="header-disconnect-btn"
+            type="button"
+            aria-label={orbDocked ? "Disconnect QNECTOR bridge" : "Bridge idle"}
+            title={orbDocked ? "Disconnect bridge" : "Bridge idle"}
+            disabled={!orbDocked || busy || isDisconnecting}
+            onClick={() => void disconnect()}
+          >
+            {orbDocked ? "Disconnect" : "IDLE"}
+          </button>
         </div>
       </header>
 
@@ -1492,42 +1556,13 @@ function App(): React.ReactElement {
                     ? "ESTABLISHING BRIDGE…"
                     : "Your bridge is offline."}
             </h2>
-            <p className="hero-state-sub">
-              {isDisconnecting
-                ? "Closing the tunnel and local bridge cleanly…"
-                : isConnected
-                  ? "Connected to ChatGPT · Full System Access"
-                  : "Expose local computer & workspace to ChatGPT"}
-            </p>
-
-            {isConnected ? (
-              <button
-                className="btn-liquid-action"
-                type="button"
-                disabled={isDisconnecting}
-                onClick={() => void openChatGPT()}
-              >
-                <span>↗ OPEN CHATGPT</span>
-              </button>
-            ) : (
-              <button
-                className="btn-liquid-action"
-                disabled={busy || isConnecting}
-                onClick={() => void connect()}
-              >
-                {busy || isConnecting ? (
-                  <span>Connecting Bridge…</span>
-                ) : (
-                  <span>⚡ Connect to Bridge</span>
-                )}
-              </button>
-            )}
-
             {!isConnected && (
-              <div className="hold-hint-pill">
-                {isDisconnecting
-                  ? "Disconnecting bridge…"
-                  : "Tap the orb or button to connect"}
+              <div className="orb-connect-prompt">
+                {isConnecting
+                  ? "Connecting bridge…"
+                  : isDisconnecting
+                    ? "Disconnecting bridge…"
+                    : "Press QNECTOR orb to connect"}
               </div>
             )}
           </section>
@@ -1580,6 +1615,13 @@ function App(): React.ReactElement {
                 {activeDrawer === "settings" && (
                   <>
                     <div className="drawer-content">
+                      <button
+                        className="btn-drawer-action"
+                        type="button"
+                        onClick={() => void openChatGPT()}
+                      >
+                        OPEN CHATGPT
+                      </button>
                       <section
                         className="workspace-settings-section"
                         aria-labelledby="workspace-settings-title"

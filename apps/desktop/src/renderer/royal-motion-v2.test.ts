@@ -56,7 +56,7 @@ describe("Royal Liquid Glass V2.1 production trial", () => {
       load("./translucent-controls.css"),
     ]);
     expect(app).toContain("orbTravelRef");
-    expect(app).toContain("stage.style.setProperty(");
+    expect(app).toContain("const animation = stage.animate(");
     expect(app).toContain("const orbDocked = isConnected && !isDisconnecting;");
     expect(app).not.toContain("holdProgressRef");
     expect(app).not.toContain("ringMeterRef");

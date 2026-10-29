@@ -408,3 +408,219 @@ html[data-motion-quality="off"] .orb-travel-stage.orb-morphing::after {
   -webkit-backdrop-filter: blur(6px) saturate(108%);
   backdrop-filter: blur(6px) saturate(108%);
 }
+
+/* Motion Lab V3 — one shared Orb, fluid brand text and restrained green signal. */
+.app-header {
+  flex: 0 0 70px;
+  min-height: 70px;
+  transition:
+    flex-basis 760ms cubic-bezier(0.2, 0.83, 0.23, 1),
+    min-height 760ms cubic-bezier(0.2, 0.83, 0.23, 1),
+    background-color 450ms ease,
+    border-color 450ms ease;
+}
+.app-header.orb-in-header {
+  flex-basis: 116px;
+  min-height: 116px;
+  background-color: rgba(25, 29, 36, 0.86);
+  border-color: rgba(243, 205, 139, 0.45);
+}
+.brand-section {
+  gap: 0;
+  min-width: 0;
+  transition: gap 800ms cubic-bezier(0.2, 0.83, 0.23, 1);
+}
+.app-header.orb-in-header .brand-section {
+  gap: 11px;
+}
+.brand-section .brand-crest {
+  width: 0;
+  height: 64px;
+  flex: 0 0 0px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  visibility: hidden;
+  transition:
+    width 850ms cubic-bezier(0.2, 0.83, 0.23, 1),
+    flex-basis 850ms cubic-bezier(0.2, 0.83, 0.23, 1);
+}
+.app-header.orb-in-header .brand-section .brand-crest {
+  width: 64px;
+  flex-basis: 64px;
+  visibility: hidden;
+}
+.brand-copy {
+  min-width: 0;
+  transform: translate3d(0, 0, 0);
+  transition: transform 800ms cubic-bezier(0.2, 0.83, 0.23, 1);
+}
+.brand-copy .brand-title {
+  font-size: 17px;
+  letter-spacing: 0.17em;
+}
+.brand-copy .brand-tag {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+.bridge-active-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-height: 0;
+  opacity: 0;
+  overflow: visible;
+  transform: translate3d(-9px, 7px, 0);
+  transition:
+    max-height 530ms ease,
+    opacity 500ms ease,
+    transform 760ms cubic-bezier(0.2, 0.83, 0.23, 1),
+    margin-top 600ms ease;
+  margin-top: 0;
+  white-space: nowrap;
+  color: #aaeebf;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.app-header.orb-in-header .bridge-active-caption {
+  max-height: 25px;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  margin-top: 5px;
+}
+.bridge-active-caption > span:last-child {
+  background: linear-gradient(
+    100deg,
+    #81dca6 10%,
+    #c8ffdc 38%,
+    #62c98e 60%,
+    #a5eec0 95%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.app-header.orb-in-header .bridge-active-caption > span:last-child {
+  animation: qnBridgeGreenTravel 3.7s ease-in-out 0.8s infinite;
+}
+.bridge-active-light {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: #68e997;
+  box-shadow:
+    0 0 0 2px rgba(60, 194, 113, 0.14),
+    0 0 9px rgba(68, 230, 131, 0.4);
+}
+.app-header.orb-in-header .bridge-active-light {
+  animation: qnBridgeGreenPulse 2.35s ease-in-out 0.7s infinite;
+}
+@keyframes qnBridgeGreenTravel {
+  0%,
+  100% {
+    background-position: 100% 0;
+    filter: brightness(1);
+  }
+  50% {
+    background-position: 0 0;
+    filter: brightness(1.14);
+  }
+}
+@keyframes qnBridgeGreenPulse {
+  0%,
+  100% {
+    opacity: 0.75;
+    box-shadow:
+      0 0 0 2px rgba(60, 194, 113, 0.12),
+      0 0 8px rgba(68, 230, 131, 0.35);
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 4px rgba(60, 194, 113, 0.22),
+      0 0 14px rgba(68, 230, 131, 0.7);
+  }
+}
+.header-actions .header-disconnect-btn:disabled {
+  visibility: hidden;
+  max-width: 0;
+  opacity: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  pointer-events: none;
+}
+.header-actions .header-disconnect-btn {
+  transition:
+    opacity 300ms ease,
+    max-width 450ms cubic-bezier(0.2, 0.83, 0.23, 1),
+    padding 450ms ease;
+}
+.orb-connect-prompt {
+  margin-top: 9px;
+  color: #f1d6a3;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  animation: qnOrbPromptBreathe 3.5s ease-in-out infinite;
+}
+@keyframes qnOrbPromptBreathe {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.orb-travel-stage,
+.orb-travel-stage.is-positioned {
+  transition: none !important;
+  transform-origin: top left;
+}
+@media (max-width: 430px) {
+  .brand-copy .brand-title {
+    font-size: 14px;
+    letter-spacing: 0.12em;
+  }
+  .brand-copy .brand-tag {
+    font-size: 7px;
+  }
+  .bridge-active-caption {
+    font-size: 9px;
+  }
+  .header-actions .header-disconnect-btn {
+    font-size: 9px;
+    padding: 7px 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-header,
+  .brand-section,
+  .brand-section .brand-crest,
+  .brand-copy,
+  .bridge-active-caption,
+  .header-disconnect-btn {
+    transition: none !important;
+  }
+  .bridge-active-caption > span:last-child,
+  .bridge-active-light,
+  .orb-connect-prompt {
+    animation: none !important;
+  }
+}
+html[data-motion="off"] .bridge-active-caption > span:last-child,
+html[data-motion="off"] .bridge-active-light,
+html[data-motion-quality="off"] .bridge-active-caption > span:last-child,
+html[data-motion-quality="off"] .bridge-active-light {
+  animation: none !important;
+}
