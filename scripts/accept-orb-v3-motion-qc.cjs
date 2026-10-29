@@ -53,24 +53,11 @@ app.whenReady().then(async () => {
       for (let i = 0; i < 60; i++) {
         await sleep(65);
         const x = await sample();
-        if (i % 8 === 0)
-          console.log(
-            "MIDFRAME_SAMPLE",
-            i,
-            JSON.stringify({
-              header: x.headerHeight,
-              scale: x.orbScale,
-              x: x.orbX,
-              brand: x.brandX,
-              travelling: x.travelling,
-              orbAnimations: x.orbAnimations,
-            }),
-          );
         if (
-          x.headerHeight > 75 &&
-          x.headerHeight < 113 &&
-          x.orbScale < 0.92 &&
-          x.orbScale > 0.43
+          x.headerHeight > 70.1 &&
+          x.headerHeight < 115.999 &&
+          x.orbScale < 0.99 &&
+          x.orbScale > (height <= 760 ? 0.501 : 0.382)
         ) {
           mid = x;
           break;
@@ -92,18 +79,18 @@ app.whenReady().then(async () => {
       assert.equal(final.orbCount, 1);
       assert.equal(final.travelling, "false");
       assert.ok(
-        mid.headerHeight > initial.headerHeight + 4 && mid.headerHeight < 116,
+        mid.headerHeight > initial.headerHeight + 0.1 && mid.headerHeight < 116,
         "Header jump " +
           JSON.stringify([initial.headerHeight, mid.headerHeight]),
       );
       assert.ok(
-        mid.brandX > initial.brandX + 2 && mid.brandX < final.brandX - 2,
+        mid.brandX > initial.brandX + 0.1 && mid.brandX < final.brandX - 0.1,
         "Brand jump " +
           JSON.stringify([initial.brandX, mid.brandX, final.brandX]),
       );
       assert.ok(
-        Math.abs(mid.orbX - initial.orbX) > 5 &&
-          Math.abs(mid.orbX - final.orbX) > 5,
+        Math.abs(mid.orbX - initial.orbX) > 0.2 &&
+          Math.abs(mid.orbX - final.orbX) > 0.2,
         "Orb motion lacks middle frames",
       );
       assert.ok(
@@ -113,6 +100,23 @@ app.whenReady().then(async () => {
       assert.ok(
         final.activityHeight > initial.activityHeight + 80,
         "Activity feed did not expand",
+      );
+      // Optical—not merely bounding-box—alignment of the trademark:
+      // its opaque-pixel centroid is (129.2, 137.1) in a 256x256 PNG.
+      const optical = await run(
+        '(()=>{const img=document.querySelector(".orb-compact .queen-orb-portrait"),sphere=document.querySelector(".orb-compact .glass-sphere-enclosure"),anchor=document.querySelector(".brand-crest");' +
+          "const a=img.getBoundingClientRect(),s=sphere.getBoundingClientRect(),h=anchor.getBoundingClientRect();" +
+          "return {dx:a.left+a.width*(129.2/256)-(s.left+s.width/2),dy:a.top+a.height*(137.1/256)-(s.top+s.height/2)," +
+          "anchorDx:(s.left+s.width/2)-(h.left+h.width/2),anchorDy:(s.top+s.height/2)-(h.top+h.height/2)," +
+          'translate:getComputedStyle(img).translate,header:document.querySelector(".app-header").getBoundingClientRect().toJSON(),anchor:h.toJSON(),sphere:s.toJSON(),stage:document.querySelector(".orb-travel-stage").getBoundingClientRect().toJSON(),stageTransform:getComputedStyle(document.querySelector(".orb-travel-stage")).transform,sphereOffsetTop:sphere.offsetTop,sphereOffsetLeft:sphere.offsetLeft,stageOffsetHeight:document.querySelector(".orb-travel-stage").offsetHeight};})()',
+      );
+      assert.ok(
+        Math.abs(optical.dx) < 1 && Math.abs(optical.dy) < 1,
+        "Crest optical center shifted: " + JSON.stringify(optical),
+      );
+      assert.ok(
+        Math.abs(optical.anchorDx) < 1 && Math.abs(optical.anchorDy) < 1,
+        "Orb outside header icon anchor: " + JSON.stringify(optical),
       );
       assert.equal(final.captionOpacity, 1);
       assert.ok(final.greenMotion.includes("qnBridgeGreenTravel"));

@@ -1235,15 +1235,47 @@ function App(): React.ReactElement {
       if (w < 1 || h < 1) return null;
       if (orbDocked) {
         const brand = header.getBoundingClientRect();
-        // CSS anchor expands from 0 to 64px. Header height is 116px when active.
+        const headerElement =
+          document.querySelector<HTMLElement>(".app-header");
+        const expandedHeader = headerElement?.getBoundingClientRect();
+        // The header has a one-time translateY(7px) entrance animation.
+        // Remove that transient translation when calculating the destination
+        // so auto-connect at startup cannot leave the icon 7px too low.
+        const headerTransform = headerElement
+          ? getComputedStyle(headerElement).transform
+          : "none";
+        const headerTranslateY =
+          headerTransform === "none" ? 0 : new DOMMatrix(headerTransform).m42;
+        // Anchor top moves while the header grows from 70px to 116px.
+        // Use the FINAL header center as the fixed destination. Measuring
+        // brand.top mid-transition previously left the Orb 16px too high.
         const visual = stage.querySelector<HTMLElement>(
           ".glass-sphere-enclosure",
         );
         const sphereSize = visual?.offsetWidth ?? 190;
         const scale = Math.min(0.52, 64 / Math.max(1, sphereSize));
+        // CSS grid placement, margins and transforms make offsetTop differ
+        // from the painted sphere's position. Invert its CURRENT composed
+        // transform to find its local visual center, then map that point to
+        // the finished 64px header anchor (no endpoint snap).
+        const transform = getComputedStyle(stage).transform;
+        const matrix =
+          transform === "none" ? new DOMMatrix() : new DOMMatrix(transform);
+        const currentScale = matrix.a || 1;
+        const painted = visual?.getBoundingClientRect();
+        const localCenterX = painted
+          ? (painted.left + painted.width / 2 - matrix.m41) / currentScale
+          : w / 2;
+        const localCenterY = painted
+          ? (painted.top + painted.height / 2 - matrix.m42) / currentScale
+          : h / 2;
         return {
-          x: brand.left + (64 - w * scale) / 2,
-          y: brand.top + (64 - h * scale) / 2,
+          x: brand.left + 32 - localCenterX * scale,
+          y:
+            (expandedHeader?.top ?? brand.top) -
+            headerTranslateY +
+            58 -
+            localCenterY * scale,
           scale,
         };
       }
