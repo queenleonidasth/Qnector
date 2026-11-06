@@ -309,7 +309,7 @@
 }
 .activity-result-pill.running {
   position: relative;
-  padding-left: 15px;
+  padding-left: 5px;
   border-color: rgba(255,207,118,.78);
   background: linear-gradient(110deg,rgba(112,72,20,.76),rgba(55,40,24,.75));
   color: #fff1c5;
@@ -317,7 +317,7 @@
   animation: royalRunningBadgeBreathe 2.35s ease-in-out infinite;
 }
 .activity-result-pill.running::before {
-  content: "";
+  content: none;
   position: absolute;
   left: 5px;
   top: 50%;

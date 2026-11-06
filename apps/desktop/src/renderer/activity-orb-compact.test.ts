@@ -50,6 +50,14 @@ describe("Royal Liquid Glass V2.3 Activity-first layout", () => {
       'html[data-motion="off"] .activity-result-pill.running',
     );
   });
+  it("keeps the RUNNING label readable without an overlapping yellow dot", async () => {
+    const css = await read("activity-orb-compact.css");
+    const jsx = await read("renderer.tsx");
+    expect(css).toMatch(/\.activity-result-pill\.running\s*\{[^}]*padding-left:\s*5px;/s);
+    expect(css).toMatch(/\.activity-result-pill\.running::before\s*\{[^}]*content:\s*none;/s);
+    expect(jsx).toContain('className={`activity-entry-rail ${item.status}`}');
+    expect(jsx).toContain('className={`item-bead ${item.status}`}');
+  });
   it("keeps the isolated synthetic preview identified without overlaying the real header", async () => {
     const preview = await read(
       "../../../../scripts/preview-activity-orb-v23.cjs",
